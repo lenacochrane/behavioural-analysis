@@ -8,98 +8,72 @@ import os # Provides functions for interacting with the operating system
 import csv
 
 class SideHoleGui:
-    def __init__(self, root): # self initialise # root window is main window of gui
-        # assigns root to the instance variable self.root
-        # allows other methods within the class to access the root window
-        self.root = root   
-        self.root.title("Hole Analyser") # title of root window 
-        # initialise two instance variables:
-        self.directory = "" # empty string to hold the user directory
-        self.video_files = [] # empty list to hold the video files
-        self.hole_coordinates = [] # empty list to hold the coordinates of hole 
-        self.drawing = False  # Initialize the drawing flag
-        self.current_video_index = 0 # Initialize the current video index
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Hole Analyser")
+        self.directory = ""
+        self.video_files = []
+        self.hole_coordinates = []
+        self.drawing = False
+        self.current_video_index = 0
 
-        # create a label in the root window 
         self.label = tk.Label(root, text="Select Video Directory")
-        # pack makes the label visible 
-        self.label.pack(pady=10) # adds space around the label (seperate other widgets)
+        self.label.pack(pady=10)
 
-        self.select_button = tk.Button(root, text="Select Directory", command=self.select_directory) # creates button widget
+        self.select_button = tk.Button(root, text="Select Directory", command=self.select_directory)
         self.select_button.pack(pady=10)
 
         self.process_button = tk.Button(root, text="Process Videos", command=self.process_videos)
         self.process_button.pack(pady=10)
 
-# +---------------------------------------+
-# | Hole Analyser                         |   <- Window Title
-# |                                       |
-# |       [ Select Video Directory ]      |   <- Label
-# |                                       |
-# |       [ Select Directory ]            |   <- Button
-# |                                       |
-# |       [ Process Videos ]              |   <- Button
-# |                                       |
-# +---------------------------------------+
-
-    # METHOD TO SELECT DIRECTORY
-    # this will be called when the select directory button is clicked
     def select_directory(self):
-        # navigate and select a directory 
         self.directory = filedialog.askdirectory()
         self.video_files = [f for f in os.listdir(self.directory) if f.endswith('.mp4')]
-        self.video_files.sort()  # Ensure files are processed in sorted order
+        self.video_files.sort()
+        print(f"Selected directory: {self.directory}")
+        print(f"Video files found: {self.video_files}")
 
-    # METHOD TO PROCESS MP4 VIDEOS  
     def process_videos(self):
         if self.current_video_index < len(self.video_files):
             video_file = self.video_files[self.current_video_index]
-            video_path = os.path.join(self.directory, video_file)  # Ensure full path is used
+            video_path = os.path.join(self.directory, video_file)
             print(f"Processing video: {video_path}")
             self.process_video(video_path)
         else:
+            print("All videos processed.")
             messagebox.showinfo("Processing Complete", "All videos have been processed.")
+            self.root.destroy()  # Force close the Tkinter window
 
-
-    # METHOD TO PROCESS INDIVIDUAL FILE
     def process_video(self, video_path):
-        cap = cv2.VideoCapture(video_path) # opens video
+        cap = cv2.VideoCapture(video_path)
 
         if not cap.isOpened():
+            print(f"Error: Cannot open video: {video_path}")
             messagebox.showerror("Error", f"Cannot open video: {video_path}")
-            self.current_video_index += 1  # Move to the next video
+            self.current_video_index += 1
             self.process_videos()
             return
 
-        # currently takes the first frame from the video 
         ret, frame = cap.read()
         if not ret:
+            print(f"Error: Cannot read video: {video_path}")
             messagebox.showerror("Error", f"Cannot read video: {video_path}")
-            self.current_video_index += 1  # Move to the next video
+            self.current_video_index += 1
             self.process_videos()
             return
 
-        self.temp_frame = frame.copy()  # Copy the frame for drawing purposes
+        self.temp_frame = frame.copy()
+        self.hole_coordinates = []  # Reset coordinates for each video
 
-        # Allow user to draw the hole perimeter
-        cv2.imshow("Draw Hole Perimeter", frame) # Displays first frame in a window titled "Draw Hole Perimeter"
-
-        cv2.setMouseCallback("Draw Hole Perimeter", self.draw_hole_perimeter, frame)
-        cv2.waitKey(0) # wait until user finished and key pressed 
-
-        # Save hole coordinates
-        hole_file = video_path.replace('.mp4', '_hole.csv')
-        with open(hole_file, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerows(self.hole_coordinates)  # coordinate into different rows
-
-        # resets to an empty list
-        self.hole_coordinates = []
+        cv2.imshow("Draw Hole Perimeter", self.temp_frame)
+        cv2.setMouseCallback("Draw Hole Perimeter", self.draw_hole_perimeter, self.temp_frame)
+        cv2.waitKey(0)
 
     def draw_hole_perimeter(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             self.drawing = True
             self.hole_coordinates.append((x, y))
+            print(f"Point added: {(x, y)}")
 
         elif event == cv2.EVENT_MOUSEMOVE:
             if self.drawing:
@@ -107,18 +81,34 @@ class SideHoleGui:
                 self.hole_coordinates.append((x, y))
                 cv2.line(self.temp_frame, prev_point, (x, y), (0, 0, 255), 2)
                 cv2.imshow("Draw Hole Perimeter", self.temp_frame)
+                print(f"Drawing line from {prev_point} to {(x, y)}")
 
         elif event == cv2.EVENT_LBUTTONUP:
             self.drawing = False
-            # Ensure the last segment of the perimeter is drawn
             if len(self.hole_coordinates) > 1:
                 prev_point = self.hole_coordinates[-1]
                 cv2.line(self.temp_frame, prev_point, self.hole_coordinates[0], (0, 0, 255), 2)
                 cv2.imshow("Draw Hole Perimeter", self.temp_frame)
+                print(f"Closed the hole perimeter by drawing line from {prev_point} to {self.hole_coordinates[0]}")
 
         elif event == cv2.EVENT_RBUTTONDOWN:
+            print("Right button clicked, saving coordinates and moving to next video.")
+            self.save_coordinates()
             cv2.destroyAllWindows()
-            self.current_video_index += 1  # Move to the next video
-            self.process_videos()  # Continue processing the next video
+            self.current_video_index += 1
+            self.process_videos()
 
+    def save_coordinates(self):
+        if self.hole_coordinates:
+            video_file = self.video_files[self.current_video_index]
+            video_path = os.path.join(self.directory, video_file)
+            hole_file = os.path.join(self.directory, os.path.basename(video_path).replace('.mp4', '_hole.csv'))
+            print(f"Saving coordinates to {hole_file} with {len(self.hole_coordinates)} points")
+            try:
+                with open(hole_file, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(self.hole_coordinates)
+                print(f"Coordinates saved to {hole_file}")
+            except Exception as e:
+                print(f"Error saving coordinates to {hole_file}: {e}")
 
