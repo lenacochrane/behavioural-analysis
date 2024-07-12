@@ -172,6 +172,34 @@ class Side_hole_analysis:
 
 
 
+    def distance_from_centre(self): 
+
+        centre = (700, 700) 
+
+        distances_from_centre = []
+
+        for track_file in self.track_files:
+            
+            predictions = self.track_data[track_file]
+
+            for index, row in predictions.iterrows():
+                x, y = row['x_body'], row['y_body']
+                distance = np.sqrt((centre[0] - x)**2 + (centre[1] - y)**2)
+                distances_from_centre.append(distance)
+        
+
+            plt.figure(figsize=(8, 6))
+            plt.hist(distances_from_centre, bins=70, edgecolor='black')
+            plt.xlabel('Distance from Centre', fontweight='bold')
+            plt.ylabel('Frequency', fontweight='bold')
+            plt.title('Distribution of Distances from Centre', fontweight='bold')
+            plt.show()
+
+
+
+
+
+
 # i will have track csv and holes csv coordinates
 
 # defintion which fills in the coordinates of the hole and removes it from the csv file idk like any larvae inside is not counted - 
@@ -181,6 +209,9 @@ class Side_hole_analysis:
 # #   - iterate over every file in a directory 
 #     - - THEN SCRIPT FOR ANALYSIS NOT IN HOLE OR IN HOLE - count number of tracks per frame but not those in the hole + CERTAIN RADIUS
 # - RETURNS TO HOLE? - tracks which appear in certain radius and re enter the radis - like a counter 
+
+
+
 
 
 

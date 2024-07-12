@@ -23,7 +23,7 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = Side_hole_analysis(directory)
 
-    analysis.distance_from_hole()
+    analysis.distance_from_centre()
     print("Analysis Completed")
 
 
