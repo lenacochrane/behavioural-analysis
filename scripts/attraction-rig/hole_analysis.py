@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os 
+import pyarrow.feather as feather
 from shapely.geometry import Polygon
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon, Point
@@ -38,12 +39,15 @@ class HoleAnalysis:
 
     def tracks(self):
         # 2024-04-30_14-31-44_td5.000_2024-04-30_14-31-44_td5.analysis.csv
-        self.track_files = [f for f in os.listdir(self.directory) if f.endswith('tracks.csv')]
+        self.track_files = [f for f in os.listdir(self.directory) if f.endswith('tracks.feather')]
         print(f"Track files: {self.track_files}")
         # load the data 
         for track_file in self.track_files: 
             track_path = os.path.join(self.directory, track_file)
-            self.track_data[track_file] = pd.read_csv(track_path)
+            df = pd.read_feather(track_path)
+            df = df.round(2)  # Round values to 2 decimal places
+            self.track_data[track_file] = df
+            # self.track_data[track_file] = pd.read_feather(track_path)
 
    # METHOD SHORTEN: OPTIONAL METHOD TO SHORTEN THE TRACK FILES TO INCLUDE UP TO A CERTAIN FRAME  
     
@@ -113,7 +117,7 @@ class HoleAnalysis:
             # join the first three elements :3 with an underscore
             # 2024-05-20_16-08-22_td1_hole.csv -> 2024-05-20 16-08-22 td1 hole.csv -> 2024-05-20_16-08-22_td1
             track_prefix = '_'.join(track_file.split('_')[:3])
-            track_prefix = track_prefix.replace('.tracks.csv', '')
+            track_prefix = track_prefix.replace('.tracks.feather', '')
             # track_prefix = track_prefix.rsplit('.', 1)[0]  # Remove the extension
             print(f"Track file: {track_file}, Prefix: {track_prefix}")
 
@@ -133,7 +137,7 @@ class HoleAnalysis:
                 #     self.matching_pairs.append((track_file, hole_boundary))
 
                 track_path = os.path.join(self.directory, track_file)
-                self.track_data[track_file] = pd.read_csv(track_path)
+                self.track_data[track_file] = pd.read_feather(track_path).round(2)
         
         print(f"Matching pairs: {self.matching_pairs}")
         print(f"Track data keys: {self.track_data.keys()}")
