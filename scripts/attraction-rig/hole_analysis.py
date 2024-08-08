@@ -269,82 +269,185 @@ class HoleAnalysis:
 
         ax = sns.lineplot(x=value_range, y=density)
 
-        return ax
-    #     print("probability_density method called")
-    #     print(f"Reading file: {file}")
-        
-    #     try:
-    #         df = pd.read_csv(file)
-    #         print("File read successfully")
-    #         print(df.head())  # Print the first few rows to confirm contents
-            
-    #         data = df.iloc[:, 0].values
-    #         data = pd.Series(data).replace([np.inf, -np.inf], np.nan).dropna().values
-
-    #         kde = gaussian_kde(data)
-    #         value_range = np.linspace(data.min(), data.max(), 100)
-    #         density = kde(value_range)
-
-    #         ax = sns.lineplot(x=value_range, y=density)
-    #         plt.title('Probability Density Function')
-    #         plt.xlabel('Values')
-    #         plt.ylabel('Density')
-    #         plt.show()
-
-    #         return ax
-    #     except Exception as e:
-    #         print(f"An error occurred: {e}")
-
+        return ax # ax = probability_density() to modify graph when called
     
-    # @staticmethod
-    # def test_method():
-    #     print("HoleAnalysis import successful!")
+    # METHOD SPEED: CALCULATES SPEED: 1) SPEED VALUES 2) SPEED OVER TIME 
+
+    def speed(self):
+
+        speed = []
+        data = []
+
+        for track_file in self.track_files:
+            track_data = self.track_data[track_file]
+
+            for track in track_data['track_id'].unique():
+                track_unique = track_data[track_data['track_id'] == track]
+
+                for i in range(len(track_unique) - 1):
+
+                    row = track_unique.iloc[i]
+                    next_row = track_unique.iloc[i+1]
+
+                    distance = np.sqrt((row['x_body'] - next_row['x_body'])**2 + (row['y_body'] - next_row['y_body'])**2)
+
+                    time1 = row['frame']
+                    time2 = next_row['frame']
+
+                    time = time2 - time1
+
+                    speed_value = distance / time 
+
+                    speed.append(speed_value)
+
+                    data.append({'time': time1, 'speed': speed_value, 'file': track_file})
+       
+        speed_values = pd.DataFrame(speed)
+        speed_values.to_csv(os.path.join(self.directory, 'speed_values.csv'), index=False)
+
+        speed_over_time = pd.DataFrame(data)
+        speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
+        speed_over_time.to_csv(os.path.join(self.directory, 'speed_over_time.csv'), index=False)
+
+        return speed_values, speed_over_time
 
 
-
- 
-
-
-
-     # # def number_in_hole_counter():
-    
-    # # def returns(): #number returning to the hole 
-
-
-    # METHOD ENSEMBLE_MSD: CALCULATES ENSEMBLE MSD 
+    # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM TIME 0
      
-    # def ensemble_msd(self):
+    def ensemble_msd(self): 
 
-    #     distance_per_track = []
-    
-    #     def msd_distance(x1, y1, x0, y0):
-    #         msd = (x1 - x0)**2 + (y1- y0)**2
-    #         return msd
+        # frame distance and file 
+
+        data = []
         
+        for track_file in self.track_files:
+            track_data = self.track_data[track_file]
 
-    #     for track_file in self.track_files:
-    
+            # calculate average x,y for first frame 
+            # (needs to change such that it time 0 for each unique track compared back to)
+            
+            frame_0 = track_data[track_data['frame'] == 0]
+
+            x = frame_0['x_body'].mean()
+            y = frame_0['y_body'].mean()
+
+            for i, row in track_data.iterrows():
+
+                squared_distance = (row['x_body'] - x)**2 + (row['y_body'] - y)**2
+
+                frame = row['frame']
+
+                data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
+        
+        df = pd.DataFrame(data)
+        df = df.sort_values(by=['time'], ascending=True)
+
+        df.to_csv(os.path.join(self.directory, 'ensemble_msd.csv'), index=False)
+
+        return df 
 
     # METHOD TIME_AVERAGE_MSD: 
+      # taus given in list format e.g. list(range(1, 101, 1))
 
-    # def time_average_msd(self):
+    def time_average_msd(self, taus):
+
+        dfs = []
+
+        # Iterate over track_data dictionary {'filename': dataframe}
+        for filename, dataframe in self.track_data.items():
+            # Add a new column to the dataframe with the filename
+            dataframe['file'] = filename
+            dfs.append(dataframe)
+
+        # Concatenate the dataframes 
+        df = pd.concat(dfs, ignore_index=True)
+
+        df = df[["file", "track_id", "frame", "x_body", "y_body"]] # chose specific parts of the dataframe
+ 
+        # one value per tau 
+        def msd_per_tau(df, tau):
+
+            squared_displacements = []
+
+            grouped_data = df.groupby(['file', 'track_id'])
+
+            # really dont get why you have to iterate in such a way ????
+            for (file, track_id), unique_track in grouped_data:
+
+                unique_track = unique_track.sort_values(by='frame').reset_index(drop=True)
+
+                if len(unique_track) > tau:
+
+                    initial_positions = unique_track[['x_body', 'y_body']].values[:-tau] # values up till tau as a NumPy array # positions from t to t-N-tau # represent starting points
+                    tau_positions = unique_track[['x_body', 'y_body']].values[tau:] # values from tau onwards # t+tau to t-N # representing ending points 
+                    disp = np.sum((tau_positions - initial_positions) ** 2, axis=1) # squared displacement for each pair
+                    # # print(disp) 
+                    # print(f"disp for tau={tau}: {disp}")
+                    # print(type(disp))
+
+                    squared_displacements.append(disp)  
+
+            if squared_displacements:
+            # Flatten the list of arrays into a single NumPy array
+                flattened_displacements = np.concatenate(squared_displacements)
+
+            # Filter out NaN and inf values
+                valid_displacements = flattened_displacements[np.isfinite(flattened_displacements)]
+
+                if valid_displacements.size > 0:
+                    mean_disp = np.mean(valid_displacements)
+                    return mean_disp
+
+
+        msds = []
+        for tau in taus:
+            msd = msd_per_tau(df, tau)
+            msds.append(msd)
+
+        tau_msd_df = pd.DataFrame({'tau': taus, 'msd': msds})
+        tau_msd_df = tau_msd_df.sort_values(by='tau', ascending=True)
+        tau_msd_df.to_csv(os.path.join(self.directory, 'time_average_msd.csv'), index=False)
+   
+        return tau_msd_df #.dropna()
+
+
+        
 
 
 
 
-    # METHOD PROBABILITY_DENSITY: MUST TAKE A 1D ARRAY SO UNSURE HOW TO TACKLE THIS RN 
-
-    # def probability_density(self):
 
 
 
 
-    # METHOD SPEED: 
 
 
 
 
-    # METHOD FOR TRACK OVERLAY IMAGES ETC? YES
+
+
+
+
+
+
+
+
+
+
+
+
+     # def hole_counter():
+    
+    # def returns(): #number returning to the hole 
+
+
+    # METHOD TRAJECTORY / BODY TURNS / ANGLE ORIENTATION  
+
+    # METHOD PROXIMITY
+
+    # METHOD CASTING 
+
+    # METHOD FOR TRACK OVERLAY IMAGES AND VIDEOS 
 
 
 
