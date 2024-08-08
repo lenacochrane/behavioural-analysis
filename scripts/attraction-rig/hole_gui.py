@@ -7,7 +7,7 @@ import pandas as pd
 import os # Provides functions for interacting with the operating system
 import csv
 
-class SideHoleGui:
+class HoleGui:
     def __init__(self, root):
         self.root = root
         self.root.title("Hole Analyser")
