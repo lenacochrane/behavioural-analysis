@@ -3,6 +3,7 @@ import numpy as np
 import os 
 from shapely.geometry import Polygon
 from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon, Point
 from scipy.spatial.distance import cdist
 from shapely.affinity import scale
 from shapely.wkt import dumps as wkt_dumps
@@ -51,17 +52,13 @@ class HoleAnalysis:
         for track_file in self.track_files:
 
             df = self.track_data[track_file]
-
             df = df[df['frame'] <= frame]
-
             self.track_data[track_file] = df # update the track data 
 
             # create path 
             shortened_path = os.path.join(self.directory, track_file.replace('.csv', f'_shortened_{frame}.csv'))
-
             # save 
             df.to_csv(shortened_path, index=False)
-
             print(f"Shortened file saved: {shortened_path}")
 
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION
@@ -81,7 +78,7 @@ class HoleAnalysis:
 
             points = df[['x', 'y']].values # values creates numpy array
 
-            hull = ConvexHull(points)
+            hull = ConvexHull(points)  
 
             # struggle with this understanding - ask callum 
             # this retrieves the points of the shapes 
@@ -105,6 +102,7 @@ class HoleAnalysis:
                 f.write(wkt_string)
         
         print(f"Hole boundaries: {self.hole_boundaries}")
+    
     
     # METHOD MATCH_FILES: MATCHES THE TRACK FILES WITH THEIR COORDINATE FILES (BY EXTENTION THE HOLE POLYGON)
 
@@ -476,31 +474,59 @@ class HoleAnalysis:
         angle_over_time = angle_over_time.sort_values(by=['time'], ascending=True)
         angle_over_time.to_csv(os.path.join(self.directory, 'angle_over_time.csv'), index=False)
 
-        return angle_values, angle_over_time    
+        return angle_values, angle_over_time   
 
 
+    # DEF HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE 
+      # CURRENTLY COUNTING IF IN THE BOUNDARY, NO TIME ELEMENT THEREFORE ID'S ARE IRRELEVANT
 
+    def hole_counter(self):
 
-            
+        count = []
 
+        for track_file, hole_boundary in self.matching_pairs:
+            df = self.track_data[track_file]
 
+            # ASSUME NO LARVAE LEAVE - COUNT THE NUMBER OF LARVAE OUTSIDE HOLE BECAUSE INSIDE HOLE MIGHT BE HARD IF THEY ARE DIGGING A LOT 
+            # TRACK ID IS IRRELEVANT SO CAN ITERATE OVER EVERY ROW 
+            # REQUIRES FRAME 
 
-    
+            for frame, frame_data in df.groupby('frame'):
 
+                # point is from the shapely library and is used to represent a point in 2d space 
+                # contains to see if the point lies within the polygon 
+                number_outside_hole = frame_data.apply(lambda row: not hole_boundary.contains(Point(row['x_body'], row['y_body'])), axis=1)
 
+                count_outside = number_outside_hole.sum()
+                count_inside = 10 - count_outside # assume 10 larvae
 
-
-
+                count.append({'time': frame, 'count': count_inside, 'file': track_file})
         
+        hole_count = pd.DataFrame(count)
+        hole_count = hole_count.sort_values(by=['time'], ascending=True)
+        hole_count.to_csv(os.path.join(self.directory, "hole_count.csv"), index=False)
+
+        return hole_count
 
 
-     # def hole_counter():
+
+
     
+
+
+
+
+
+
+
+    # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICHH RETURN TO THE HOLE AND THE TIME TAKEN 
     # def returns(): #number returning to the hole 
 
-    # METHOD PROXIMITY
+    # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
 
-    # METHOD CASTING 
+    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS'
+
+    # METHOD CASTING: 
 
     # METHOD FOR TRACK OVERLAY IMAGES AND VIDEOS 
 
@@ -513,7 +539,7 @@ class HoleAnalysis:
 
 
 
-# i will have track csv and holes csv coordinates
+
 
 # defintion which fills in the coordinates of the hole and removes it from the csv file idk like any larvae inside is not counted - 
 
