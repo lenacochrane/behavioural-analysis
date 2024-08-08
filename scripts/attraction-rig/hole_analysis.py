@@ -409,6 +409,86 @@ class HoleAnalysis:
         tau_msd_df.to_csv(os.path.join(self.directory, 'time_average_msd.csv'), index=False)
    
         return tau_msd_df #.dropna()
+    
+    # METHOD TRAJECTORY: CALCULATES TRAJECTORY ANGLES: 1) TRAJECTORY ANGLE VALUES 2) TRAJECTORY ANGLE OVER TIME 
+      # ANGLE INBETWEEN 2 VECTORS: TAIL-BODY AND BODY-HEAD 
+
+    def trajectory(self):
+
+        dfs = []
+        # Iterate over track_data dictionary {'filename': dataframe}
+        for filename, dataframe in self.track_data.items():
+            # Add a new column to the dataframe with the filename
+            dataframe['file'] = filename
+            dfs.append(dataframe)
+
+        # Concatenate the dataframes 
+        df = pd.concat(dfs, ignore_index=True)
+
+        grouped_data = df.groupby(['file', 'track_id'])
+        
+        # definition to calculate angle 
+        def angle_calculator(vector_A, vector_B):
+            # convert to an array for mathmatical ease 
+            A = np.array(vector_A)
+            B = np.array(vector_B)
+            # calculate the dot product
+            dot_product = np.dot(A, B)
+            # calculate the magnitude of vector (length / norm of vector)
+            magnitude_A = np.linalg.norm(vector_A)
+            magnitude_B = np.linalg.norm(vector_B)
+            # cosθ
+            cos_theta = dot_product / (magnitude_A * magnitude_B)
+            # θ in radians
+            theta_radians = np.arccos(cos_theta)
+            # θ in degrees
+            theta_degrees = np.degrees(theta_radians)
+            return theta_degrees
+        
+        angles = []
+        data = []
+
+        # really dont get why you have to iterate in such a way ????
+        for (file, track_id), unique_track in grouped_data:
+            unique_track = unique_track.sort_values(by='frame').reset_index(drop=True)
+
+            for i in range(len(unique_track) - 1):
+
+                head = unique_track.iloc[i][['x_head', "y_head"]].values
+                body = unique_track.iloc[i][['x_body', 'y_body']].values
+                tail = unique_track.iloc[i][['x_tail', 'y_tail']].values
+
+                HB = head - body
+                BT = body - tail 
+
+                angle = angle_calculator(HB, BT)
+
+                frame = unique_track.iloc[i]['frame']
+                # filename = track_unique.iloc[i]['file']
+
+                angles.append(angle)
+                data.append({'time': frame, 'angle': angle, 'file': file})
+        
+        angle_values = pd.DataFrame(angles)
+        angle_values.to_csv(os.path.join(self.directory, 'angle_values.csv'), index=False)
+
+        angle_over_time = pd.DataFrame(data)
+        angle_over_time = angle_over_time.sort_values(by=['time'], ascending=True)
+        angle_over_time.to_csv(os.path.join(self.directory, 'angle_over_time.csv'), index=False)
+
+        return angle_values, angle_over_time    
+
+
+
+
+            
+
+
+
+    
+
+
+
 
 
         
@@ -417,9 +497,6 @@ class HoleAnalysis:
      # def hole_counter():
     
     # def returns(): #number returning to the hole 
-
-
-    # METHOD TRAJECTORY / BODY TURNS / ANGLE ORIENTATION  
 
     # METHOD PROXIMITY
 
