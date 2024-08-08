@@ -414,28 +414,6 @@ class HoleAnalysis:
         
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
      # def hole_counter():
     
     # def returns(): #number returning to the hole 
