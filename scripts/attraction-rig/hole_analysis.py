@@ -45,6 +45,8 @@ class HoleAnalysis:
         for track_file in self.track_files: 
             track_path = os.path.join(self.directory, track_file)
             df = pd.read_feather(track_path)
+            pixels_to_cm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+            df[pixels_to_cm] = df[pixels_to_cm] * (9/1032) #conversion factor pixels to cm
             df = df.round(2)  # Round values to 2 decimal places
             self.track_data[track_file] = df
             # self.track_data[track_file] = pd.read_feather(track_path)
@@ -92,7 +94,7 @@ class HoleAnalysis:
             # create the polygon
             polygon = Polygon(hull_points)
 
-            scaled_polygon = scale(polygon, xfact=scale_factor, yfact=scale_factor, origin='center')
+            scaled_polygon = scale(polygon, xfact=scale_factor, yfact=scale_factor, origin='center') # polygon scaled uniform relative to center
 
             self.hole_boundaries.append(scaled_polygon)
 
@@ -482,7 +484,7 @@ class HoleAnalysis:
 
 
     # DEF HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE 
-      # CURRENTLY COUNTING IF IN THE BOUNDARY, NO TIME ELEMENT THEREFORE ID'S ARE IRRELEVANT
+      # CURRENTLY COUNTING IF INSIDE THE BOUNDARY, NO TIME ELEMENT THEREFORE ID'S ARE IRRELEVANT
 
     def hole_counter(self):
 
@@ -511,6 +513,47 @@ class HoleAnalysis:
         hole_count.to_csv(os.path.join(self.directory, "hole_count.csv"), index=False)
 
         return hole_count
+    
+    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS' 1) AVERAGE  2) AVERAGE OVER TIME
+      # CURRENTLY ACCOUNTS ONLY FOR BODY-BODY CONTACTS 
+
+    def proximity(self, pixel=50):
+
+        count = []
+        data = []
+
+        for track_file in self.track_files:
+            track_data = self.track_data[track_file]
+
+            # count for each frame 
+            for frame in track_data['frame'].unique():
+                unique_frame = track_data[track_data['frame'] == frame]
+
+                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy() # cdist requires 2D NumPy array as input
+
+                euclidean_distance = cdist(body_coordinates, body_coordinates, 'euclidean')
+
+                proximity = (euclidean_distance < pixel) & (euclidean_distance > 0) # above 0 so track1 != track1 proximity 
+
+                proximal_counters = np.sum(proximity)
+
+                count.append(proximal_counters)
+                data.append({'time': frame, 'proximity count': proximal_counters, 'file': track_file})
+
+        
+        proximal_counters = pd.DataFrame(count)
+        proximal_counters.to_csv(os.path.join(self.directory, 'proximal_counters.csv'), index=False)
+
+        proximity_over_time = pd.DataFrame(data)
+        proximity_over_time = proximity_over_time.sort_values(by=['time'], ascending=True)
+        proximity_over_time.to_csv(os.path.join(self.directory, 'proximity_over_time.csv'), index=False)
+
+        return proximal_counters, proximity_over_time
+
+
+
+
+
 
 
 
@@ -523,23 +566,14 @@ class HoleAnalysis:
 
 
 
-    # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICHH RETURN TO THE HOLE AND THE TIME TAKEN 
-    # def returns(): #number returning to the hole 
+    # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICH RETURN TO THE HOLE AND THE TIME TAKEN 
+    # def returns(self)):
 
     # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
-
-    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS'
 
     # METHOD CASTING: 
 
     # METHOD FOR TRACK OVERLAY IMAGES AND VIDEOS 
-
-
-
-
-
-
-
 
 
 
