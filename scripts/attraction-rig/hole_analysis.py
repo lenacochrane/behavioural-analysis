@@ -549,25 +549,125 @@ class HoleAnalysis:
         proximity_over_time.to_csv(os.path.join(self.directory, 'proximity_over_time.csv'), index=False)
 
         return proximal_counters, proximity_over_time
-
-
-
-
-
-
-
-
-
     
+    # METHOD TIME_TO_ENTER: TIME TAKEN FOR EACH TRACK TO ENTER THE HOLE
 
+    def time_to_enter(self):
 
+        times = []
 
+        for track_file, hole_boundary in self.matching_pairs:
+            df = self.track_data[track_file]
 
+            for track in df['track_id'].unique():
+                unique_track = df[df['track_id'] == track]
+                unique_track = unique_track.sort_values(by=['frame'], ascending=True)
 
+                entered = False
+
+                # frame at which it enters the hole 
+                for row in unique_track.itertuples():
+                    point = Point(row.x_body, row.y_body) # Create a Point object for each (x_body, y_body) pair
+
+                    if hole_boundary.contains(point) or hole_boundary.touches(point):
+                        times.append({'track': track, 'time': row.frame, 'file': track_file})
+                        entered = True
+                        break
+
+                if not entered:
+                    times.append({'track': track, 'time': np.nan, 'file': track_file})
+        
+        hole_entry_time = pd.DataFrame(times)
+        hole_entry_time = hole_entry_time.sort_values(by=['track'], ascending=True)
+        hole_entry_time.to_csv(os.path.join(self.directory, 'hole_entry_time.csv'), index=False)
+
+        return hole_entry_time
 
 
     # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICH RETURN TO THE HOLE AND THE TIME TAKEN 
-    # def returns(self)):
+
+    def returns(self):
+
+        data = []
+
+        for track_file, hole_boundary in self.matching_pairs:
+            df = self.track_data[track_file]
+
+            df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
+
+            for track in df['track_id'].unique():
+                unique_track = df[df['track_id'] == track].sort_values(by=['frame'], ascending=True)
+
+                # identify inside or touching 2d points - Boolean True if so 
+                unique_track['potential point'] = unique_track['point'].apply(lambda row: hole_boundary.contains(row) or hole_boundary.touches(row))
+
+                # shifts the rows up by one, such that if the following row were to contain True/False we would know 
+                unique_track['following point'] = unique_track['potential point'].shift(-1)
+
+                exit_frame = None
+
+                # Identify rows which were within/touching the hole (potential point: True) and have now left the hole (following point: False)
+                for i, row in unique_track.iterrows():
+                    
+                    if row['potential point'] and not row['following point']: # identify tracks which have left the hole boundary
+                        exit_frame = row['frame']
+
+                        continue 
+                         
+                    if exit_frame is not None:
+                        if row['potential point']: # the track has reentered
+                            return_frame = row['frame']
+                            print(exit_frame, return_frame)
+                            time_taken = return_frame - exit_frame
+      
+                            data.append({'track': track, 'return time': time_taken, 'file': track_file})
+                            exit_frame = None
+        
+        returns = pd.DataFrame(data)
+        returns = returns.sort_values(by=['track'], ascending=True)
+        returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
+
+        return returns
+
+    
+            
+        
+
+
+
+                            
+
+
+
+
+                    
+  
+                    
+
+                    
+
+                    
+
+                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
 
@@ -577,15 +677,6 @@ class HoleAnalysis:
 
 
 
-
-
-# defintion which fills in the coordinates of the hole and removes it from the csv file idk like any larvae inside is not counted - 
-
-
-# # things i would want to use in every analysis which is useful
-# #   - iterate over every file in a directory 
-#     - - THEN SCRIPT FOR ANALYSIS NOT IN HOLE OR IN HOLE - count number of tracks per frame but not those in the hole + CERTAIN RADIUS
-# - RETURNS TO HOLE? - tracks which appear in certain radius and re enter the radis - like a counter 
 
 
 
