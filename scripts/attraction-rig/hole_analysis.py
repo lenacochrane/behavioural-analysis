@@ -611,7 +611,6 @@ class HoleAnalysis:
                     
                     if row['potential point'] and not row['following point']: # identify tracks which have left the hole boundary
                         exit_frame = row['frame']
-
                         continue 
                          
                     if exit_frame is not None:

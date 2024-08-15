@@ -5,17 +5,8 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
+import pyarrow.feather as feather
 
-# Add the directory containing hole_analysis.py to the Python path
-sys.path.append('/Users/cochral/repos/behavioural-analysis/scripts/attraction-rig')
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/modelling-behaviour/michael-test-sleap-extrac/ptc/2024-07-16_11-14-59_td10.tracks.feather')
 
-from hole_analysis import HoleAnalysis 
-
-
-
-HoleAnalysis.probability_density('/Users/cochral/repos/behavioural-analysis/scripts/attraction-rig/distances_from_centre.csv')
-
-ax.set_title('Custom Title for the Plot')
-
-plt.show()
-
+print(df)

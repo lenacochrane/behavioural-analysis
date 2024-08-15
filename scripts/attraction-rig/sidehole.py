@@ -23,7 +23,7 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.euclidean_distance()
+    analysis.returns()
 
     print("Analysis Completed")
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     if run_gui_option == 'y':
         run_gui()
 
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/modelling-behaviour/extract/test-for-script")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/modelling-behaviour/michael-test-sleap-extrac/ptc")
 
 
 
