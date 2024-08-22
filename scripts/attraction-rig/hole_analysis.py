@@ -316,7 +316,7 @@ class HoleAnalysis:
         return speed_values, speed_over_time
 
 
-    # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM TIME 0
+    # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM FIRST TRACK APPEARANCE
      
     def ensemble_msd(self): 
 
@@ -329,19 +329,29 @@ class HoleAnalysis:
 
             # calculate average x,y for first frame 
             # (needs to change such that it time 0 for each unique track compared back to)
-            
-            frame_0 = track_data[track_data['frame'] == 0]
 
-            x = frame_0['x_body'].mean()
-            y = frame_0['y_body'].mean()
+            for track in track_data['track_id'].unique():
+                track_unique = track_data[track_data['track_id'] == track].sort_values(by=['frame'])
 
-            for i, row in track_data.iterrows():
+                x0 = track_unique.iloc[0]['x_body']
+                y0 = track_unique.iloc[0]['y_body']
 
-                squared_distance = (row['x_body'] - x)**2 + (row['y_body'] - y)**2
+                for i in range(len(track_unique)):
 
-                frame = row['frame']
+                    squared_distance = (track_unique.iloc[i]['x_body'] - x0)**2 + (track_unique.iloc[i]['y_body'] - y0)**2
+                    # print(squared_distance)
 
-                data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
+                    frame = track_unique.iloc[i]['frame']
+
+                    data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
+                
+            # frame_0 = track_data[track_data['frame'] == 0]
+            # x = frame_0['x_body'].mean()
+            # y = frame_0['y_body'].mean()
+            # for i, row in track_data.iterrows():
+            #     squared_distance = (row['x_body'] - x)**2 + (row['y_body'] - y)**2
+            #     frame = row['frame']
+            #     data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
         
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time'], ascending=True)
@@ -484,7 +494,7 @@ class HoleAnalysis:
 
 
     # DEF HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE 
-      # CURRENTLY COUNTING IF INSIDE THE BOUNDARY, NO TIME ELEMENT THEREFORE ID'S ARE IRRELEVANT
+      # CURRENTLY COUNTING IF INSIDE THE BOUNDARY, NO TIME ELEMENT (WHICH IS NECESSARY) THEREFORE ID'S ARE IRRELEVANT
 
     def hole_counter(self):
 
@@ -628,47 +638,73 @@ class HoleAnalysis:
 
         return returns
 
-    
-            
+    # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
+
+    def hole_orientation(self):
+
+        self.hole_centroid() # call the hole_centroid method 
+
+        def angle_calculator(vector_A, vector_B):
+            # convert to an array for mathmatical ease 
+            A = np.array(vector_A)
+            B = np.array(vector_B)
+            # calculate the dot product
+            dot_product = np.dot(A, B)
+            # calculate the magnitude of vector (length / norm of vector)
+            magnitude_A = np.linalg.norm(vector_A)
+            magnitude_B = np.linalg.norm(vector_B)
+            # cosθ
+            cos_theta = dot_product / (magnitude_A * magnitude_B)
+            # θ in radians
+            theta_radians = np.arccos(cos_theta)
+            # θ in degrees
+            theta_degrees = np.degrees(theta_radians)
+            return theta_degrees
+        
+        hole_orientations = []
+        data = []
+
+        for track_file, centroid in self.matching_pairs:
+            df = self.track_data[track_file]
+
+            for row in df.itertuples(): # tuple of each row 
+
+                body = np.array([row.x_body, row.y_body])
+                head = np.array([row.x_head, row.y_head])
+
+                hole_body = np.array(centroid) - body 
+                body_head = body - head
+
+                angle = angle_calculator(hole_body, body_head)
+
+                frame = row.frame
+
+                hole_orientations.append(angle)
+
+                data.append({'time': frame, 'hole orientation': angle, 'file': track_file})
         
 
+        hole_orientations = pd.DataFrame(hole_orientations)
+        hole_orientations.to_csv(os.path.join(self.directory, 'hole_orientations.csv'), index=False)
 
+        hole_orientation_over_time = pd.DataFrame(data)
+        hole_orientation_over_time = hole_orientation_over_time.sort_values(by=['time'], ascending=True)
+        hole_orientation_over_time.to_csv(os.path.join(self.directory, 'hole_orientation_over_time.csv'), index=False)
 
-                            
+        return hole_orientations, hole_orientation_over_time
+        
 
+        
 
+        
 
-
-                    
-  
-                    
-
-                    
-
-                    
-
-                    
-
-
+    
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-    # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
 
     # METHOD CASTING: 
 
