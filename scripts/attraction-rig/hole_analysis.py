@@ -304,7 +304,7 @@ class HoleAnalysis:
 
                     speed.append(speed_value)
 
-                    data.append({'time': time1, 'speed': speed_value, 'file': track_file})
+                    data.append({'time': time2, 'speed': speed_value, 'file': track_file})
        
         speed_values = pd.DataFrame(speed)
         speed_values.to_csv(os.path.join(self.directory, 'speed_values.csv'), index=False)
@@ -314,6 +314,53 @@ class HoleAnalysis:
         speed_over_time.to_csv(os.path.join(self.directory, 'speed_over_time.csv'), index=False)
 
         return speed_values, speed_over_time
+
+    # DEF ACCELERATION: 
+
+    def acceleration(self):
+
+        acceleration = []
+        data = []
+
+        for track_file in self.track_files:
+            track_data = self.track_data[track_file]
+
+            for track in track_data['track_id'].unique():
+                track_unique = track_data[track_data['track_id'] == track]
+
+                previous_speed = None
+                previous_time = None
+
+                for i in range(len(track_unique) - 1):
+
+                    row = track_unique.iloc[i]
+                    next_row = track_unique.iloc[i+1]
+
+                    distance = np.sqrt((row['x_body'] - next_row['x_body'])**2 + (row['y_body'] - next_row['y_body'])**2)
+
+                    time1 = row['frame']
+                    time2 = next_row['frame']
+
+                    time = time2 - time1
+
+                    speed_value = distance / time 
+
+                    if previous_speed is not None and previous_time is not None:
+                        acceleration_value = (speed_value - previous_speed) / time 
+                        acceleration.append(acceleration_value)
+                        data.append({'time': time2, 'acceleration': acceleration_value, 'file': track_file})
+
+                    previous_speed = speed_value
+                    previous_time = time
+        
+        acceleration = pd.DataFrame(acceleration)
+        acceleration.to_csv(os.path.join(self.directory, 'acceleration.csv'), index=False)
+
+        acceleration_accross_time = pd.DataFrame(data)
+        acceleration_accross_time = acceleration_accross_time.sort_values(by=['time'], ascending=True)
+        acceleration_accross_time.to_csv(os.path.join(self.directory, 'acceleration_accross_time.csv'), index=False)
+
+        return acceleration, acceleration_accross_time
 
 
     # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM FIRST TRACK APPEARANCE
