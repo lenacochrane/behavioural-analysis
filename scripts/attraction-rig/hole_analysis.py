@@ -67,6 +67,58 @@ class HoleAnalysis:
             df.to_csv(shortened_path, index=False)
             print(f"Shortened file saved: {shortened_path}")
 
+    # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 2) 
+
+    def post_processing(self):
+        
+        # FUNCTION INPUTS INDIVIDUAL TRACK DF DATA AND INCRIMENTALLY FILLS IN GAPS 
+        def interpolate(track_df):
+            # range of frames
+            min_frame = track_df['frame'].min() 
+            max_frame = track_df['frame'].max()
+            # create Numpy Array of min-max 
+            frame_range = np.arange(min_frame, max_frame + 1)
+            # return difference between expected and actual frame numbers
+            missing_frames = np.setdiff1d(frame_range, track_df['frame'].values)
+  
+            if len(missing_frames) == 0:
+                return track_df
+    
+            track_name = track_df['track_id'].iloc[0]
+            # create df for missing frames
+            missing_df = pd.DataFrame({'frame': missing_frames, 'track_id': track_name})
+            # join track data and missing tracks 
+            df = pd.concat([track_df, missing_df]).sort_values(by='frame')
+
+            # Interpolate for each coordinate pair
+            coordinates = ['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'y_tail']
+            # add nan values for the missing data in the additional frames 
+            for coord in coordinates:
+                if coord not in df.columns:
+                    df[coord] = np.nan 
+            
+            for coord in coordinates:
+                # interpolate fills in missing values assuming a linear relation between known values
+                df[coord] = df[coord].interpolate()
+    
+            # Forward-fill and backward-fill (dont think this is applicable here really- gaps at start and end of track)
+            # for coord in coordinates:
+            #     full_df[coord] = full_df[coord].ffill().bfill()
+            return df
+        
+
+        for track_file in self.track_files:
+            df = self.track_data[track_file]
+            # unsure if in the feather file has the instance score -> get michael to include 
+            # group by tracks, calculate mean per tracks, if True >= 0.9 include in df 
+            df = df[df.groupby('track_id')['instance.score'].transform('mean') >= 0.9]
+
+            # fill in track gaps 
+            df = df.sort_values(by=['track_id', 'frame'])
+            # applies the definition to each mini dataframe for tracks and then combines the results into a single dataframe
+            df = df.groupby('track_id').apply(interpolate).reset_index(drop=True)
+
+
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION
      # 1. CONVEX HULL: CONVEX SHAPE THAT ENCLOSES A SET OF POINTS (CONTINIOUS BOUNDARY)
      # 2. VERTICES: CORNER POINTS OF THE CONVEX SHAPE
