@@ -46,7 +46,7 @@ class HoleAnalysis:
             track_path = os.path.join(self.directory, track_file)
             df = pd.read_feather(track_path)
             pixels_to_cm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
-            df[pixels_to_cm] = df[pixels_to_cm] * (9/1032) #conversion factor pixels to cm
+            df[pixels_to_cm] = df[pixels_to_cm] * (90/1032) #conversion factor pixels to mm
             df = df.round(2)  # Round values to 2 decimal places
             self.track_data[track_file] = df
             # self.track_data[track_file] = pd.read_feather(track_path)
@@ -791,19 +791,19 @@ class HoleAnalysis:
         hole_orientation_over_time.to_csv(os.path.join(self.directory, 'hole_orientation_over_time.csv'), index=False)
 
         return hole_orientations, hole_orientation_over_time
-        
-
-        
-
-        
-
     
 
+    # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
 
 
 
+        
+    # METHOD NUMBER_DIGGING: IN ABSENCE OF MAN-MADE HOLE, THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING 
 
 
+
+    # DIGGING IN ISOLATION/ HOW TO COMBINE THE MAN-MADE HOLE WITH THE NUMBER DIGGING OUTSIDE OF THIS
+      # IDEK HOW TO DO THIS
 
     # METHOD CASTING: 
 

@@ -23,7 +23,7 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.returns()
+    analysis.acceleration()
 
     print("Analysis Completed")
 
