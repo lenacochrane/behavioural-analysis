@@ -45,10 +45,14 @@ class HoleAnalysis:
         for track_file in self.track_files: 
             track_path = os.path.join(self.directory, track_file)
             df = pd.read_feather(track_path)
-            pixels_to_cm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
-            df[pixels_to_cm] = df[pixels_to_cm] * (90/1032) #conversion factor pixels to mm
-            df = df.round(2)  # Round values to 2 decimal places
+            # Print to verify data right after loading
+            print(f"Loaded data from {track_file}:")
+            print(df[['frame', 'track_id', 'x_body', 'y_body']].head(10))
+            pixels_to_mm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+            df[pixels_to_mm] = df[pixels_to_mm] * (90/1032) #conversion factor pixels to mm
+            # df = df.round(2)  # Round values to 2 decimal places
             self.track_data[track_file] = df
+        
             # self.track_data[track_file] = pd.read_feather(track_path)
 
    # METHOD SHORTEN: OPTIONAL METHOD TO SHORTEN THE TRACK FILES TO INCLUDE UP TO A CERTAIN FRAME  
@@ -62,9 +66,10 @@ class HoleAnalysis:
             self.track_data[track_file] = df # update the track data 
 
             # create path 
-            shortened_path = os.path.join(self.directory, track_file.replace('.csv', f'_shortened_{frame}.csv'))
+            shortened_path = os.path.join(self.directory, track_file.replace('.feather', f'_shortened_{frame}.feather'))
             # save 
-            df.to_csv(shortened_path, index=False)
+            df.reset_index(drop=True, inplace=True)  # Feather requires a default integer index
+            df.to_feather(shortened_path)  # Save the DataFrame without 'index=False'
             print(f"Shortened file saved: {shortened_path}")
 
     # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 2) 
@@ -111,12 +116,17 @@ class HoleAnalysis:
             df = self.track_data[track_file]
             # unsure if in the feather file has the instance score -> get michael to include 
             # group by tracks, calculate mean per tracks, if True >= 0.9 include in df 
-            df = df[df.groupby('track_id')['instance.score'].transform('mean') >= 0.9]
+            df = df[df.groupby('track_id')['instance_score'].transform('mean') >= 0.9]
 
             # fill in track gaps 
             df = df.sort_values(by=['track_id', 'frame'])
             # applies the definition to each mini dataframe for tracks and then combines the results into a single dataframe
             df = df.groupby('track_id').apply(interpolate).reset_index(drop=True)
+
+            # # Save the post-processed DataFrame to the original file path
+            # file_path = os.path.join(self.directory, track_file)  # Combines directory and filename
+            # df.to_feather(file_path)  # Save the DataFrame back to the file
+            self.track_data[track_file] = df  # Update the in-memory version
 
 
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION
@@ -133,6 +143,10 @@ class HoleAnalysis:
             file_path = os.path.join(self.directory, coordinates)
 
             df = pd.read_csv(file_path, header=None, names=['x', 'y'])
+
+            # Convert coordinates from pixels to millimeters using the same conversion factor
+            conversion_factor = 90 / 1032
+            df[['x', 'y']] = df[['x', 'y']] * conversion_factor
 
             points = df[['x', 'y']].values # values creates numpy array
 
@@ -190,8 +204,8 @@ class HoleAnalysis:
                 # if hole_prefix == track_prefix:
                 #     self.matching_pairs.append((track_file, hole_boundary))
 
-                track_path = os.path.join(self.directory, track_file)
-                self.track_data[track_file] = pd.read_feather(track_path).round(2)
+                # track_path = os.path.join(self.directory, track_file)
+                # self.track_data[track_file] = pd.read_feather(track_path).round(2)
         
         print(f"Matching pairs: {self.matching_pairs}")
         print(f"Track data keys: {self.track_data.keys()}")
@@ -305,9 +319,7 @@ class HoleAnalysis:
     # METHOD PROBABILITY_DENSITY: PROBABILITY DENSITY FOR INPUTTED 1D ARRAY
     
     @staticmethod
-    def probability_density(file, x=None, y=None):
-
-        df = pd.read_csv(file)
+    def probability_density(df, ax=None, color=None, label=None, linestyle=None):
 
         data = df.iloc[:, 0].values #iloc indexed based selection - : all rows - 0 first column
 
@@ -321,9 +333,14 @@ class HoleAnalysis:
         # np.linspace(start, stop, num)
 
         density = kde(value_range)
+   
         # evaluates the KDE at each of the points in the range provided 
 
-        ax = sns.lineplot(x=value_range, y=density)
+        if ax is None:
+            ax = plt.gca()
+        
+        ax = sns.lineplot(x=value_range, y=density, ax=ax, color=color, label=label, linestyle=linestyle)
+    
 
         return ax # ax = probability_density() to modify graph when called
     
@@ -542,21 +559,33 @@ class HoleAnalysis:
         
         # definition to calculate angle 
         def angle_calculator(vector_A, vector_B):
+
             # convert to an array for mathmatical ease 
-            A = np.array(vector_A)
-            B = np.array(vector_B)
-            # calculate the dot product
-            dot_product = np.dot(A, B)
-            # calculate the magnitude of vector (length / norm of vector)
-            magnitude_A = np.linalg.norm(vector_A)
-            magnitude_B = np.linalg.norm(vector_B)
-            # cosθ
-            cos_theta = dot_product / (magnitude_A * magnitude_B)
-            # θ in radians
-            theta_radians = np.arccos(cos_theta)
-            # θ in degrees
-            theta_degrees = np.degrees(theta_radians)
-            return theta_degrees
+            A = np.array(vector_A, dtype=np.float64)
+            B = np.array(vector_B, dtype=np.float64)
+            
+            # Ensure there are no NaN values in the vectors and check for zero-length vectors
+            if not np.isnan(A).any() and not np.isnan(B).any():
+                # calculate magnitude of the vector
+                magnitude_A = np.linalg.norm(A)
+                magnitude_B = np.linalg.norm(B)
+                
+                # ensure magnitude =! 0
+                if magnitude_A != 0 and magnitude_B != 0:
+                    # Calculate the dot product
+                    dot_product = np.dot(A, B)
+                    
+                    # cosθ
+                    cos_theta = dot_product / (magnitude_A * magnitude_B)
+                    cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure valid range for arccos
+        
+                    # θ in radians
+                    theta_radians = np.arccos(cos_theta)
+                    # θ in degrees
+                    theta_degrees = np.degrees(theta_radians)
+                    return theta_degrees
+            
+            return np.nan
         
         angles = []
         data = []
@@ -572,7 +601,7 @@ class HoleAnalysis:
                 tail = unique_track.iloc[i][['x_tail', 'y_tail']].values
 
                 HB = head - body
-                BT = body - tail 
+                BT = tail - body 
 
                 angle = angle_calculator(HB, BT)
 
@@ -591,7 +620,43 @@ class HoleAnalysis:
 
         return angle_values, angle_over_time   
 
+    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS' 1) AVERAGE  2) AVERAGE OVER TIME
+      # CURRENTLY ACCOUNTS ONLY FOR BODY-BODY CONTACTS 
 
+    def proximity(self, pixel=(50*(90/1032))):
+
+        count = []
+        data = []
+
+        for track_file in self.track_files:
+            track_data = self.track_data[track_file]
+            track_data.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/test2.csv')
+
+            # count for each frame 
+            for frame in track_data['frame'].unique():
+                unique_frame = track_data[track_data['frame'] == frame]
+
+                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy() # cdist requires 2D NumPy array as input
+
+                euclidean_distance = cdist(body_coordinates, body_coordinates, 'euclidean')
+
+                proximity = (euclidean_distance < pixel) & (euclidean_distance > 0) # above 0 so track1 != track1 proximity 
+
+                proximal_counters = np.sum(proximity)
+
+                count.append(proximal_counters)
+                data.append({'time': frame, 'proximity count': proximal_counters, 'file': track_file})
+
+        
+        proximal_counters = pd.DataFrame(count)
+        proximal_counters.to_csv(os.path.join(self.directory, 'proximal_counters.csv'), index=False)
+
+        proximity_over_time = pd.DataFrame(data)
+        proximity_over_time = proximity_over_time.sort_values(by=['time'], ascending=True)
+        proximity_over_time.to_csv(os.path.join(self.directory, 'proximity_over_time.csv'), index=False)
+
+        return proximal_counters, proximity_over_time
+    
     # DEF HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE 
       # CURRENTLY COUNTING IF INSIDE THE BOUNDARY, NO TIME ELEMENT (WHICH IS NECESSARY) THEREFORE ID'S ARE IRRELEVANT
 
@@ -623,42 +688,6 @@ class HoleAnalysis:
 
         return hole_count
     
-    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS' 1) AVERAGE  2) AVERAGE OVER TIME
-      # CURRENTLY ACCOUNTS ONLY FOR BODY-BODY CONTACTS 
-
-    def proximity(self, pixel=50):
-
-        count = []
-        data = []
-
-        for track_file in self.track_files:
-            track_data = self.track_data[track_file]
-
-            # count for each frame 
-            for frame in track_data['frame'].unique():
-                unique_frame = track_data[track_data['frame'] == frame]
-
-                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy() # cdist requires 2D NumPy array as input
-
-                euclidean_distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-
-                proximity = (euclidean_distance < pixel) & (euclidean_distance > 0) # above 0 so track1 != track1 proximity 
-
-                proximal_counters = np.sum(proximity)
-
-                count.append(proximal_counters)
-                data.append({'time': frame, 'proximity count': proximal_counters, 'file': track_file})
-
-        
-        proximal_counters = pd.DataFrame(count)
-        proximal_counters.to_csv(os.path.join(self.directory, 'proximal_counters.csv'), index=False)
-
-        proximity_over_time = pd.DataFrame(data)
-        proximity_over_time = proximity_over_time.sort_values(by=['time'], ascending=True)
-        proximity_over_time.to_csv(os.path.join(self.directory, 'proximity_over_time.csv'), index=False)
-
-        return proximal_counters, proximity_over_time
-    
     # METHOD TIME_TO_ENTER: TIME TAKEN FOR EACH TRACK TO ENTER THE HOLE
 
     def time_to_enter(self):
@@ -667,6 +696,7 @@ class HoleAnalysis:
 
         for track_file, hole_boundary in self.matching_pairs:
             df = self.track_data[track_file]
+            print(df)
 
             for track in df['track_id'].unique():
                 unique_track = df[df['track_id'] == track]
@@ -676,9 +706,17 @@ class HoleAnalysis:
 
                 # frame at which it enters the hole 
                 for row in unique_track.itertuples():
+      
                     point = Point(row.x_body, row.y_body) # Create a Point object for each (x_body, y_body) pair
 
+                    # print(point)
+                    # print(f"Hole boundary: {hole_boundary.bounds}")
+                    # THESE COME OUT COMPLETELY DIFFERENT 
+                    # is one in pixels and mm that shouldnt be true 
+
+     
                     if hole_boundary.contains(point) or hole_boundary.touches(point):
+                        print(row.frame)
                         times.append({'track': track, 'time': row.frame, 'file': track_file})
                         entered = True
                         break
@@ -728,10 +766,12 @@ class HoleAnalysis:
                             print(exit_frame, return_frame)
                             time_taken = return_frame - exit_frame
       
-                            data.append({'track': track, 'return time': time_taken, 'file': track_file})
+                            data.append({'track': track, 'return time': time_taken, 'exit frame': exit_frame, 'return frame': return_frame, 'file': track_file})
+        
                             exit_frame = None
         
         returns = pd.DataFrame(data)
+        print(returns.head())
         returns = returns.sort_values(by=['track'], ascending=True)
         returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
 
@@ -765,14 +805,14 @@ class HoleAnalysis:
 
         for track_file, centroid in self.matching_pairs:
             df = self.track_data[track_file]
-
+            
             for row in df.itertuples(): # tuple of each row 
 
                 body = np.array([row.x_body, row.y_body])
                 head = np.array([row.x_head, row.y_head])
 
                 hole_body = np.array(centroid) - body 
-                body_head = body - head
+                body_head = head - body
 
                 angle = angle_calculator(hole_body, body_head)
 
@@ -792,13 +832,104 @@ class HoleAnalysis:
 
         return hole_orientations, hole_orientation_over_time
     
+    
+    # METHOD NUMBER_DIGGING: THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
 
-    # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
+    def number_digging(self, total_larvae):
 
+        dataframe_list = [] 
 
+        for track_file in self.track_files:
+            df = self.track_data[track_file]
 
+            # mm_to_pixel = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+            # df[mm_to_pixel] = df[mm_to_pixel] * (1032/90) #conversion factor mm to pixels 
+
+            df = df.sort_values(by=['track_id', 'frame'])
+
+            # Smooth the positions with a rolling window to reduce noise
+            df['x_body'] = df['x_body'].rolling(window=5, min_periods=1).mean()
+            df['y_body'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+
+            # Calculate the difference between consecutive rows for body coordinates
+            df['dx'] = df.groupby('track_id')['x_body'].diff().fillna(0)
+            df['dy'] = df.groupby('track_id')['y_body'].diff().fillna(0)
+
+            # Calculate the Euclidean distance (hypotenuse) between consecutive points
+            df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
+            print(df[['dx', 'dy']].head(-1000))
+
+            # Create a boolean mask where x,y movement is greater than 0.1 pixel
+            df['is_moving'] = (df['dx'].abs() > 0.01) | (df['dy'].abs() > 0.01)
+            # df['is_moving'] = True
+
+            # Use a rolling window to check for sustained movement over the next 100 frames  
+            df['future_movement'] = df.groupby('track_id')['is_moving'].transform(lambda x: x.rolling(window=10, min_periods=1).mean())
+
+            # Use a rolling window to check if the cumulative distance moved in the last 5 frames exceeds a threshold (e.g., 10 pixels)
+            # ONLY CONSIDER IT MOVING IF IT HAS MOVED MORE THAN > PIXELS IN THE WINDOW OF A CERTAIN AMOUNT OF FRAMES  
+            df['distance_rolled'] = df.groupby('track_id')['distance'].transform(lambda x: x.rolling(window=30, min_periods=1).sum())
+            df['distance_check'] = df['distance_rolled'] > 2
+
+            # Print is_moving (boolean) and future_movement (numerical values), along with distance_rolled and distance_check
+            print(df[['frame', 'distance_rolled', 'distance_check', 'is_moving', 'future_movement']].head(-1500))
+            
+
+            # If future_movement is high enough, we can classify as "moving" 
+            # unsure if the distance check should be an and 
+            # distance check must be True 
+            df['final_movement'] = (df['is_moving'] | (df['future_movement'] > 0.3)) & df['distance_check']
+            print(df['final_movement'].head(-2000))
+            df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/testing-digging-behaviour/n10-food/df.csv')
+          
+
+            # Now count the moving frames per frame_idx
+            moving_counts = df.groupby('frame')['final_movement'].sum().reset_index()
+
+            # Rename the column for clarity
+            moving_counts.columns = ['frame', 'moving_count']
+
+            # Ensure we have a count for every frame
+            full_frame_range = pd.DataFrame({'frame': range(int(df['frame'].min()), int(df['frame'].max()) + 1)})
+            full_frame_counts = full_frame_range.merge(moving_counts, on='frame', how='left').fillna(0)
+
+            # Convert counts to integers
+            full_frame_counts['moving_count'] = full_frame_counts['moving_count'].astype(int)
+
+            full_frame_counts['number digging'] = total_larvae - full_frame_counts['moving_count']
+
+            full_frame_counts['file'] = track_file
+
+            dataframe_list.append(full_frame_counts)
         
-    # METHOD NUMBER_DIGGING: IN ABSENCE OF MAN-MADE HOLE, THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING 
+        number_digging = pd.concat(dataframe_list, ignore_index=True)
+        number_digging = number_digging.sort_values(by=['frame'], ascending=True)
+        number_digging.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
+
+        return number_digging
+    
+        # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
+        # EXTRACTED FROM THE ABOVE !
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
