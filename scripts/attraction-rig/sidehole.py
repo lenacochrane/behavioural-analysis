@@ -23,7 +23,38 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.acceleration()
+    analysis.post_processing()
+
+    analysis.hole_boundary(scale_factor=1.5)
+
+    #METHOD TO SHORTEN
+    # analysis.shorten(frame=1801)
+    
+    # CALL METHODS FOR LARVAEL BEHAVIOUR 
+    # analysis.trajectory()
+    # analysis.time_average_msd(list(range(1, 101, 1)))
+    # analysis.speed()
+    # analysis.ensemble_msd()
+    # analysis.acceleration()
+    # analysis.euclidean_distance()
+    # analysis.distance_from_centre()
+    # analysis.proximity()
+
+    # DIGGING IN ABSENCE OF HOLES
+    # analysis.number_digging(10)
+
+    # HOLE ANALYSIS METHODS 
+
+    # requires polygon
+    # analysis.returns()
+    # analysis.time_to_enter()
+    # analysis.hole_counter()
+    analysis.hole_departures()
+    
+    # requires hole centroid 
+    # analysis.hole_orientation()
+    # analysis.distance_from_hole()
+
 
     print("Analysis Completed")
 
@@ -32,9 +63,36 @@ if __name__ == "__main__":
 
     run_gui_option = input("Do you want to run the GUI for hole drawing? (y/n): ").strip().lower()
     if run_gui_option == 'y':
-        run_gui()
+        run_gui()    
+ 
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n1")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n2")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n3")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n4")
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n5')
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n6")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n7")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n8")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n9")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n10")
 
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/modelling-behaviour/michael-test-sleap-extrac/ptc")
+    
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/1-hour-agarose-n10')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/1-hour-food-n10')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/30-minutes-agarose-n10')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/30-minutes-agarose-n10')
+
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/agarose')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/food')
+
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/agarose')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/food')
+
+
+
+
+    
+
 
 
 

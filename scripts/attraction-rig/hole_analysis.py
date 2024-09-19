@@ -234,6 +234,7 @@ class HoleAnalysis:
         self.hole_centroid() # call the hole_centroid method 
 
         distances_from_hole = []
+        data = []
 
         for track_file, centroid in self.matching_pairs: # track file is just the name of the file 
 
@@ -242,6 +243,7 @@ class HoleAnalysis:
                 x, y = row['x_body'], row['y_body']
                 distance = np.sqrt((centroid[0] - x)**2 + (centroid[1] - y)**2)
                 distances_from_hole.append(distance)
+                data.append({'time': row.frame, 'distance_from_hole': distance, 'file': track_file})
         
         print("Distances from hole centroid:", distances_from_hole)
 
@@ -252,6 +254,11 @@ class HoleAnalysis:
             df_distances = pd.DataFrame(distances_from_hole, columns=['Distance from hole'])
             df_distances.to_csv(os.path.join(self.directory, 'distance_from_hole_centroid.csv'), index=False)
             print(f"Distance from hole saved: {df_distances}")
+
+            distance_hole_over_time = pd.DataFrame(data)
+            distance_hole_over_time = distance_hole_over_time.sort_values(by=['time'], ascending=True)
+            distance_hole_over_time.to_csv(os.path.join(self.directory, 'distance_hole_over_time.csv'), index=False)
+
             return df_distances
     
     # METHOD DISTANCE_FROM_CENTRE: CALCULATES DISTANCES FROM CENTRE COORDINATES 
@@ -340,7 +347,6 @@ class HoleAnalysis:
             ax = plt.gca()
         
         ax = sns.lineplot(x=value_range, y=density, ax=ax, color=color, label=label, linestyle=linestyle)
-    
 
         return ax # ax = probability_density() to modify graph when called
     
@@ -709,10 +715,7 @@ class HoleAnalysis:
       
                     point = Point(row.x_body, row.y_body) # Create a Point object for each (x_body, y_body) pair
 
-                    # print(point)
-                    # print(f"Hole boundary: {hole_boundary.bounds}")
-                    # THESE COME OUT COMPLETELY DIFFERENT 
-                    # is one in pixels and mm that shouldnt be true 
+        
 
      
                     if hole_boundary.contains(point) or hole_boundary.touches(point):
@@ -776,6 +779,44 @@ class HoleAnalysis:
         returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
 
         return returns
+    
+
+    # METHOD HOLE_DEPARTURES: METHOD WHICH CALCULATES THE NUMBER OF LARVAE LEAVING THE HOLE
+
+    def hole_departures(self):
+
+        data = []
+
+        for track_file, hole_boundary in self.matching_pairs:
+            df = self.track_data[track_file]
+
+            df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
+
+            for track in df['track_id'].unique():
+                unique_track = df[df['track_id'] == track].sort_values(by=['frame'], ascending=True)
+                
+                # IDENTIFY TRACKS WHICH ARE WITHIN/TOUCHING THE BOUNDARY
+                unique_track['potential point'] = unique_track['point'].apply(lambda row: hole_boundary.contains(row) or hole_boundary.touches(row))
+
+                # IS THE NEXT ROW INSIDE ALSO 
+                unique_track['following point'] = unique_track['potential point'].shift(-1)
+
+                # Identify rows which were within/touching the hole (potential point: True) and have now left the hole (following point: False)
+                for i, row in unique_track.iterrows():
+
+                    # IDENTIFY TRACKS WHICH HAVE NOW LEFT THE HOLE BOUNDARY!
+                    
+                    if row['potential point'] and not row['following point']: 
+                        data.append({'track': track, 'exit frame': row['frame'], 'file': track_file})
+                        continue 
+        
+        hole_departures = pd.DataFrame(data)
+        hole_departures = hole_departures.sort_values(by=['track'], ascending=True)
+        hole_departures.to_csv(os.path.join(self.directory, 'hole_departures.csv'), index=False)
+
+        return hole_departures
+                        
+
 
     # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
 
@@ -860,6 +901,7 @@ class HoleAnalysis:
             print(df[['dx', 'dy']].head(-1000))
 
             # Create a boolean mask where x,y movement is greater than 0.1 pixel
+            # CHANGE THIS DISTANCE - 
             df['is_moving'] = (df['dx'].abs() > 0.01) | (df['dy'].abs() > 0.01)
             # df['is_moving'] = True
 
@@ -882,7 +924,6 @@ class HoleAnalysis:
             print(df['final_movement'].head(-2000))
             df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/testing-digging-behaviour/n10-food/df.csv')
           
-
             # Now count the moving frames per frame_idx
             moving_counts = df.groupby('frame')['final_movement'].sum().reset_index()
 
@@ -908,6 +949,15 @@ class HoleAnalysis:
 
         return number_digging
     
+
+
+
+
+
+
+
+
+
         # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
         # EXTRACTED FROM THE ABOVE !
     
