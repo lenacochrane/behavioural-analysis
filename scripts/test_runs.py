@@ -7,16 +7,27 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import pyarrow.feather as feather
 
-# df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/2024-08-20_13-17-04_td2.tracks.feather')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-fake_data/distances_from_centre.csv')
+
+sns.stripplot(data=df, x='time', y='average_distance')
+
+plt.title('Euclidean Distances Data Points for Fake Data')
+
+plt.savefig('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-fake_data/distances_from_centre.png', dpi=300, bbox_inches='tight')
+
+plt.show()
+
+
+
 
 
 # this has been cleaned already 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-hole-counter/hole_count.csv')
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/testing-digging-behaviour/with-new-method/number_digging.csv')
 
 
-sns.lineplot(data=df, x='time', y='count')
+# sns.lineplot(data=df, x='frame', y='number_digging')
 
-plt.show()
+# plt.show()
 
 
 

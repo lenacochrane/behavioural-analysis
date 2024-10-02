@@ -23,12 +23,12 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.post_processing()
+    # analysis.post_processing()
 
     analysis.hole_boundary(scale_factor=1.5)
 
     #METHOD TO SHORTEN
-    # analysis.shorten(frame=1801)
+    # analysis.shorten(frame=100)
     
     # CALL METHODS FOR LARVAEL BEHAVIOUR 
     # analysis.trajectory()
@@ -37,6 +37,7 @@ def perform_analysis(directory):
     # analysis.ensemble_msd()
     # analysis.acceleration()
     # analysis.euclidean_distance()
+    # analysis.euclidean_distance_variance(200, 600) # currently plotting the plataeu but arbitary time start for plateu 
     # analysis.distance_from_centre()
     # analysis.proximity()
 
@@ -47,9 +48,9 @@ def perform_analysis(directory):
 
     # requires polygon
     # analysis.returns()
-    # analysis.time_to_enter()
-    # analysis.hole_counter()
-    analysis.hole_departures()
+    # analysis.time_to_enter() # SCALE FACTOR LESS THAN 1.5?
+    analysis.hole_counter()
+    # analysis.hole_departures()
     
     # requires hole centroid 
     # analysis.hole_orientation()
@@ -64,6 +65,18 @@ if __name__ == "__main__":
     run_gui_option = input("Do you want to run the GUI for hole drawing? (y/n): ").strip().lower()
     if run_gui_option == 'y':
         run_gui()    
+
+
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n1")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n2")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n3")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n4")
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n5')
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n6")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n7")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n8")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n9")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n10")
  
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n1")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n2")
@@ -87,6 +100,9 @@ if __name__ == "__main__":
 
     perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/agarose')
     perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/food')
+
+
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-fake_data')
 
 
 
