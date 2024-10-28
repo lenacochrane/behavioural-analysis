@@ -774,19 +774,43 @@ class HoleAnalysis:
             df = self.track_data[track_file]
 
             # True/False is the point inside or outside the hole 
-            df['outside_hole'] = df.apply(lambda row: not hole_boundary.contains(Point(row['x_body'], row['y_body'])), axis=1)
+            # Apply a buffer to expand the hole boundary slightly # feel like this is buffering the original boundary by 1.5 - unsure why the scale didint work 
+            buffered_boundary = hole_boundary.buffer(1.5)  
+
+            # Update the condition to use the buffered boundary
+            df['outside_hole'] = df.apply(lambda row: not (buffered_boundary.contains(Point(row['x_body'], row['y_body'])) or 
+                                               buffered_boundary.touches(Point(row['x_body'], row['y_body']))), axis=1)
+
             
             # True/False within 10mm of the hole
-            df['within_10mm'] = df.apply(lambda row: hole_boundary.exterior.distance(Point(row['x_body'], row['y_body'])) <= 10, axis=1)
+            df['within_10mm'] = df.apply(lambda row: buffered_boundary.exterior.distance(Point(row['x_body'], row['y_body'])) <= 10, axis=1)
 
             # calculate displacement between frames
             # chat gpt said resent index is necessary here due to the apply and groupby * ask michael or callum to explain this properly
             df['displacement'] = df.groupby('track_id').apply(lambda group: np.sqrt((group['x_body'].diff() ** 2) + (group['y_body'].diff() ** 2))).reset_index(drop=True)
 
-            # cumulative distance over rolling window
-            df['rolling_displacement'] = df.groupby('track_id')['displacement'].transform(lambda x: x.rolling(window=30, min_periods=1).sum()) 
+            # cumalative displacement
+            df['cumulative_displacement'] = df.groupby('track_id')['displacement'].cumsum()
 
-            df['digging'] = df['within_10mm'] & (df['rolling_displacement'] < 3)
+            # cumalative displacement rate - rolling window 20 frames
+            # first 19 frames - fillna0 
+            df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(20) / 20).fillna(0)
+
+
+            # # cumulative distance over rolling window
+            # df['rolling_displacement'] = df.groupby('track_id')['displacement'].transform(lambda x: x.rolling(window=30, min_periods=1).sum()) 
+
+            # df['digging'] = df['within_10mm'] & (df['rolling_displacement'] < 3)
+
+            # standard deviation of x y movement 
+            df['x_std'] = df.groupby('track_id')['x_body'].transform(lambda x: x.rolling(window=20, min_periods=1).std())
+            df['y_std'] = df.groupby('track_id')['y_body'].transform(lambda x: x.rolling(window=20, min_periods=1).std())
+            df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
+
+
+            df['digging'] = df['within_10mm'] & ((df['cumulative_displacement_rate'] < 0.5) | (df['overall_std'] < 3))
+
+
 
             df['moving_outside'] = df['outside_hole'] & ~df['digging']
 
