@@ -17,6 +17,7 @@ def list_files_in_directory(directory_path, output_csv):
         writer.writerow(['File Name'])  # Write the header
         for filename in files:
             writer.writerow([filename])  # Write each filename
+            # writer.writerows([[]] * 6) # add 6 rows 
 
     print(f"CSV file '{output_csv}' created successfully.")
 
@@ -24,6 +25,6 @@ def list_files_in_directory(directory_path, output_csv):
 
 # Example usage:
 
-directory_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/Holes/1H/PLAIN-PETRI-N10/AGAROSE'
-output_csv = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/Holes/1H/PLAIN-PETRI-N10/agarose.csv'
+directory_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/N Free Roaming Larvae/1H/DAY4/N10/FOOD'
+output_csv = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/N Free Roaming Larvae/1H/DAY4/N10/FOOD/filename.csv'
 list_files_in_directory(directory_path, output_csv)
