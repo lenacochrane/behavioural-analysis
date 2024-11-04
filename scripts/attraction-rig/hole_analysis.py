@@ -27,6 +27,7 @@ class HoleAnalysis:
         self.tracks()
         self.hole_boundary()
         self.match_files()
+        # self.radius()
 
     # METHOD COORDINATES: IDENTIFIES AND STORES THE HOLE COORDINATE FILES
 
@@ -685,84 +686,6 @@ class HoleAnalysis:
 
         return proximal_counters, proximity_over_time
     
-    # DEF HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE 
-
-    # def hole_counter(self):
-
-    #     count = []
-
-    #     for track_file, hole_boundary in self.matching_pairs:
-    #         df = self.track_data[track_file]
-
-    #         # ASSUME NO LARVAE LEAVE - COUNT THE NUMBER OF LARVAE OUTSIDE HOLE BECAUSE INSIDE HOLE MIGHT BE HARD IF THEY ARE DIGGING A LOT 
-    #         # TRACK ID IS IRRELEVANT SO CAN ITERATE OVER EVERY ROW 
-    #         # REQUIRES FRAME 
-
-    #         for frame, frame_data in df.groupby('frame'):
-
-    #             # point is from the shapely library and is used to represent a point in 2d space 
-    #             # contains to see if the point lies within the polygon 
-    #             number_outside_hole = frame_data.apply(lambda row: not hole_boundary.contains(Point(row['x_body'], row['y_body'])), axis=1)
-
-    #             count_outside = number_outside_hole.sum()
-    #             count_inside = 10 - count_outside # assume 10 larvae
-
-    #             count.append({'time': frame, 'count': count_inside, 'file': track_file})
-        
-    #     hole_count = pd.DataFrame(count)
-    #     hole_count = hole_count.sort_values(by=['time'], ascending=True)
-    #     hole_count.to_csv(os.path.join(self.directory, "hole_count.csv"), index=False)
-
-    #     return hole_count
-    
-    
-    # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE + IF LARVAE OUTSIDE HOLE IS IT MOVING (IDENTIFYING THOSE CLOSE AND BURROWING BENEATH SURFACE)
-
-    # def hole_counter(self):
-
-    #     count = []
-
-    #     for track_file, hole_boundary in self.matching_pairs:
-    #         df = self.track_data[track_file]
-
-    #         # True/False is the point inside or outside the hole 
-    #         df['outside_hole'] = df.apply(lambda row: not hole_boundary.contains(Point(row['x_body'], row['y_body'])), axis=1)
-            
-    #         # True/False within 10mm of the hole
-    #         df['within_10mm'] = df.apply(lambda row: hole_boundary.exterior.distance(Point(row['x_body'], row['y_body'])) <= 10, axis=1)
-
-    #         # calculate displacement between frames
-    #         df['displacement'] = df.groupby('track_id').apply(lambda group: np.sqrt((group['x_body'].diff() ** 2) + (group['y_body'].diff() ** 2))).reset_index(drop=True)
-
-    #         # cumulative distance over rolling window
-    #         df['rolling_displacement'] = df.groupby('track_id')['displacement'].transform(lambda x: x.rolling(window=30, min_periods=1).sum()) 
-
-    #         for frame, frame_data in df.groupby('frame'):
-
-    #             outside_count = 0
-
-    #             for i, row in frame_data.iterrows():
-
-    #                 if row['outside_hole']:
-    #                     # If it's within 10mm and not moving, skip it (ROLLING DISPLACEMENT BELOW)
-    #                     if row['within_10mm'] and row['rolling_displacement'] < 3:
-    #                         continue
-    #                     else:
-    #                         # If it's genuinely outside, increment the counter
-    #                         outside_count += 1
-                
-    #             inside_count = 10 - outside_count 
-
-    #             # count.append({'time': frame, 'count': inside_count, 'outside':outside_count , 'file': track_file})
-    #             count.append({'time': frame, 'inside_count': inside_count, 'outside':outside_count , 'file': track_file})
-        
-    #     hole_count = pd.DataFrame(count)
-    #     hole_count = hole_count.sort_values(by=['time'], ascending=True)
-    #     hole_count.to_csv(os.path.join(self.directory, "hole_count.csv"), index=False)
-
-    #     return hole_count
-
-
     # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE + IF LARVAE OUTSIDE HOLE IS IT MOVING (IDENTIFYING THOSE CLOSE AND BURROWING BENEATH SURFACE)
     # ALSO CHANGED IT SUCH THAT IT KEEPS THE ORIGINAL DATAFRAME SO I CAN DO A VIDEO CHECK 
 
@@ -1012,6 +935,7 @@ class HoleAnalysis:
     
     
     # METHOD NUMBER_DIGGING: THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
+    # MODIFYING 2024-10-28
 
     def number_digging(self, total_larvae):
 
@@ -1020,48 +944,56 @@ class HoleAnalysis:
         for track_file in self.track_files:
             df = self.track_data[track_file]
 
-            # mm_to_pixel = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
-            # df[mm_to_pixel] = df[mm_to_pixel] * (1032/90) #conversion factor mm to pixels 
-
             df = df.sort_values(by=['track_id', 'frame'])
 
+            # DISTANCE MOVED 
+
             # Smooth the positions with a rolling window to reduce noise
-            df['x_body'] = df['x_body'].rolling(window=5, min_periods=1).mean()
-            df['y_body'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+            df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
+            df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
 
             # Calculate the difference between consecutive rows for body coordinates
-            df['dx'] = df.groupby('track_id')['x_body'].diff().fillna(0)
-            df['dy'] = df.groupby('track_id')['y_body'].diff().fillna(0)
+            df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
+            df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
 
-            # Calculate the Euclidean distance (hypotenuse) between consecutive points
+            # Calculate the Euclidean distance 
             df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
-            print(df[['dx', 'dy']].head(-1000))
 
-            # Create a boolean mask where x,y movement is greater than 0.1 MM
-            # CHANGE THIS DISTANCE - 
-            df['is_moving'] = (df['dx'].abs() > 0.01) | (df['dy'].abs() > 0.01)
-            # df['is_moving'] = True
+            # Create a boolean mask where x,y movement is greater than 0.1 MM 
+            df['is_moving'] = df['distance'] > 0.1
 
-            # Use a rolling window to check for sustained movement over the next 100 frames  
-            df['future_movement'] = df.groupby('track_id')['is_moving'].transform(lambda x: x.rolling(window=10, min_periods=1).mean())
+            # CUMALTIVE DISTANCE 
 
-            # Use a rolling window to check if the cumulative distance moved in the last 5 frames exceeds a threshold (e.g., 10 pixels)
-            # ONLY CONSIDER IT MOVING IF IT HAS MOVED MORE THAN > PIXELS IN THE WINDOW OF A CERTAIN AMOUNT OF FRAMES  
-            df['distance_rolled'] = df.groupby('track_id')['distance'].transform(lambda x: x.rolling(window=30, min_periods=1).sum())
-            df['distance_check'] = df['distance_rolled'] > 2
+            df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
 
-            # # Print is_moving (boolean) and future_movement (numerical values), along with distance_rolled and distance_check
-            # print(df[['frame', 'distance_rolled', 'distance_check', 'is_moving', 'future_movement']].head(-1500))
+            df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(5) / 5).fillna(0)
             
-            # If future_movement is high enough, we can classify as "moving" 
-            # unsure if the distance check should be an and 
-            # distance check must be True 
-            df['final_movement'] = (df['is_moving'] | (df['future_movement'] > 0.3)) & df['distance_check']
-            # print(df['final_movement'].head(-2000))
-            # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/testing-digging-behaviour/n10-food/df.csv')
+            # STANDARD DEVIATION OF BODY X, Y COORDINATES 
+
+            df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+            df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+            df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
+
+            # FINAL MOVEMENT - THEY ARE BOTH QUITE GOOD TBF 
+
+            # df['final_movement'] = (df['is_moving']) | ((df['overall_std'] > 0.09) & (df['cumulative_displacement_rate'] > 0.1))
+            df['final_movement'] = (df['cumulative_displacement_rate'] > 0.05) | ((df['overall_std'] > 0.09) & (df['is_moving']))
+
+            # SMOOTH ROLLING WINDOW FOR FINAL MOVEMENT 
+
+            # Apply a rolling window with majority voting to smooth out the 'final_movement' column
+            window_size = 20 # Adjust the window size as needed
+            df['smoothed_final_movement'] = (df['final_movement']
+                                             .rolling(window=window_size, center=True) # centre rolling window
+                                             .apply(lambda x: x.sum() >= (window_size / 2)) # Majority 
+                                             .fillna(0) # start and end fill with 0 = False
+                                             .astype(bool)) # all returned True/False
+
+
+            # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-number-digging/withrollingwindow.csv')
           
             # Now count the moving frames per frame_idx
-            moving_counts = df.groupby('frame')['final_movement'].sum().reset_index()
+            moving_counts = df.groupby('frame')['smoothed_final_movement'].sum().reset_index()
 
             # Rename the column for clarity
             moving_counts.columns = ['frame', 'moving_count']
@@ -1085,83 +1017,19 @@ class HoleAnalysis:
 
         return number_digging
 
-    # THIS METHOD SUBTRACTS THE NUMBER MOVING FROM THE TOTAL LARVAE PRESENT - WANT TO INCLUDE ALL THE VIDEOS
-    # HOWEVER THIS DOESNT NECESSARILY HELP WITH UNDERLYING PREDICTION ISSUES 
-    # AND IF THEY DIG ON TOP OF ONE ANOTHER THIS IS AN ISSUE 
 
-    # def number_digging(self):
 
-    #     dataframe_list = [] 
 
-    #     for track_file in self.track_files:
-    #         df = self.track_data[track_file]
 
-    #         # mm_to_pixel = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
-    #         # df[mm_to_pixel] = df[mm_to_pixel] * (1032/90) #conversion factor mm to pixels 
 
-    #         df = df.sort_values(by=['track_id', 'frame'])
 
-    #         # Smooth the positions with a rolling window to reduce noise
-    #         df['x_body'] = df['x_body'].rolling(window=5, min_periods=1).mean()
-    #         df['y_body'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+    # def radius(self):
+    
 
-    #         # Calculate the difference between consecutive rows for body coordinates
-    #         df['dx'] = df.groupby('track_id')['x_body'].diff().fillna(0)
-    #         df['dy'] = df.groupby('track_id')['y_body'].diff().fillna(0)
 
-    #         # Calculate the Euclidean distance (hypotenuse) between consecutive points
-    #         df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
-    #         print(df[['dx', 'dy']].head(-1000))
 
-    #         # Create a boolean mask where x,y movement is greater than 0.1 pixel
-    #         # CHANGE THIS DISTANCE - 
-    #         df['is_moving'] = (df['dx'].abs() > 0.01) | (df['dy'].abs() > 0.01)
-    #         # df['is_moving'] = True
 
-    #         # Use a rolling window to check for sustained movement over the next 100 frames  
-    #         df['future_movement'] = df.groupby('track_id')['is_moving'].transform(lambda x: x.rolling(window=10, min_periods=1).mean())
 
-    #         # Use a rolling window to check if the cumulative distance moved in the last 5 frames exceeds a threshold (e.g., 10 pixels)
-    #         # ONLY CONSIDER IT MOVING IF IT HAS MOVED MORE THAN > PIXELS IN THE WINDOW OF A CERTAIN AMOUNT OF FRAMES  
-    #         df['distance_rolled'] = df.groupby('track_id')['distance'].transform(lambda x: x.rolling(window=30, min_periods=1).sum())
-    #         df['distance_check'] = df['distance_rolled'] > 2
-
-    #         # # Print is_moving (boolean) and future_movement (numerical values), along with distance_rolled and distance_check
-    #         # print(df[['frame', 'distance_rolled', 'distance_check', 'is_moving', 'future_movement']].head(-1500))
-            
-    #         # If future_movement is high enough, we can classify as "moving" 
-    #         # unsure if the distance check should be an and 
-    #         # distance check must be True 
-    #         df['final_movement'] = (df['is_moving'] | (df['future_movement'] > 0.3)) & df['distance_check']
-    #         # print(df['final_movement'].head(-2000))
-    #         # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/testing-digging-behaviour/n10-food/df.csv')
-          
-    #         # Now count the moving frames per frame_idx
-    #         moving_counts = df.groupby('frame')['final_movement'].sum().reset_index()
-
-    #         # Rename the column for clarity
-    #         moving_counts.columns = ['frame', 'moving_count']
-
-    #         # Calculate the total larvae (unique track_ids) per frame
-    #         total_larvae_per_frame = df.groupby('frame')['track_id'].nunique().reset_index()
-    #         total_larvae_per_frame.columns = ['frame', 'total_larvae']
-
-    #         # Merge the moving counts with the total larvae count per frame
-    #         full_frame_counts = pd.merge(total_larvae_per_frame, moving_counts, on='frame', how='left').fillna(0)
-
-    #         # Calculate the number of digging larvae
-    #         full_frame_counts['number_digging'] = full_frame_counts['total_larvae'] - full_frame_counts['moving_count']
-
-    #         # Add a column for the track file
-    #         full_frame_counts['file'] = track_file
-
-    #         dataframe_list.append(full_frame_counts)
-        
-    #     number_digging = pd.concat(dataframe_list, ignore_index=True)
-    #     number_digging = number_digging.sort_values(by=['frame'], ascending=True)
-    #     number_digging.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
-
-    #     return number_digging
 
 
 
