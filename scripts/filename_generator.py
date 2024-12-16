@@ -25,6 +25,6 @@ def list_files_in_directory(directory_path, output_csv):
 
 # Example usage:
 
-directory_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/N Free Roaming Larvae/1H/DAY4/N10/FOOD'
-output_csv = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/N Free Roaming Larvae/1H/DAY4/N10/FOOD/filename.csv'
+directory_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/Holes/1H/SIDE-HOLE/N10/FOOD'
+output_csv = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/Holes/1H/SIDE-HOLE/N10/FOOD/filename.csv'
 list_files_in_directory(directory_path, output_csv)

@@ -16,8 +16,7 @@ def process_video(video_path):
                                    param1=500, param2=50, minRadius=400, maxRadius=600)
 
         if circles is not None:
-            circles = np.round(circles[0, :]).astype("int")
-            largest_circle = max(circles, key=lambda c: c[2])  # Get the largest circle (based on radius)
+            largest_circle = max(circles[0, :], key=lambda c: c[2])  # Get the largest circle (based on radius)
             return largest_circle  # x, y, r (center coordinates and radius)
         
         return None
@@ -53,7 +52,8 @@ def process_video(video_path):
             print(f"Petri dish boundary saved as WKT at {save_path_wkt}.")
             
             # Draw the circle on the frame (green with thickness 2)
-            cv2.circle(frame, (x, y), r, (0, 255, 0), 2)  # Draw circle in green (BGR format)
+            cv2.circle(frame, (int(x), int(y)), int(r), (0, 255, 0), 2)  # Cast to int when drawing
+
 
             # Save the frame with the drawn boundary
             frame_with_boundary_path = os.path.join(save_dir, 'frame_with_boundary1.png')
@@ -69,5 +69,5 @@ def process_video(video_path):
     cap.release()
 
 # Example usage
-video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-perimeter/2024-07-10_16-17-12_td5.mp4'
+video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-perimeter/failed-on/2024-07-23_11-54-45_td6.mp4'
 process_video(video_path)

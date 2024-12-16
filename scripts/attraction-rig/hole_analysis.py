@@ -11,6 +11,9 @@ from shapely.wkt import dumps as wkt_dumps
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
+import cv2
+from shapely import wkt
+from shapely.affinity import scale
 
 
 class HoleAnalysis:
@@ -73,61 +76,126 @@ class HoleAnalysis:
             df.to_feather(shortened_path)  # Save the DataFrame without 'index=False'
             print(f"Shortened file saved: {shortened_path}")
 
-    # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 2) 
+    # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 
+    # # 2) FILLS INCREMENTALLY- REMOVED 
 
     def post_processing(self):
         
         # FUNCTION INPUTS INDIVIDUAL TRACK DF DATA AND INCRIMENTALLY FILLS IN GAPS 
-        def interpolate(track_df):
-            # range of frames
-            min_frame = track_df['frame'].min() 
-            max_frame = track_df['frame'].max()
-            # create Numpy Array of min-max 
-            frame_range = np.arange(min_frame, max_frame + 1)
-            # return difference between expected and actual frame numbers
-            missing_frames = np.setdiff1d(frame_range, track_df['frame'].values)
+        # def interpolate(track_df):
+        #     # range of frames
+        #     min_frame = track_df['frame'].min() 
+        #     max_frame = track_df['frame'].max()
+        #     # create Numpy Array of min-max 
+        #     frame_range = np.arange(min_frame, max_frame + 1)
+        #     # return difference between expected and actual frame numbers
+        #     missing_frames = np.setdiff1d(frame_range, track_df['frame'].values)
   
-            if len(missing_frames) == 0:
-                return track_df
+        #     if len(missing_frames) == 0:
+        #         return track_df
     
-            track_name = track_df['track_id'].iloc[0]
-            # create df for missing frames
-            missing_df = pd.DataFrame({'frame': missing_frames, 'track_id': track_name})
-            # join track data and missing tracks 
-            df = pd.concat([track_df, missing_df]).sort_values(by='frame')
+        #     track_name = track_df['track_id'].iloc[0]
+        #     # create df for missing frames
+        #     missing_df = pd.DataFrame({'frame': missing_frames, 'track_id': track_name})
+        #     # join track data and missing tracks 
+        #     df = pd.concat([track_df, missing_df]).sort_values(by='frame')
 
-            # Interpolate for each coordinate pair
-            coordinates = ['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'y_tail']
-            # add nan values for the missing data in the additional frames 
-            for coord in coordinates:
-                if coord not in df.columns:
-                    df[coord] = np.nan 
+        #     # Interpolate for each coordinate pair
+        #     coordinates = ['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'y_tail']
+        #     # add nan values for the missing data in the additional frames 
+        #     for coord in coordinates:
+        #         if coord not in df.columns:
+        #             df[coord] = np.nan 
             
-            for coord in coordinates:
-                # interpolate fills in missing values assuming a linear relation between known values
-                df[coord] = df[coord].interpolate()
+        #     for coord in coordinates:
+        #         # interpolate fills in missing values assuming a linear relation between known values
+        #         df[coord] = df[coord].interpolate()
     
-            # Forward-fill and backward-fill (dont think this is applicable here really- gaps at start and end of track)
-            # for coord in coordinates:
-            #     full_df[coord] = full_df[coord].ffill().bfill()
-            return df
+        #     # Forward-fill and backward-fill (dont think this is applicable here really- gaps at start and end of track)
+        #     # for coord in coordinates:
+        #     #     full_df[coord] = full_df[coord].ffill().bfill()
+        #     return df
         
 
         for track_file in self.track_files:
             df = self.track_data[track_file]
-            # unsure if in the feather file has the instance score -> get michael to include 
+
             # group by tracks, calculate mean per tracks, if True >= 0.9 include in df 
             df = df[df.groupby('track_id')['instance_score'].transform('mean') >= 0.9]
 
             # fill in track gaps 
-            df = df.sort_values(by=['track_id', 'frame'])
-            # applies the definition to each mini dataframe for tracks and then combines the results into a single dataframe
-            df = df.groupby('track_id').apply(interpolate).reset_index(drop=True)
+            # df = df.sort_values(by=['track_id', 'frame'])
+            # # applies the definition to each mini dataframe for tracks and then combines the results into a single dataframe
+            # df = df.groupby('track_id').apply(interpolate).reset_index(drop=True)
 
             # # Save the post-processed DataFrame to the original file path
             # file_path = os.path.join(self.directory, track_file)  # Combines directory and filename
             # df.to_feather(file_path)  # Save the DataFrame back to the file
             self.track_data[track_file] = df  # Update the in-memory version
+    
+
+    # METHOD PERIMETER: IDENTIFY XY CENTRE POINTS AND PERIMETER OF THE PETRI DISH
+
+    def perimeter(self):
+        
+        # function to process the video 1) identify centre coordinates and the perimeter
+        def process_video(video_path):
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+
+            def detect_largest_circle(frame):
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                gray_blurred = cv2.medianBlur(gray, 5)
+                circles = cv2.HoughCircles(gray_blurred, cv2.HOUGH_GRADIENT, dp=1.0, minDist=100,
+                                       param1=500, param2=50, minRadius=400, maxRadius=600)
+                if circles is not None:
+                    largest_circle = max(circles[0, :], key=lambda c: c[2])  # No rounding for accuracy
+                    return largest_circle  # x, y, r (center coordinates and radius)
+                return None
+
+            def circle_to_polygon(x, y, radius, num_points=100):
+                angles = np.linspace(0, 2 * np.pi, num_points)
+                points = [(x + radius * np.cos(angle), y + radius * np.sin(angle)) for angle in angles]
+                return Polygon(points)
+            
+            cap = cv2.VideoCapture(video_path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 10) # frame 10 
+            ret, frame = cap.read()
+            
+            if ret:
+                circle = detect_largest_circle(frame)
+                if circle is not None:
+                    x, y, r = circle
+                    petri_dish_boundary = circle_to_polygon(x, y, r)
+
+                    save_dir = self.directory
+                    wkt_file_path = os.path.join(save_dir, f"{video_name}_perimeter.wkt")
+                    with open(wkt_file_path, 'w') as f:
+                        f.write(petri_dish_boundary.wkt)
+                
+                    # Draw the circle on the frame
+                    cv2.circle(frame, (int(x), int(y)), int(r), (0, 255, 0), 2)
+
+                    # Updated PNG-saving logic
+                    frame_with_boundary_path = os.path.join(save_dir, f"{video_name}_perimeter.png")
+                    cv2.imwrite(frame_with_boundary_path, frame)
+                    print(f"Frame with boundary saved at {frame_with_boundary_path}.")
+            
+                else:
+                    print("No circle detected.")
+            else:
+                print(f"Failed to extract the 10th frame from the video.")
+
+            cap.release()
+            return None
+        
+        # Iterate through video files in the directory
+        video_files = [f for f in os.listdir(self.directory) if f.endswith('.mp4')]
+        for file in video_files:
+            video_path = os.path.join(self.directory, file)
+            print(f"Processing video: {video_path}")
+            process_video(video_path)
+
+
 
 
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION
@@ -180,36 +248,82 @@ class HoleAnalysis:
     # METHOD MATCH_FILES: MATCHES THE TRACK FILES WITH THEIR COORDINATE FILES (BY EXTENTION THE HOLE POLYGON)
 
     def match_files(self):
+        # Initialize a list for all matching pairs
+        self.matching_pairs = []
 
+        # Gather all video and perimeter files
+        video_files = [f for f in os.listdir(self.directory) if f.endswith('.mp4')]
+        perimeter_files = [f for f in os.listdir(self.directory) if f.endswith('_perimeter.wkt')]
+
+        # Iterate over all track files
         for track_file in self.track_files:
-            # split: splites the file name whenever there is an underscore
-            # join the first three elements :3 with an underscore
-            # 2024-05-20_16-08-22_td1_hole.csv -> 2024-05-20 16-08-22 td1 hole.csv -> 2024-05-20_16-08-22_td1
-            track_prefix = '_'.join(track_file.split('_')[:3])
-            track_prefix = track_prefix.replace('.tracks.feather', '')
-            # track_prefix = track_prefix.rsplit('.', 1)[0]  # Remove the extension
-            print(f"Track file: {track_file}, Prefix: {track_prefix}")
+            # Extract the common prefix from the track file
+            track_prefix = '_'.join(track_file.split('_')[:3]).replace('.tracks.feather', '')
+            matched_data = {
+                'track_file': track_file,
+                'hole_boundary': None,
+                'video_file': None,
+                'perimeter_file': None
+            }
 
-            # for hole_boundary in self.hole_boundaries:
-            #     hole_prefix = '_'.join(hole_boundary.split('_')[:3])
-
+            # Match with coordinate files (hole boundaries)
             for i, coordinates_file in enumerate(self.coordinate_files):
-                hole_prefix = '_'.join(coordinates_file.split('_')[:3])
-                hole_prefix = hole_prefix.rsplit('.', 1)[0]  # Remove the extension
-                print(f"Coordinate file: {coordinates_file}, Prefix: {hole_prefix}")
-
+                hole_prefix = '_'.join(coordinates_file.split('_')[:3]).rsplit('.', 1)[0]
                 if hole_prefix == track_prefix:
                     print(f"Match found: {track_file} with {coordinates_file}")
-                    self.matching_pairs.append((track_file, self.hole_boundaries[i]))
+                    matched_data['hole_boundary'] = self.hole_boundaries[i]  # Assign the associated hole boundary polygon
 
-                # if hole_prefix == track_prefix:
-                #     self.matching_pairs.append((track_file, hole_boundary))
+            # Match with video files
+            for video_file in video_files:
+                video_prefix = '_'.join(video_file.split('_')[:3]).rsplit('.', 1)[0]
+                if video_prefix == track_prefix:
+                    matched_data['video_file'] = video_file
 
-                # track_path = os.path.join(self.directory, track_file)
-                # self.track_data[track_file] = pd.read_feather(track_path).round(2)
+
+            # Match with perimeter files
+            for perimeter_file in perimeter_files:
+                perimeter_prefix = '_'.join(perimeter_file.split('_')[:3]).rsplit('.', 1)[0]
+                if perimeter_prefix == track_prefix:
+                    matched_data['perimeter_file'] = perimeter_file
+                    print(f"Match found: {track_file} with {perimeter_file}")
+
+                    # Read the perimeter file and parse it into a Polygon object
+                    perimeter_path = os.path.join(self.directory, perimeter_file)
+                    with open(perimeter_path, 'r') as f:
+                        perimeter_wkt = f.read()
+
+
+                    polygon = wkt.loads(perimeter_wkt)
+                    scaling_factor = (90/1032)
+                    scaled_polygon = scale(polygon, xfact=scaling_factor, yfact=scaling_factor, origin=(0, 0))
+                    
+                    matched_data['perimeter_polygon'] = scaled_polygon
+                    
+
+            # Append the matched data to the matching_pairs list
+            self.matching_pairs.append(matched_data)
+
+        print(f"All matching pairs: {self.matching_pairs}")
+
+
+    # def match_files(self):
+
+    #     for track_file in self.track_files:
+   
+    #         track_prefix = '_'.join(track_file.split('_')[:3])
+    #         track_prefix = track_prefix.replace('.tracks.feather', '')
+
+    #         for i, coordinates_file in enumerate(self.coordinate_files):
+    #             hole_prefix = '_'.join(coordinates_file.split('_')[:3])
+    #             hole_prefix = hole_prefix.rsplit('.', 1)[0]  # Remove the extension
+
+    #             if hole_prefix == track_prefix:
+    #                 print(f"Match found: {track_file} with {coordinates_file}")
+    #                 self.matching_pairs.append((track_file, self.hole_boundaries[i]))
+
         
-        print(f"Matching pairs: {self.matching_pairs}")
-        print(f"Track data keys: {self.track_data.keys()}")
+    #     print(f"Matching pairs: {self.matching_pairs}")
+    #     print(f"Track data keys: {self.track_data.keys()}")
 
 
     # METHOD HOLE_CENTROID: REPLACE THE HOLE BOUNDARY WITH A HOLE CENTROID COORDINATE 
@@ -232,17 +346,26 @@ class HoleAnalysis:
 
     def distance_from_hole(self): 
 
-        self.hole_centroid() # call the hole_centroid method 
+        # self.hole_centroid() # call the hole_centroid method 
 
         distances_from_hole = []
         data = []
 
-        for track_file, centroid in self.matching_pairs: # track file is just the name of the file 
+        for match in self.matching_pairs:  # Access dictionaries instead of unpacking tuples
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+            
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
 
-            df = self.track_data[track_file] # retreieve the data for that file name 
+            df = self.track_data[track_file]
+
+            centroid = hole_boundary.centroid
+
             for index, row in df.iterrows():
                 x, y = row['x_body'], row['y_body']
-                distance = np.sqrt((centroid[0] - x)**2 + (centroid[1] - y)**2)
+                distance = np.sqrt((centroid.x - x)**2 + (centroid.y - y)**2)
                 distances_from_hole.append(distance)
                 data.append({'time': row.frame, 'distance_from_hole': distance, 'file': track_file})
         
@@ -264,11 +387,47 @@ class HoleAnalysis:
     
     # METHOD DISTANCE_FROM_CENTRE: CALCULATES DISTANCES FROM CENTRE COORDINATES 
 
+    # def distance_from_centre(self): 
+
+    #     distances_from_centre = []
+    #     data = []
+
+    #     for match in self.matching_pairs:
+    #         track_file = match['track_file']
+    #         perimeter = match.get('perimeter_polygon')
+            
+    #         if perimeter is None:
+    #             print(f"No perimeter polygon available for track file: {track_file}")
+    #             continue
+
+    #         centre_x, centre_y = perimeter.centroid.x, perimeter.centroid.y
+
+    #         predictions = self.track_data[track_file]
+
+    #         for index, row in predictions.iterrows():
+    #             x, y = row['x_body'], row['y_body']
+    #             distance = np.sqrt((centre_x - x)**2 + (centre_y - y)**2)
+    #             distances_from_centre.append(distance)
+    #             data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
+
+    #     df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
+    #     df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
+    #     print(f"Distance from centre saved: {df_distances}")
+
+    #     df_distance_over_time = pd.DataFrame(data)
+    #     df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
+    #     print(f'Distance over time saved: {df_distance_over_time}')
+
+    #     return df_distances, df_distance_over_time
+
     def distance_from_centre(self): 
 
-        centre = (700, 700) 
+        factor = 700 * (90/1032)
+
+        centre = (factor, factor) 
 
         distances_from_centre = []
+        data = []
 
         for track_file in self.track_files:
             
@@ -278,10 +437,15 @@ class HoleAnalysis:
                 x, y = row['x_body'], row['y_body']
                 distance = np.sqrt((centre[0] - x)**2 + (centre[1] - y)**2)
                 distances_from_centre.append(distance)
+                data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
 
         df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
         df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
         print(f"Distance from centre saved: {df_distances}")
+
+        df_distance_over_time = pd.DataFrame(data)
+        df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
+
 
         return df_distances
 
@@ -459,51 +623,101 @@ class HoleAnalysis:
         acceleration_accross_time.to_csv(os.path.join(self.directory, 'acceleration_accross_time.csv'), index=False)
 
         return acceleration, acceleration_accross_time
-
-
-    # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM FIRST TRACK APPEARANCE
-     
-    def ensemble_msd(self): 
-
-        # frame distance and file 
+    
+    # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM THE CENTROID COORDINATES
+    
+    def ensemble_msd(self):
 
         data = []
-        
-        for track_file in self.track_files:
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            perimeter = match.get('perimeter_polygon')
+
+            # Ensure the perimeter polygon is available
+            if perimeter is None:
+                print(f"No perimeter polygon available for track file: {track_file}")
+                continue
+
+            # Calculate the centroid of the perimeter polygon
+            centre_x, centre_y = perimeter.centroid.x, perimeter.centroid.y
+
             track_data = self.track_data[track_file]
 
-            # calculate average x,y for first frame 
-            # (needs to change such that it time 0 for each unique track compared back to)
+            for track_id in track_data['track_id'].unique():
+                track_unique = track_data[track_data['track_id'] == track_id].sort_values(by=['frame']).reset_index(drop=True)
 
-            for track in track_data['track_id'].unique():
-                track_unique = track_data[track_data['track_id'] == track].sort_values(by=['frame'])
-
-                x0 = track_unique.iloc[0]['x_body']
-                y0 = track_unique.iloc[0]['y_body']
-
-                for i in range(len(track_unique)):
-
-                    squared_distance = (track_unique.iloc[i]['x_body'] - x0)**2 + (track_unique.iloc[i]['y_body'] - y0)**2
-                    # print(squared_distance)
-
-                    frame = track_unique.iloc[i]['frame']
-
-                    data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
-                
-            # frame_0 = track_data[track_data['frame'] == 0]
-            # x = frame_0['x_body'].mean()
-            # y = frame_0['y_body'].mean()
-            # for i, row in track_data.iterrows():
-            #     squared_distance = (row['x_body'] - x)**2 + (row['y_body'] - y)**2
-            #     frame = row['frame']
-            #     data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
-        
+                for _, row in track_unique.iterrows():
+                    squared_distance = (row['x_body'] - centre_x) ** 2 + (row['y_body'] - centre_y) ** 2
+                    data.append({
+                    'time': row['frame'], 
+                    'squared_distance': squared_distance, 
+                    'file': track_file
+                })
+                    
+        # Create a DataFrame from the MSD data
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time'], ascending=True)
 
-        df.to_csv(os.path.join(self.directory, 'ensemble_msd.csv'), index=False)
-
+        # Save the DataFrame as a CSV file
+        output_path = os.path.join(self.directory, 'ensemble_msd.csv')
+        df.to_csv(output_path, index=False)
+        print(f"Ensemble MSD saved to {output_path}")
         return df 
+
+
+
+
+
+    # # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM FIRST TRACK APPEARANCE
+     
+    # def ensemble_msd(self): 
+
+    #     # frame distance and file 
+
+    #     data = []
+
+    #     for match in self.matching_pairs:
+
+    #         track_file = match['track_file']
+    #         perimeter = match.get('perimeter_polygon')
+            
+    #         if perimeter is None:
+    #             print(f"No perimeter polygon available for track file: {track_file}")
+    #             continue
+
+    #         centre_x, centre_y = perimeter.centroid.x, perimeter.centroid.y
+
+        
+    #     for track_file in self.track_files:
+    #         track_data = self.track_data[track_file]
+
+    #         # calculate average x,y for first frame 
+    #         # (needs to change such that it time 0 for each unique track compared back to)
+
+    #         for track in track_data['track_id'].unique():
+    #             track_unique = track_data[track_data['track_id'] == track].sort_values(by=['frame'])
+
+    #             x0 = track_unique.iloc[0]['x_body']
+    #             y0 = track_unique.iloc[0]['y_body']
+
+    #             for i in range(len(track_unique)):
+
+    #                 squared_distance = (track_unique.iloc[i]['x_body'] - x0)**2 + (track_unique.iloc[i]['y_body'] - y0)**2
+    #                 # print(squared_distance)
+
+    #                 frame = track_unique.iloc[i]['frame']
+
+    #                 data.append({'time': frame, 'squared distance': squared_distance, 'file': track_file})
+        
+    #     df = pd.DataFrame(data)
+    #     df = df.sort_values(by=['time'], ascending=True)
+
+    #     df.to_csv(os.path.join(self.directory, 'ensemble_msd.csv'), index=False)
+
+    #     return df 
+
+
 
     # METHOD TIME_AVERAGE_MSD: 
       # taus given in list format e.g. list(range(1, 101, 1))
@@ -693,7 +907,14 @@ class HoleAnalysis:
 
         count = []
 
-        for track_file, hole_boundary in self.matching_pairs:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+            
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
             df = self.track_data[track_file]
 
             # True/False is the point inside or outside the hole 
@@ -733,11 +954,11 @@ class HoleAnalysis:
 
             df['digging'] = df['within_10mm'] & ((df['cumulative_displacement_rate'] < 0.5) | (df['overall_std'] < 3))
 
-
-
             df['moving_outside'] = df['outside_hole'] & ~df['digging']
 
             df.to_csv(os.path.join(self.directory, f"{track_file}_hole_data.csv"), index=False)
+            print(f"Saving to file: {os.path.join(self.directory, f'{track_file}_hole_data.csv')}")
+
 
             for frame in df['frame'].unique():
                 frame_df = df[df['frame'] == frame]
@@ -759,7 +980,14 @@ class HoleAnalysis:
 
         times = []
 
-        for track_file, hole_boundary in self.matching_pairs:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+            
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
             df = self.track_data[track_file]
       
             for track in df['track_id'].unique():
@@ -800,7 +1028,14 @@ class HoleAnalysis:
 
         data = []
 
-        for track_file, hole_boundary in self.matching_pairs:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
             df = self.track_data[track_file]
 
             df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
@@ -847,7 +1082,14 @@ class HoleAnalysis:
 
         data = []
 
-        for track_file, hole_boundary in self.matching_pairs:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
             df = self.track_data[track_file]
 
             df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
