@@ -145,6 +145,7 @@ class HoleAnalysis:
             def detect_largest_circle(frame):
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 gray_blurred = cv2.medianBlur(gray, 5)
+        
                 circles = cv2.HoughCircles(gray_blurred, cv2.HOUGH_GRADIENT, dp=1.0, minDist=100,
                                        param1=500, param2=50, minRadius=400, maxRadius=600)
                 if circles is not None:
@@ -194,6 +195,7 @@ class HoleAnalysis:
             video_path = os.path.join(self.directory, file)
             print(f"Processing video: {video_path}")
             process_video(video_path)
+
 
 
 
@@ -387,55 +389,26 @@ class HoleAnalysis:
     
     # METHOD DISTANCE_FROM_CENTRE: CALCULATES DISTANCES FROM CENTRE COORDINATES 
 
-    # def distance_from_centre(self): 
-
-    #     distances_from_centre = []
-    #     data = []
-
-    #     for match in self.matching_pairs:
-    #         track_file = match['track_file']
-    #         perimeter = match.get('perimeter_polygon')
-            
-    #         if perimeter is None:
-    #             print(f"No perimeter polygon available for track file: {track_file}")
-    #             continue
-
-    #         centre_x, centre_y = perimeter.centroid.x, perimeter.centroid.y
-
-    #         predictions = self.track_data[track_file]
-
-    #         for index, row in predictions.iterrows():
-    #             x, y = row['x_body'], row['y_body']
-    #             distance = np.sqrt((centre_x - x)**2 + (centre_y - y)**2)
-    #             distances_from_centre.append(distance)
-    #             data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
-
-    #     df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
-    #     df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
-    #     print(f"Distance from centre saved: {df_distances}")
-
-    #     df_distance_over_time = pd.DataFrame(data)
-    #     df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
-    #     print(f'Distance over time saved: {df_distance_over_time}')
-
-    #     return df_distances, df_distance_over_time
-
     def distance_from_centre(self): 
-
-        factor = 700 * (90/1032)
-
-        centre = (factor, factor) 
 
         distances_from_centre = []
         data = []
 
-        for track_file in self.track_files:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            perimeter = match.get('perimeter_polygon')
             
+            if perimeter is None:
+                print(f"No perimeter polygon available for track file: {track_file}")
+                continue
+
+            centre_x, centre_y = perimeter.centroid.x, perimeter.centroid.y
+
             predictions = self.track_data[track_file]
 
             for index, row in predictions.iterrows():
                 x, y = row['x_body'], row['y_body']
-                distance = np.sqrt((centre[0] - x)**2 + (centre[1] - y)**2)
+                distance = np.sqrt((centre_x - x)**2 + (centre_y - y)**2)
                 distances_from_centre.append(distance)
                 data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
 
@@ -445,9 +418,37 @@ class HoleAnalysis:
 
         df_distance_over_time = pd.DataFrame(data)
         df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
+        print(f'Distance over time saved: {df_distance_over_time}')
 
+        return df_distances, df_distance_over_time
 
-        return df_distances
+    # def distance_from_centre(self): 
+
+    #     factor = 700 * (90/1032)
+
+    #     centre = (factor, factor) 
+
+    #     distances_from_centre = []
+    #     data = []
+
+    #     for track_file in self.track_files:
+            
+    #         predictions = self.track_data[track_file]
+
+    #         for index, row in predictions.iterrows():
+    #             x, y = row['x_body'], row['y_body']
+    #             distance = np.sqrt((centre[0] - x)**2 + (centre[1] - y)**2)
+    #             distances_from_centre.append(distance)
+    #             data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
+
+    #     df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
+    #     df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
+    #     print(f"Distance from centre saved: {df_distances}")
+
+    #     df_distance_over_time = pd.DataFrame(data)
+    #     df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
+
+    #     return df_distances
 
     # METHOD EUCLIDEAN_DISTANCE: CALCULATES THE AVERAGE DISTANCE BETWEEN LARVAE ACCROSS FRAMES
 
