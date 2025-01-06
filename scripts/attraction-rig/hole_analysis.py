@@ -26,11 +26,14 @@ class HoleAnalysis:
         self.hole_boundaries = []
         self.matching_pairs = []
         self.track_data = {}  # Initialize the track_data dictionary # actually has the data so we dont have to keep reloading 
-        self.coordinates()
-        self.tracks()
+        
+        self.perimeter()
+        self.coordinates() # used by hole boundary 
         self.hole_boundary()
+        self.tracks()
         self.match_files()
-        # self.radius()
+        self.conversion()
+
 
     # METHOD COORDINATES: IDENTIFIES AND STORES THE HOLE COORDINATE FILES
 
@@ -44,21 +47,20 @@ class HoleAnalysis:
     def tracks(self):
         # 2024-04-30_14-31-44_td5.000_2024-04-30_14-31-44_td5.analysis.csv
         self.track_files = [f for f in os.listdir(self.directory) if f.endswith('tracks.feather')]
-        print(f"Track files: {self.track_files}")
-        # load the data 
+    
         for track_file in self.track_files: 
             track_path = os.path.join(self.directory, track_file)
             df = pd.read_feather(track_path)
-            # Print to verify data right after loading
-            # print(f"Loaded data from {track_file}:")
-            # print(df[['frame', 'track_id', 'x_body', 'y_body']].head(10))
-            pixels_to_mm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
-            df[pixels_to_mm] = df[pixels_to_mm] * (90/1032) #conversion factor pixels to mm
-            # df = df.round(2)  # Round values to 2 decimal places
-            self.track_data[track_file] = df
-        
-            # self.track_data[track_file] = pd.read_feather(track_path)
+            # NEED DIAMATER CONVERSION FFS 
+            # # cant access the perimeter right now here 
+            # diameter = self.diameter()
+            # print(diameter)
 
+            # pixels_to_mm = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+            # df[pixels_to_mm] = df[pixels_to_mm] * (90 / diameter)
+            # print(df.head())
+            self.track_data[track_file] = df
+    
    # METHOD SHORTEN: OPTIONAL METHOD TO SHORTEN THE TRACK FILES TO INCLUDE UP TO A CERTAIN FRAME  
     
     def shorten(self, frame=-1):
@@ -81,56 +83,11 @@ class HoleAnalysis:
 
     def post_processing(self):
         
-        # FUNCTION INPUTS INDIVIDUAL TRACK DF DATA AND INCRIMENTALLY FILLS IN GAPS 
-        # def interpolate(track_df):
-        #     # range of frames
-        #     min_frame = track_df['frame'].min() 
-        #     max_frame = track_df['frame'].max()
-        #     # create Numpy Array of min-max 
-        #     frame_range = np.arange(min_frame, max_frame + 1)
-        #     # return difference between expected and actual frame numbers
-        #     missing_frames = np.setdiff1d(frame_range, track_df['frame'].values)
-  
-        #     if len(missing_frames) == 0:
-        #         return track_df
-    
-        #     track_name = track_df['track_id'].iloc[0]
-        #     # create df for missing frames
-        #     missing_df = pd.DataFrame({'frame': missing_frames, 'track_id': track_name})
-        #     # join track data and missing tracks 
-        #     df = pd.concat([track_df, missing_df]).sort_values(by='frame')
-
-        #     # Interpolate for each coordinate pair
-        #     coordinates = ['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'y_tail']
-        #     # add nan values for the missing data in the additional frames 
-        #     for coord in coordinates:
-        #         if coord not in df.columns:
-        #             df[coord] = np.nan 
-            
-        #     for coord in coordinates:
-        #         # interpolate fills in missing values assuming a linear relation between known values
-        #         df[coord] = df[coord].interpolate()
-    
-        #     # Forward-fill and backward-fill (dont think this is applicable here really- gaps at start and end of track)
-        #     # for coord in coordinates:
-        #     #     full_df[coord] = full_df[coord].ffill().bfill()
-        #     return df
-        
-
         for track_file in self.track_files:
             df = self.track_data[track_file]
-
             # group by tracks, calculate mean per tracks, if True >= 0.9 include in df 
             df = df[df.groupby('track_id')['instance_score'].transform('mean') >= 0.9]
 
-            # fill in track gaps 
-            # df = df.sort_values(by=['track_id', 'frame'])
-            # # applies the definition to each mini dataframe for tracks and then combines the results into a single dataframe
-            # df = df.groupby('track_id').apply(interpolate).reset_index(drop=True)
-
-            # # Save the post-processed DataFrame to the original file path
-            # file_path = os.path.join(self.directory, track_file)  # Combines directory and filename
-            # df.to_feather(file_path)  # Save the DataFrame back to the file
             self.track_data[track_file] = df  # Update the in-memory version
     
 
@@ -179,7 +136,6 @@ class HoleAnalysis:
                     # Updated PNG-saving logic
                     frame_with_boundary_path = os.path.join(save_dir, f"{video_name}_perimeter.png")
                     cv2.imwrite(frame_with_boundary_path, frame)
-                    print(f"Frame with boundary saved at {frame_with_boundary_path}.")
             
                 else:
                     print("No circle detected.")
@@ -195,9 +151,6 @@ class HoleAnalysis:
             video_path = os.path.join(self.directory, file)
             print(f"Processing video: {video_path}")
             process_video(video_path)
-
-
-
 
 
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION
@@ -216,8 +169,8 @@ class HoleAnalysis:
             df = pd.read_csv(file_path, header=None, names=['x', 'y'])
 
             # Convert coordinates from pixels to millimeters using the same conversion factor
-            conversion_factor = 90 / 1032
-            df[['x', 'y']] = df[['x', 'y']] * conversion_factor
+            # conversion_factor = 90 / self.diameter
+            # df[['x', 'y']] = df[['x', 'y']] * conversion_factor
 
             points = df[['x', 'y']].values # values creates numpy array
 
@@ -231,11 +184,11 @@ class HoleAnalysis:
             # create the polygon
             polygon = Polygon(hull_points)
 
-            scaled_polygon = scale(polygon, xfact=scale_factor, yfact=scale_factor, origin='center') # polygon scaled uniform relative to center
+            # scaled_polygon = scale(polygon, xfact=scale_factor, yfact=scale_factor, origin='center') # polygon scaled uniform relative to center
 
-            self.hole_boundaries.append(scaled_polygon)
+            self.hole_boundaries.append(polygon) #change from scale to poly
 
-            wkt_string = wkt_dumps(scaled_polygon) # Convert the scaled polygon to WKT format
+            wkt_string = wkt_dumps(polygon) # Convert the scaled polygon to WKT format
 
             # Save the WKT string to a file with the same name as the original but with a .wkt extension
             # hole_boundary = coordinates.replace('.csv', '.wkt')
@@ -294,18 +247,63 @@ class HoleAnalysis:
                     with open(perimeter_path, 'r') as f:
                         perimeter_wkt = f.read()
 
-
                     polygon = wkt.loads(perimeter_wkt)
-                    scaling_factor = (90/1032)
-                    scaled_polygon = scale(polygon, xfact=scaling_factor, yfact=scaling_factor, origin=(0, 0))
-                    
-                    matched_data['perimeter_polygon'] = scaled_polygon
-                    
 
+                    matched_data['perimeter_polygon'] = polygon
+
+                    # diameter = self.diameter(polygon) # call the diamater method here 
+                    # print(diameter)
+
+                    # scaling_factor = 90 / diameter
+                    # scaled_polygon = scale(polygon, xfact=scaling_factor, yfact=scaling_factor, origin=(0, 0))
+                    # print('polygon')
+                    # print(scaled_polygon)
+
+                    # matched_data['perimeter_polygon'] = scaled_polygon
+                    # matched_data['diameter'] = diameter
+           
+                    
             # Append the matched data to the matching_pairs list
             self.matching_pairs.append(matched_data)
 
         print(f"All matching pairs: {self.matching_pairs}")
+
+
+    def conversion(self):
+
+        for match in self.matching_pairs:
+            
+            perimeter_polygon = match.get('perimeter_polygon')
+            
+            if perimeter_polygon:
+                # Calculate the diameter of the perimeter 
+                minx, miny, maxx, maxy = perimeter_polygon.bounds
+                diameter = maxx - minx  # This assumes the perimeter is a circle and uses its width as the diameter.
+
+                conversion_factor = 90 / diameter # 90mm 
+
+                scaled_perimeter_polygon = scale(perimeter_polygon, xfact=conversion_factor, yfact=conversion_factor,  origin=(0, 0))
+                match['perimeter_polygon'] = scaled_perimeter_polygon  # Update the scaled polygon.
+
+                # Apply conversion to hole boundaries.
+                hole_boundary = match.get('hole_boundary')
+                if hole_boundary:
+                    # Scale the hole boundary using the conversion factor.
+                    scaled_hole_boundary = scale(hole_boundary, xfact=conversion_factor, yfact=conversion_factor, origin='center')
+                    match['hole_boundary'] = scaled_hole_boundary  # Update the scaled polygon.
+
+                track_file = match['track_file']
+                track_data = self.track_data[track_file]
+
+                pixel_columns = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+                track_data[pixel_columns] = track_data[pixel_columns] * conversion_factor
+                self.track_data[track_file] = track_data  # Update the track data.
+                print(f"Conversion applied for {track_file} with conversion factor: {conversion_factor:.3f}")
+            
+            else:
+                print('no perimeter detected!')
+
+                
 
 
     # def match_files(self):
