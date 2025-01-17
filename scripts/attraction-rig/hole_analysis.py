@@ -14,6 +14,7 @@ from scipy.stats import gaussian_kde
 import cv2
 from shapely import wkt
 from shapely.affinity import scale
+from shapely.wkt import loads as load_wkt
 
 
 class HoleAnalysis:
@@ -99,6 +100,11 @@ class HoleAnalysis:
         def process_video(video_path):
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
+            # Check if the perimeter file already exists
+            wkt_file_path = os.path.join(self.directory, f"{video_name}_perimeter.wkt")
+            if os.path.exists(wkt_file_path):
+                return
+
             def detect_largest_circle(frame):
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 gray_blurred = cv2.medianBlur(gray, 5)
@@ -138,7 +144,7 @@ class HoleAnalysis:
                     cv2.imwrite(frame_with_boundary_path, frame)
             
                 else:
-                    print("No circle detected.")
+                    print(f"No Perimeter detected for {video_name} .")
             else:
                 print(f"Failed to extract the 10th frame from the video.")
 
@@ -149,7 +155,6 @@ class HoleAnalysis:
         video_files = [f for f in os.listdir(self.directory) if f.endswith('.mp4')]
         for file in video_files:
             video_path = os.path.join(self.directory, file)
-            print(f"Processing video: {video_path}")
             process_video(video_path)
 
 
@@ -218,14 +223,13 @@ class HoleAnalysis:
                 'track_file': track_file,
                 'hole_boundary': None,
                 'video_file': None,
-                'perimeter_file': None
-            }
+                'perimeter_file': None}
 
             # Match with coordinate files (hole boundaries)
             for i, coordinates_file in enumerate(self.coordinate_files):
                 hole_prefix = '_'.join(coordinates_file.split('_')[:3]).rsplit('.', 1)[0]
                 if hole_prefix == track_prefix:
-                    print(f"Match found: {track_file} with {coordinates_file}")
+                    # print(f"Match found: {track_file} with {coordinates_file}")
                     matched_data['hole_boundary'] = self.hole_boundaries[i]  # Assign the associated hole boundary polygon
 
             # Match with video files
@@ -234,13 +238,12 @@ class HoleAnalysis:
                 if video_prefix == track_prefix:
                     matched_data['video_file'] = video_file
 
-
             # Match with perimeter files
             for perimeter_file in perimeter_files:
                 perimeter_prefix = '_'.join(perimeter_file.split('_')[:3]).rsplit('.', 1)[0]
                 if perimeter_prefix == track_prefix:
                     matched_data['perimeter_file'] = perimeter_file
-                    print(f"Match found: {track_file} with {perimeter_file}")
+                    # print(f"Match found: {track_file} with {perimeter_file}")
 
                     # Read the perimeter file and parse it into a Polygon object
                     perimeter_path = os.path.join(self.directory, perimeter_file)
@@ -249,24 +252,10 @@ class HoleAnalysis:
 
                     polygon = wkt.loads(perimeter_wkt)
 
-                    matched_data['perimeter_polygon'] = polygon
-
-                    # diameter = self.diameter(polygon) # call the diamater method here 
-                    # print(diameter)
-
-                    # scaling_factor = 90 / diameter
-                    # scaled_polygon = scale(polygon, xfact=scaling_factor, yfact=scaling_factor, origin=(0, 0))
-                    # print('polygon')
-                    # print(scaled_polygon)
-
-                    # matched_data['perimeter_polygon'] = scaled_polygon
-                    # matched_data['diameter'] = diameter
-           
+                    matched_data['perimeter_polygon'] = polygon           
                     
             # Append the matched data to the matching_pairs list
             self.matching_pairs.append(matched_data)
-
-        print(f"All matching pairs: {self.matching_pairs}")
 
 
     def conversion(self):
@@ -276,21 +265,44 @@ class HoleAnalysis:
             perimeter_polygon = match.get('perimeter_polygon')
             
             if perimeter_polygon:
+                print(perimeter_polygon)
                 # Calculate the diameter of the perimeter 
                 minx, miny, maxx, maxy = perimeter_polygon.bounds
                 diameter = maxx - minx  # This assumes the perimeter is a circle and uses its width as the diameter.
 
                 conversion_factor = 90 / diameter # 90mm 
 
-                scaled_perimeter_polygon = scale(perimeter_polygon, xfact=conversion_factor, yfact=conversion_factor,  origin=(0, 0))
+                # IF PERIMETER DETECTED BADLY 
+                threshold = 0.09 #
+                if conversion_factor > threshold:
+                    print(f"Conversion factor {conversion_factor:.3f} is above threshold for {match['track_file']}. Using default conversion factor:")
+                    conversion_factor = 90 / 1032  # Use the old conversion factor
+              
+
+                # scaled_perimeter_polygon = scale(perimeter_polygon, xfact=conversion_factor, yfact=conversion_factor,  origin=(0, 0))
+                perimeter_coordinates = np.array(perimeter_polygon.exterior.coords)
+                perimeter_coordinates *= conversion_factor
+                scaled_perimeter_polygon = Polygon(perimeter_coordinates)
+                print(scaled_perimeter_polygon)
+
                 match['perimeter_polygon'] = scaled_perimeter_polygon  # Update the scaled polygon.
 
                 # Apply conversion to hole boundaries.
                 hole_boundary = match.get('hole_boundary')
                 if hole_boundary:
                     # Scale the hole boundary using the conversion factor.
-                    scaled_hole_boundary = scale(hole_boundary, xfact=conversion_factor, yfact=conversion_factor, origin='center')
-                    match['hole_boundary'] = scaled_hole_boundary  # Update the scaled polygon.
+
+                    coordinates = np.array(hole_boundary.exterior.coords)
+
+                    coordinates *= conversion_factor
+                    scaled_polygon = Polygon(coordinates)
+                    print(scaled_polygon)
+
+                    match['hole_boundary'] = scaled_polygon
+
+                    # scaled_hole_boundary = scale(hole_boundary, xfact=conversion_factor, yfact=conversion_factor, origin='center')
+                    # match['hole_boundary'] = scaled_hole_boundary  # Update the scaled polygon.
+                    # print(scaled_hole_boundary)
 
                 track_file = match['track_file']
                 track_data = self.track_data[track_file]
@@ -301,7 +313,27 @@ class HoleAnalysis:
                 print(f"Conversion applied for {track_file} with conversion factor: {conversion_factor:.3f}")
             
             else:
-                print('no perimeter detected!')
+                print(f"no perimeter detected for {match['track_file']}")
+  
+                conversion_factor = 90 / 1032 # the one i used to use 
+                hole_boundary = match.get('hole_boundary')
+                if hole_boundary:
+                    coordinates = np.array(hole_boundary.exterior.coords)
+                    coordinates *= conversion_factor
+                    scaled_polygon = Polygon(coordinates)
+                    print(scaled_polygon)
+                    match['hole_boundary'] = scaled_polygon
+                
+                track_file = match['track_file']
+                track_data = self.track_data[track_file]
+
+                pixel_columns = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+                track_data[pixel_columns] = track_data[pixel_columns] * conversion_factor
+                self.track_data[track_file] = track_data  # Update the track data.
+                print(f"Conversion applied for {track_file} with conversion factor: {conversion_factor:.3f}")
+
+
+                
 
                 
 
@@ -1182,8 +1214,12 @@ class HoleAnalysis:
 
         dataframe_list = [] 
 
-        for track_file in self.track_files:
+        for match in self.matching_pairs:
+            track_file = match['track_file']
             df = self.track_data[track_file]
+            print(df)
+            # perimeter = match['perimeter_file']
+            perimeter = match.get('perimeter_polygon')
 
             df = df.sort_values(by=['track_id', 'frame'])
 
@@ -1232,23 +1268,39 @@ class HoleAnalysis:
 
 
             # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-number-digging/withrollingwindow.csv')
-          
+
+            df['count'] = total_larvae
+
+            df = self.detect_larvae_leaving(df, perimeter) # call method 
+
             # Now count the moving frames per frame_idx
             moving_counts = df.groupby('frame')['smoothed_final_movement'].sum().reset_index()
-
             # Rename the column for clarity
             moving_counts.columns = ['frame', 'moving_count']
 
-            # Ensure we have a count for every frame
-            full_frame_range = pd.DataFrame({'frame': range(int(df['frame'].min()), int(df['frame'].max()) + 1)})
-            full_frame_counts = full_frame_range.merge(moving_counts, on='frame', how='left').fillna(0)
+            full_frame_counts = df[['frame', 'count']].drop_duplicates().merge(moving_counts, on='frame', how='left')
+            full_frame_counts['moving_count'] = full_frame_counts['moving_count'].fillna(0).astype(int)
 
-            # Convert counts to integers
-            full_frame_counts['moving_count'] = full_frame_counts['moving_count'].astype(int)
+            full_frame_counts = full_frame_counts.sort_values(by='frame', ascending=True)
 
-            full_frame_counts['number digging'] = total_larvae - full_frame_counts['moving_count']
+            full_frame_counts['number_digging'] = full_frame_counts['count'] - full_frame_counts['moving_count']
 
             full_frame_counts['file'] = track_file
+            full_frame_counts['normalised_digging'] = (full_frame_counts['number_digging'] / total_larvae) * 100
+
+
+            # Ensure we have a count for every frame
+            # full_frame_range = pd.DataFrame({'frame': range(int(df['frame'].min()), int(df['frame'].max()) + 1)})
+            # full_frame_counts = full_frame_range.merge(moving_counts, on='frame', how='left').fillna(0)
+            # # Convert counts to integers
+            # full_frame_counts['moving_count'] = full_frame_counts['moving_count'].astype(int)
+
+            # full_frame_counts['number digging'] = total_larvae - full_frame_counts['moving_count']
+
+            # full_frame_counts['file'] = match['track_file']  
+
+            # # check this works- shd work 
+            # full_frame_counts['normalised digging'] = (full_frame_counts['number digging'] / total_larvae) * 100
 
             dataframe_list.append(full_frame_counts)
         
@@ -1257,6 +1309,56 @@ class HoleAnalysis:
         number_digging.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
 
         return number_digging
+    
+
+    def detect_larvae_leaving(self, df, perimeter):
+        
+        df['outside_perimeter'] = df.apply(lambda row: not perimeter.contains(Point(row['x_body'], row['y_body'])),axis=1)
+
+        def update_larvae_count(df):
+            # Iterate over each row that is marked as outside the perimeter
+            for index, row in df[df['outside_perimeter']].iterrows():
+                # Track subsequent 10 frames for this track
+                end_frame = row['frame'] + 10
+                subsequent_data = df[(df['track_id'] == row['track_id']) & (df['frame'] > row['frame']) & (df['frame'] <= end_frame)]
+
+                if subsequent_data.empty:
+                    print(f"Larva with track ID {row['track_id']} left the perimeter at frame {row['frame']}.")
+                    df.loc[df['frame'] >= row['frame'], 'count'] -= 1
+                        # If there is subsequent data, assume the larva could potentially return
+                else:
+                    continue  # This continues to the next larva without adjusting the count
+            
+        update_larvae_count(df)
+
+        full_frame_range = range(0, 3601)  # From 0 to 3600
+        existing_frames = set(df['frame'].unique())
+        missing_frames = sorted(set(full_frame_range) - existing_frames)
+        missing_data = [{'frame': frame, 'count': 0} for frame in missing_frames]
+        df_missing = pd.DataFrame(missing_data)
+        # Append missing data to the original DataFram
+        df = pd.concat([df, df_missing], ignore_index=True)
+        # Sort the DataFrame by frame to maintain chronological order
+        df.sort_values(by='frame', inplace=True)
+        # Optional: Reset index for cleanliness
+        df.reset_index(drop=True, inplace=True)
+
+        df_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-17-n10-agarose/track_count_int.csv'
+        df.to_csv(df_path, index=False)
+        return df
+            
+
+
+
+            
+
+
+
+            
+
+
+
+
 
 
 
