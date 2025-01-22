@@ -265,7 +265,6 @@ class HoleAnalysis:
             perimeter_polygon = match.get('perimeter_polygon')
             
             if perimeter_polygon:
-                print(perimeter_polygon)
                 # Calculate the diameter of the perimeter 
                 minx, miny, maxx, maxy = perimeter_polygon.bounds
                 diameter = maxx - minx  # This assumes the perimeter is a circle and uses its width as the diameter.
@@ -283,7 +282,6 @@ class HoleAnalysis:
                 perimeter_coordinates = np.array(perimeter_polygon.exterior.coords)
                 perimeter_coordinates *= conversion_factor
                 scaled_perimeter_polygon = Polygon(perimeter_coordinates)
-                print(scaled_perimeter_polygon)
 
                 match['perimeter_polygon'] = scaled_perimeter_polygon  # Update the scaled polygon.
 
@@ -1217,8 +1215,7 @@ class HoleAnalysis:
         for match in self.matching_pairs:
             track_file = match['track_file']
             df = self.track_data[track_file]
-            print(df)
-            # perimeter = match['perimeter_file']
+
             perimeter = match.get('perimeter_polygon')
 
             df = df.sort_values(by=['track_id', 'frame'])
@@ -1243,7 +1240,7 @@ class HoleAnalysis:
 
             df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
 
-            df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(5) / 5).fillna(0)
+            df['cumulative_displacement_rate'] = df.groupby('track_id', group_keys=False)['cumulative_displacement', ].apply(lambda x: x.diff(5) / 5).fillna(0) # unsure what groupkeys is but it asked me to put it in cause kept getting lengthy like use this for future
             
             # STANDARD DEVIATION OF BODY X, Y COORDINATES 
 
@@ -1271,7 +1268,16 @@ class HoleAnalysis:
 
             df['count'] = total_larvae
 
-            df = self.detect_larvae_leaving(df, perimeter) # call method 
+
+            if perimeter: # ACOUNTS FOR NO PERIMETER FILES 
+                # IF PERIMETER FILES BAD WANT TO IGNORE- ONLY DETECT GOOD ONES 
+                minx, miny, maxx, maxy = perimeter.bounds
+                diameter = maxx - minx  
+        
+                if diameter > 89:
+                    print(track_file)
+                    df = self.detect_larvae_leaving(df, perimeter, total_larvae)
+
 
             # Now count the moving frames per frame_idx
             moving_counts = df.groupby('frame')['smoothed_final_movement'].sum().reset_index()
@@ -1281,26 +1287,18 @@ class HoleAnalysis:
             full_frame_counts = df[['frame', 'count']].drop_duplicates().merge(moving_counts, on='frame', how='left')
             full_frame_counts['moving_count'] = full_frame_counts['moving_count'].fillna(0).astype(int)
 
+            full_frame_counts.loc[full_frame_counts['moving_count'] > total_larvae, 'moving_count'] = total_larvae
+
             full_frame_counts = full_frame_counts.sort_values(by='frame', ascending=True)
 
             full_frame_counts['number_digging'] = full_frame_counts['count'] - full_frame_counts['moving_count']
 
+            full_frame_counts.loc[full_frame_counts['number_digging'] < 0, 'number_digging'] = full_frame_counts['count']
+
             full_frame_counts['file'] = track_file
+            print(track_file)
             full_frame_counts['normalised_digging'] = (full_frame_counts['number_digging'] / total_larvae) * 100
 
-
-            # Ensure we have a count for every frame
-            # full_frame_range = pd.DataFrame({'frame': range(int(df['frame'].min()), int(df['frame'].max()) + 1)})
-            # full_frame_counts = full_frame_range.merge(moving_counts, on='frame', how='left').fillna(0)
-            # # Convert counts to integers
-            # full_frame_counts['moving_count'] = full_frame_counts['moving_count'].astype(int)
-
-            # full_frame_counts['number digging'] = total_larvae - full_frame_counts['moving_count']
-
-            # full_frame_counts['file'] = match['track_file']  
-
-            # # check this works- shd work 
-            # full_frame_counts['normalised digging'] = (full_frame_counts['number digging'] / total_larvae) * 100
 
             dataframe_list.append(full_frame_counts)
         
@@ -1311,27 +1309,59 @@ class HoleAnalysis:
         return number_digging
     
 
-    def detect_larvae_leaving(self, df, perimeter):
+    def detect_larvae_leaving(self, df, perimeter, total_larvae):
         
         df['outside_perimeter'] = df.apply(lambda row: not perimeter.contains(Point(row['x_body'], row['y_body'])),axis=1)
+
+        df = df.sort_values('frame').reset_index(drop=True)
+        df['frame'] = df['frame'].astype(int)
+        df['track_id'] = df['track_id'].astype(int)
+
+        df['track_count'] = df.groupby('frame')['track_id'].transform('nunique')
 
         def update_larvae_count(df):
             # Iterate over each row that is marked as outside the perimeter
             for index, row in df[df['outside_perimeter']].iterrows():
-                # Track subsequent 10 frames for this track
-                end_frame = row['frame'] + 10
-                subsequent_data = df[(df['track_id'] == row['track_id']) & (df['frame'] > row['frame']) & (df['frame'] <= end_frame)]
 
-                if subsequent_data.empty:
+                end_frame = row['frame'] + 40
+                subsequent_data = df[(df['track_id'] == row['track_id']) & (df['frame'] > row['frame']) & (df['frame'] <= end_frame)]
+          
+                ## CREATING DF TO ACCESS 1 ROW PER FRAME FOR EASE
+                # Drop duplicates based specifically on the 'frame' column
+                track_data = df[['frame', 'track_count']].drop_duplicates(subset='frame').reset_index(drop=True)
+    
+                track_data['rolling_track_count'] = track_data['track_count'].transform(lambda x: x.rolling(window=10).mean())
+                track_data.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-20-n10-agarose/df.csv',  index=False)
+
+                frame = row['frame']
+                
+
+                after_frame = track_data.loc[track_data['frame'] == frame, 'rolling_track_count']
+                before_frame = track_data.loc[track_data['frame'] == frame -1, 'rolling_track_count']
+
+                if not after_frame.empty and not before_frame.empty:
+                    
+                    before_count = before_frame.iloc[0]
+                    after_count = after_frame.iloc[0]
+                else:
+                    continue
+
+                if subsequent_data.empty  and (after_count < before_count):
+        
+                    if after_count >= (total_larvae - 0.2):
+                        continue
+              
+                    print(f'{before_count} and {after_count}')
                     print(f"Larva with track ID {row['track_id']} left the perimeter at frame {row['frame']}.")
                     df.loc[df['frame'] >= row['frame'], 'count'] -= 1
                         # If there is subsequent data, assume the larva could potentially return
                 else:
                     continue  # This continues to the next larva without adjusting the count
-            
+        
+
         update_larvae_count(df)
 
-        full_frame_range = range(0, 3601)  # From 0 to 3600
+        full_frame_range = range(0, 3600)  # From 0 to 3600
         existing_frames = set(df['frame'].unique())
         missing_frames = sorted(set(full_frame_range) - existing_frames)
         missing_data = [{'frame': frame, 'count': 0} for frame in missing_frames]
@@ -1343,9 +1373,126 @@ class HoleAnalysis:
         # Optional: Reset index for cleanliness
         df.reset_index(drop=True, inplace=True)
 
-        df_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-17-n10-agarose/track_count_int.csv'
-        df.to_csv(df_path, index=False)
+        # df_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-20-n10-agarose/df.csv'
+        # df.to_csv(df_path, index=False)
         return df
+    
+    ### METHOD QUALITY_CONTROL: QUALITY CONTROL TO ASSESS PREDICTION AND TRACK QUALITY
+
+    def quality_control(self):
+
+        data = []   
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+
+            perimeter = match.get('perimeter_polygon')
+
+            ### CREATE FOLDER WITH FILENAME 
+            file_name = track_file.replace(".tracks.feather", "")
+            folder_path = os.path.join(self.directory, file_name)
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)  
+
+
+            ### COUNT UNIQUE TRACKS PER FRAME
+            all_frames = pd.Series(index=range(0, 3601))
+
+            track_counts = df.groupby('frame')['track_id'].nunique()
+            track_counts = all_frames.combine_first(track_counts).fillna(0)
+            
+            ### COUNT UNIQUE POST PROCESSED TRACKS PER FRAME 
+            df_tracks = df[df.groupby('track_id')['instance_score'].transform('mean') >= 0.9]
+            track_counts_score = df_tracks.groupby('frame')['track_id'].nunique()
+            track_counts_score = all_frames.combine_first(track_counts_score).fillna(0)
+
+            plt.figure(figsize=(10, 6))
+            sns.lineplot(data=track_counts, label='track number', alpha=0.5)
+            sns.lineplot(data=track_counts_score, label='post-procesed track number')
+            plt.title(f"Number of Tracks per Frame")
+            plt.xlabel("Frame")
+            plt.ylabel("Number of Track IDs")
+            plt.tight_layout()
+            plot_path = os.path.join(folder_path, "number_of_tracks.png")
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.close()  
+
+            ### FIRST AND LAST FRAME OFF EVERY TRACK 
+            track_first_last_df = df.groupby('track_id').agg(first_frame=('frame', 'min'), last_frame=('frame', 'max')).reset_index()
+            csv_path = os.path.join(folder_path, "track_first_last_frames.csv")
+            track_first_last_df.to_csv(csv_path ,index=False)
+
+            ### CREATE PLOTS FOR BODY X,Y COORDINATES OF EACH TRACK TRAJECTORY 
+            
+            for track_id, track_data in df.groupby('track_id'):
+                plt.figure(figsize=(8, 6))
+                plt.plot(track_data['x_body'], track_data['y_body']) 
+                plt.title(f"Track {track_id}: Body Coordinates")
+                plt.xlabel("X Body")
+                plt.ylabel("Y Body")
+                plt.xlim(0,122)
+                plt.ylim(0,122)
+                track_plot_path = os.path.join(folder_path, f"track_{track_id}.png")
+                plt.tight_layout()
+                plt.savefig(track_plot_path, dpi=300, bbox_inches='tight')
+                plt.close()
+
+            
+            ### IDENTIFY TRACK JUMPS
+            df['dx'] = df.groupby('track_id')['x_body'].diff().fillna(0) 
+            df['dy'] = df.groupby('track_id')['y_body'].diff().fillna(0) 
+            df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2) 
+
+            df['track_jumps'] = df.groupby('track_id')['distance'].transform(lambda x: x > 2.5) # jumped if greater than 2.5mm 
+
+            track_jumps = df[df['track_jumps']].copy()
+            track_jump_path = os.path.join(folder_path, 'potential_track_jumps.csv')
+            track_jumps.to_csv(track_jump_path, index=False)
+
+            ### PERIMETER FILE
+            perimeter_detected = "Yes" if perimeter is not None else "No"
+            perimeter_size = "Correct"
+
+            if perimeter: 
+                minx, miny, maxx, maxy = perimeter.bounds
+                diameter = maxx - minx  
+        
+                if diameter < 89:
+                    perimeter_size = "Small"
+            
+            ### DETECT LARVAE OUTSIDE THE PERIMETER
+            if diameter > 89:
+                df['outside_perimeter'] = df.apply(lambda row: not perimeter.contains(Point(row['x_body'], row['y_body'])),axis=1)
+
+                outside_perimeter = df[df['outside_perimeter']].copy()
+                path = os.path.join(folder_path, 'outside_perimeter.csv')
+                outside_perimeter.to_csv(path, index=False)
+
+                outside_perimeter_number = outside_perimeter.shape[0]
+            
+            ### META DATA FOR DIRECTORY
+            total_tracks = df['track_id'].nunique()
+            track_jump_number = track_jumps.shape[0]
+            track_lengths = track_first_last_df['last_frame'] - track_first_last_df['first_frame'] #df created above
+            average_track_length = track_lengths.mean()
+
+            data.append({'file':file_name, 'total tracks': total_tracks, 'average track length': average_track_length, 'track jumps': track_jump_number, 'perimeter detected': perimeter_detected, 'perimeter size': perimeter_size, 'outside perimeter': outside_perimeter_number})
+    
+
+        summary_df = pd.DataFrame(data)
+        summary_path = os.path.join(self.directory, "summary.csv")
+        summary_df.to_csv(summary_path, index=False)
+
+
+
+
+
+
+
+
+
+
             
 
 
@@ -1366,7 +1513,7 @@ class HoleAnalysis:
 
 
 
-    # def radius(self):
+  
     
 
 
