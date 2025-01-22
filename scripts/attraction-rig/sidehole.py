@@ -23,11 +23,11 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.post_processing()
+    # analysis.post_processing()
+    analysis.quality_control()
 
-    # analysis.perimeter()
 
-    analysis.hole_boundary(scale_factor=1.5)
+    # analysis.hole_boundary(scale_factor=1.5)
 
     #METHOD TO SHORTEN
     # analysis.shorten(frame=600)
@@ -44,14 +44,14 @@ def perform_analysis(directory):
     # analysis.proximity()
 
     # DIGGING IN ABSENCE OF HOLES
-    # analysis.number_digging(2) #HAVE TO MODIFY
+    # analysis.number_digging(10) #HAVE TO MODIFY
 
     # HOLE ANALYSIS METHODS 
 
     # requires polygon
     # analysis.returns()
     # analysis.time_to_enter() # SCALE FACTOR LESS THAN 1.5?
-    analysis.hole_counter()
+    # analysis.hole_counter()
     # analysis.hole_departures()
     
     # requires hole centroid 
@@ -69,43 +69,38 @@ if __name__ == "__main__":
         run_gui()    
 
 
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n1")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n2")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n3")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n4")
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n5')
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n6")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n7")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n8")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n9")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour-day4/n10")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n1")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n3")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n4")
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n5')
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n6")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n7")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n8")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n9")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10")
  
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n1")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n2")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n3")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n4")
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n5')
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n6")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n7")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n8")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n9")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour-day4/n10")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n1")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n2")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n3")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n4")
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n5')
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n6")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n7")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n8")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n9")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-food-behaviour/n10")
 
-    
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/1-hour-agarose-n10')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/1-hour-food-n10')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/30-minutes-agarose-n10')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/30-minutes-agarose-n10')
-
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/agarose')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/food')
-
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/agarose')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/middle-hole/food')
-
-
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n1')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n2')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n3')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n4')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n5')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n6')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n7')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n8')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n9')
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-agarose-behaviour/n10')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-attraction-food')
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-food-behaviour/n1')
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-food-behaviour/n2')
@@ -118,7 +113,10 @@ if __name__ == "__main__":
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-food-behaviour/n9')
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/1h-food-behaviour/n10')
 
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-hole-counter/test')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/agarose')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/side-hole/food')
+
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-20-n10-agarose')
     
 
 

@@ -14,7 +14,7 @@ from scipy.spatial.distance import euclidean
 
 
 
-wkt_file = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-17-n10-agarose/2024-08-05_10-07-59_td4_perimeter.wkt'
+wkt_file = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-20-n10-agarose/2024-07-23_11-33-41_td2_perimeter.wkt'
 
 with open(wkt_file, 'r') as f:
     wkt_content = f.read()  # Read the WKT file into the wkt_content variable
@@ -24,7 +24,7 @@ buffered_inside_boundary = petri_dish_boundary.buffer(-1)
 buffered_outside_boundary = petri_dish_boundary.buffer(5) 
                             
 
-feather_file = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-17-n10-agarose/2024-08-05_10-07-59_td4.tracks.feather'  # Replace with your actual Feather file path
+feather_file = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-20-n10-agarose/2024-07-23_11-33-41_td2.tracks.feather'  # Replace with your actual Feather file path
 df = feather.read_feather(feather_file)
 # df_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/feather.csv'
 # df.to_csv(df_path, index=False)
@@ -58,15 +58,22 @@ df['outside_perimeter'] = df.apply(lambda row: not petri_dish_boundary.contains(
 
 df['count'] = 10
 
+window_size = 100  # Example window size, adjust as needed
+df['rolling_track_count'] = df.groupby('frame')['track_id'].nunique().rolling(window=window_size).mean().fillna(method='bfill').fillna(method='ffill')
+
 # Function to process data and update counts
 def update_larvae_count(df):
     # Iterate over each row that is marked as outside the perimeter
     for index, row in df[df['outside_perimeter']].iterrows():
         # Track subsequent 10 frames for this track
-        end_frame = row['frame'] + 10
+        end_frame = row['frame'] + 40
         subsequent_data = df[(df['track_id'] == row['track_id']) & (df['frame'] > row['frame']) & (df['frame'] <= end_frame)]
 
-        if subsequent_data.empty:
+        before_count = df.loc[max(0, row['frame'] - 100):row['frame'] - 1, 'rolling_track_count'].mean()
+        after_count = df.loc[row['frame'] + 1:min(df['frame'].max(), row['frame'] + 100), 'rolling_track_count'].mean()
+
+        if subsequent_data.empty and after_count < before_count:
+
             print(f"Larva with track ID {row['track_id']} left the perimeter at frame {row['frame']}.")
             df.loc[df['frame'] >= row['frame'], 'count'] -= 1
         # If there is subsequent data, assume the larva could potentially return

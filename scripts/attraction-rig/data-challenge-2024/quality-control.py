@@ -9,7 +9,7 @@ import numpy as np
 
 ### QUALITY CONTROL TO FLAG VIDEOS WITH MORE TRACKING 
 
-directory = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-quality-control'
+directory = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-leaving-perimeter/2025-01-17-n10-agarose'
 
 data = []   
 
@@ -34,11 +34,22 @@ for file in os.listdir(directory):
         # df[mm_to_pixel] = df[mm_to_pixel] * (1032 / 90) 
 
         ### PLOT OF NUMBER OF INSTANCES OVER TIME 
+        ### HAD TO CHANGE THIS TO INCLUDE SERIES WITH ALL FRAMES BECAUSE FOR FRAMES WHERE NO LARVA WAS DETECTED IT STILL HAD IT DOWN AS 1 
 
+        # track_counts = df.groupby('frame')['track_id'].nunique()
+
+        # Count unique tracks per frame
         track_counts = df.groupby('frame')['track_id'].nunique()
+        all_frames = pd.Series(index=range(0, 3601))
+        track_counts = all_frames.combine_first(track_counts).fillna(0)
+
+        df_tracks = df[df.groupby('track_id')['instance_score'].transform('mean') >= 0.9]
+        track_counts_score = df_tracks.groupby('frame')['track_id'].nunique()
+        track_counts_score = all_frames.combine_first(track_counts_score).fillna(0)
 
         plt.figure(figsize=(10, 6))
         sns.lineplot(data=track_counts)
+        sns.lineplot(data=track_counts_score)
         plt.title(f"Number of Tracks per Frame")
         plt.xlabel("Frame")
         plt.ylabel("Number of Track IDs")
