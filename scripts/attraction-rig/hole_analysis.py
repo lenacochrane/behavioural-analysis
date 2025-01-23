@@ -15,6 +15,7 @@ import cv2
 from shapely import wkt
 from shapely.affinity import scale
 from shapely.wkt import loads as load_wkt
+import random
 
 
 class HoleAnalysis:
@@ -1483,6 +1484,81 @@ class HoleAnalysis:
         summary_df = pd.DataFrame(data)
         summary_path = os.path.join(self.directory, "summary.csv")
         summary_df.to_csv(summary_path, index=False)
+
+
+    def pseudo_population_model(self, number_of_iterations, number_of_animals):
+
+        ### GENERATE LIST OF NORMALISED TRACK FILES 
+
+        data = []   
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+    
+            perimeter = match.get('perimeter_polygon')
+
+            if perimeter:
+                centroid = perimeter.centroid
+                centroid_x = centroid.x
+                centroid_y = centroid.y
+     
+ 
+                ## for every body coordinate need to minus this centroid 
+                body_coordinates = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
+                for coord in body_coordinates:
+                    if 'x' in coord:
+                        df[coord] = df[coord] - centroid_x
+                    elif 'y' in coord:
+                        df[coord] = df[coord] - centroid_y
+
+                df['filename'] = track_file
+                    
+                data.append(df)
+       
+            else:
+                continue 
+        
+        ## CHECK DATA POINTS NORMALISED
+        # plt.figure(figsize=(10, 6))
+        # for i, df in enumerate(data):
+        #     random_color = (random.random(), random.random(), random.random())
+        #     plt.scatter(df['x_body'], df['y_body'], color=random_color, alpha=0.6) 
+        # plt.title(f'Body Coordinates')  
+        # plt.xlabel('X Coordinate')  
+        # plt.ylabel('Y Coordinate')  
+        # plt.grid(True) 
+        # plt.show()  
+        
+        ### RANDOMLY SELECT FILES AND CONCAT THEM
+        for iteration in range(number_of_iterations):
+            selected_files = random.sample(data, number_of_animals)
+            concatenated_df = pd.concat(selected_files, ignore_index=True)
+            concatenated_df = concatenated_df.sort_values(by='frame', ascending=True)
+
+
+            filepath = os.path.join(self.directory, f'pseudo_population_{iteration+1}.csv')
+            concatenated_df.to_csv(filepath, index=False)
+
+    
+
+        
+
+
+
+
+
+
+
+
+     
+
+
+        #pseudo_population = pd.concat(dataframes, ignore_index=True)
+        
+ 
+
+
 
 
 
