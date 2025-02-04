@@ -7,14 +7,17 @@ import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from itertools import combinations
 import cv2
+import ast
 
 
-# df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interactions-3/2024-12-10_10-55-21_td9.tracks.feather')
+### TRY AND GET THE CSV TO LOOK LIKE THE IDEAL DATAFRAME- UNMERGE DF 
+
+# df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df/2024-07-12_13-18-27_td1.tracks.feather')
 
 # pixel_columns = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
 # df[pixel_columns] = df[pixel_columns] * (90/1032)
 
-# proximity_threshold = 10 # 10mm
+# proximity_threshold = 20 # 10mm
 
 # df['track_id'] = df['track_id'].astype(int)
 # df['frame'] = df['frame'].astype(int)
@@ -22,44 +25,69 @@ import cv2
 # track_ids = df['track_id'].unique()
 # track_combinations = list(combinations(track_ids, 2))
 
+# results = []
 # for track_a, track_b in track_combinations:
-#     results = []
+
 #     track_a_data = df[df['track_id'] == track_a]
 #     track_b_data = df[df['track_id'] == track_b]
 
 #     common_frames = set(track_a_data['frame']).intersection(track_b_data['frame'])
 
-
 #     for frame in common_frames:
 
+
+#         # body
 #         point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
 #         point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+#         ## tail
+#         a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+#         b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+
+#         ## head
+#         a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+#         b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+ 
 
 #         dist = np.linalg.norm(point_a - point_b)
 #         if dist < proximity_threshold:
 #             results.append({
 #                         'Frame': frame,
-#                         'Track A': track_a,
-#                         'Track A X Body': point_a[0, 0], #idk why this shape but fix ltr 
-#                         'Track A Y Body': point_a[0, 1],
-#                         'Track B': track_b,
-#                         'Track B X Body': point_b[0, 0],
-#                         'Track B Y Body': point_b[0, 1],
-#                         'Proximal': True,
-#                         'Distance (mm)': dist
+#                         f'Interaction {track_a},{track_b}': True,
+#                         f' Distance {track_a},{track_b}': dist,
+#                         ## track a coordinates
+#                         f'track_{track_a} x_tail': a_tail[0,0], 
+#                         f'track_{track_a} y_tail': a_tail[0,1],
+#                         f'track_{track_a} x_body': point_a[0,0], 
+#                         f'track_{track_a} y_body': point_a[0,1],
+#                         f'track_{track_a} x_head': a_head[0,0], 
+#                         f'track_{track_a} y_head': a_head[0,1],
+#                         ## track b coordinates
+#                         f'track_{track_b} x_tail': b_tail[0,0], 
+#                         f'track_{track_b} y_tail': b_tail[0,1],
+#                         f'track_{track_b} x_body': point_b[0,0],
+#                         f'track_{track_b} y_body': point_b[0,0],
+#                         f'track_{track_b} x_head': b_head[0,0], 
+#                         f'track_{track_b} y_head': b_head[0,1]
+                        
 #                     })
 
-#     # Create and save DataFrame
-#     results_df = pd.DataFrame(results)
-#     if not results_df.empty:
+
+# # Create and save DataFrame
+# results_df = pd.DataFrame(results)
+# if not results_df.empty:
 #         # Save to CSV
-#         filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interactions-3'
-#         filename = f'track_{track_a}_vs_track_{track_b}_proximity_results.csv'
-#         full_path = os.path.join(filepath, filename)
 
-#         results_df.to_csv(full_path, index=False)
+#     results_df.set_index('Frame', inplace=True, drop=False)
 
-# # all_frames = pd.Series(index=range(0, 3601))
+
+#     filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df'
+#     filename =  'proximity_results.csv'
+#     full_path = os.path.join(filepath, filename)
+
+#     results_df.to_csv(full_path, index=False)
+
+
 
 
 
@@ -132,6 +160,7 @@ import cv2
 # out.release()
 # cap.release()
 # cv2.destroyAllWindows()
+
 
 
 
