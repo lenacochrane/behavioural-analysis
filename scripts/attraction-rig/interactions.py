@@ -8,6 +8,7 @@ from scipy.spatial import KDTree
 from itertools import combinations
 import cv2
 import ast
+import re
 
 
 ### TRY AND GET THE CSV TO LOOK LIKE THE IDEAL DATAFRAME- UNMERGE DF 
@@ -93,10 +94,10 @@ import ast
 
 
 
-### VIDEO_FILES
+## VIDEO_FILES
 
 
-# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interactions-3/track_4_vs_track_7_proximity_results.csv')
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df/proximity_results.csv')
 
 # pixel_columns = ['Track A X Body',  'Track A Y Body',  'Track B X Body',  'Track B Y Body']
 # df[pixel_columns] = df[pixel_columns] * (1032/90)
@@ -165,5 +166,100 @@ import ast
 
 
 
+### VIDEO FILES
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df/proximity_results.csv')
+
+# pixel_columns = ['Track A X Body',  'Track A Y Body',  'Track B X Body',  'Track B Y Body']
+# df[pixel_columns] = df[pixel_columns] * (1032/90)
+
+columns = [col for col in df.columns if col.startswith("Interaction")]
 
 
+video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df/2024-07-12_13-18-27_td1.mp4'
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-df'
+os.makedirs(output_dir, exist_ok=True)
+
+
+# Open the video file
+cap = cv2.VideoCapture(video_path)
+fps = cap.get(cv2.CAP_PROP_FPS)
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+for column in columns:
+
+    match = re.search(r"(\d+),(\d+)", column)
+    if not match:
+        continue  # Skip if no match found
+
+    track_A, track_B = match.groups()
+    track_A_x = f"track_{track_A} x_body"
+    track_A_y = f"track_{track_A} y_body"
+    track_B_x = f"track_{track_B} x_body"
+    track_B_y = f"track_{track_B} y_body"
+
+    # Ensure track columns exist in DataFrame
+    if track_A_x not in df.columns or track_A_y not in df.columns or track_B_x not in df.columns or track_B_y not in df.columns:
+        print(f"Skipping {column} because track columns are missing.")
+        continue
+
+
+
+    true_frames = df.loc[df[column] == True]['Frame'].sort_values().reset_index(drop=True)
+
+
+    
+    segments = []
+    start_frame = true_frames.iloc[0]
+    prev_frame = start_frame
+
+    for current_frame in true_frames.iloc[1:]:
+        if current_frame - prev_frame != 1:  # If gap detected, close the segment
+            segments.append((start_frame, prev_frame))
+            start_frame = current_frame
+        prev_frame = current_frame
+
+    segments.append((start_frame, prev_frame))  # Add last segment
+
+        # Process each segment
+    for idx, (start, end) in enumerate(segments):
+        output_filename = f"{column.replace(' ', '_')}_{start}-{end}.mp4"
+        output_filepath = os.path.join(output_dir, output_filename)
+
+        # Open video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_filepath, fourcc, fps, (frame_width, frame_height))
+
+        # Extract frames
+        for frame_num in range(start, end + 1):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+
+            if not ret:
+                break
+            
+            # Get track positions for this frame
+            # frame_data = true_frames[true_frames['Frame'] == frame_num]
+            # if not frame_data.empty:
+            #     x_A, y_A = int(frame_data[track_A_x].values[0]), int(frame_data[track_A_y].values[0])
+            #     x_B, y_B = int(frame_data[track_B_x].values[0]), int(frame_data[track_B_y].values[0])
+
+            #     # Draw circles on video frame at track locations
+            #     cv2.circle(frame, (x_A, y_A), 10, (0, 0, 255), -1)  # Red for Track A
+            #     cv2.circle(frame, (x_B, y_B), 10, (255, 0, 0), -1)  # Blue for Track B
+
+            #     # Add text labels
+            #     cv2.putText(frame, f"Track {track_A}", (x_A + 15, y_A - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            #     cv2.putText(frame, f"Track {track_B}", (x_B + 15, y_B - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
+            # # Add label overlay (frame number & interaction name)
+            label = f"{column} - Frame {frame_num}"
+            cv2.putText(frame, label, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # Write frame to output video
+            out.write(frame)
+
+        out.release()  # Close writer
+    
+cap.release()
