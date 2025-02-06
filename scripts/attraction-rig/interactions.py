@@ -438,20 +438,140 @@ print("Cropped interaction videos saved successfully.")
 
 
 
-# %% NORMALISE COORDINATES TO MIDPOINT OF MINIMUM DISTANCE
+# %% NORMALISE COORDINATES TO MIDPOINT OF MINIMUM DISTANCE BETWEEN BODY COORDINATES (POTENTIALLY ISSUE ITS BODY COORDINATES)
 
+import pandas as pd
 
+# Load DataFrame
 df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
 
+# Define columns to normalize
+coordinate_columns = [
+    "Track_1 x_body", "Track_1 y_body", "Track_2 x_body", "Track_2 y_body",
+    "Track_1 x_tail", "Track_1 y_tail", "Track_2 x_tail", "Track_2 y_tail",
+    "Track_1 x_head", "Track_1 y_head", "Track_2 x_head", "Track_2 y_head"
+]
+
+# Iterate through each unique interaction
+for interaction in df["Interaction Number"].unique():
+    # Filter for the current interaction
+    interaction_data = df[df["Interaction Number"] == interaction]
+
+    # Find the row where Normalized Frame == 0 (should be the minimum distance frame)
+    min_distance_rows = interaction_data[interaction_data["Normalized Frame"] == 0]
+
+    min_distance_row = min_distance_rows.iloc[0]  # Get the first occurrence
+
+    # Compute midpoint using body coordinates
+    mid_x = (min_distance_row["Track_1 x_body"] + min_distance_row["Track_2 x_body"]) / 2
+    mid_y = (min_distance_row["Track_1 y_body"] + min_distance_row["Track_2 y_body"]) / 2
+
+    # Normalize all coordinates within this interaction
+    for col in coordinate_columns:
+        if "x_" in col:
+            df.loc[df["Interaction Number"] == interaction, col] -= mid_x
+        elif "y_" in col:
+            df.loc[df["Interaction Number"] == interaction, col] -= mid_y
+
+# Save the updated DataFrame
+df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions_normalized.csv', index=False)
 
 
-
-
-# %%
 
 # %% KEYPOINT VIDEOS POST NORMALISATION
 
+import pandas as pd
+import ast
+import cv2
+import numpy as np
+import os
 
+# Load the DataFrame
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions_normalized.csv')
+
+columns = [
+    "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
+    "Track_2 x_tail", "Track_2 y_tail", "Track_2 x_body", "Track_2 y_body", "Track_2 x_head", "Track_2 y_head"
+]
+df[columns] *= (1032 / 90)
+
+# Convert 'Interaction Pair' column from string to list
+df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)
+
+# Define output directory
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/normalised-keypoints'
+os.makedirs(output_dir, exist_ok=True)
+
+# Video settings
+fps = 30  
+crop_size = 1300  
+
+
+# Iterate through each unique interaction
+for interaction in df["Interaction Number"].unique():
+    interaction_data = df[df["Interaction Number"] == interaction]
+
+    output_filename = f"interaction_{interaction}_cropped.mp4"
+    output_filepath = os.path.join(output_dir, output_filename)
+
+    # Open video writer at final output size
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filepath, fourcc, fps, (crop_size, crop_size))
+
+    for _, row in interaction_data.iterrows():
+        frame_num = row["Frame"]
+        track_1, track_2 = row["Interaction Pair"]
+
+        # Get keypoint coordinates
+        keypoints = np.array([
+            [row["Track_1 x_head"], row["Track_1 y_head"]],
+            [row["Track_1 x_body"], row["Track_1 y_body"]],
+            [row["Track_1 x_tail"], row["Track_1 y_tail"]],
+            [row["Track_2 x_head"], row["Track_2 y_head"]],
+            [row["Track_2 x_body"], row["Track_2 y_body"]],
+            [row["Track_2 x_tail"], row["Track_2 y_tail"]],
+        ])
+
+        # Create a black background **AT THE CROP SIZE**
+        cropped_frame = np.zeros((crop_size, crop_size, 3), dtype=np.uint8)
+
+        keypoints_shifted = keypoints + (crop_size // 2)
+
+        # Ensure keypoints stay inside the cropped region
+        keypoints_shifted = np.clip(keypoints_shifted, 0, crop_size - 1)
+
+        # Extract new positions
+        coords_1 = {
+            "head": tuple(keypoints_shifted[0].astype(int)),
+            "body": tuple(keypoints_shifted[1].astype(int)),
+            "tail": tuple(keypoints_shifted[2].astype(int)),
+        }
+        coords_2 = {
+            "head": tuple(keypoints_shifted[3].astype(int)),
+            "body": tuple(keypoints_shifted[4].astype(int)),
+            "tail": tuple(keypoints_shifted[5].astype(int)),
+        }
+
+
+        # Draw keypoints directly onto the cropped frame (not full-size frame)
+        cv2.circle(cropped_frame, coords_1["head"], 5, (0, 255, 0), -1)  
+        cv2.circle(cropped_frame, coords_1["body"], 5, (0, 255, 0), -1)  
+        cv2.circle(cropped_frame, coords_1["tail"], 5, (0, 255, 0), -1) 
+
+        cv2.circle(cropped_frame, coords_2["head"], 5, (255, 0, 255), -1)  
+        cv2.circle(cropped_frame, coords_2["body"], 5, (255, 0, 255), -1)  
+        cv2.circle(cropped_frame, coords_2["tail"], 5, (255, 0, 255), -1) 
+
+        # Add Labels
+        cv2.putText(cropped_frame, f"Track {track_1}", (coords_1["body"][0] + 15, coords_1["body"][1] - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(cropped_frame, f"Track {track_2}", (coords_2["body"][0] + 15, coords_2["body"][1] - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
+
+        # Write frame to output video
+        out.write(cropped_frame)
+
+    out.release()  # Close writer
 
 
 
