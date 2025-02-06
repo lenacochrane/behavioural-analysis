@@ -1,3 +1,5 @@
+# %% IMPORTS
+
 import sys
 import os
 import pandas as pd
@@ -11,7 +13,7 @@ import ast
 import re
 
 
-## TRY AND GET THE CSV TO LOOK LIKE THE IDEAL DATAFRAME- UNMERGE DF 
+# %% CREATE INTERACTIONS CSV 
 
 df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/cleaned_tracks.feather')
 
@@ -69,15 +71,15 @@ for track_a, track_b in track_combinations:
                 'Distance': dist,
                 ## Track 1 coord
                 'Track_1 x_tail': a_tail[0, 0],
-                'Track_1 x_tail': a_tail[0, 1],
+                'Track_1 y_tail': a_tail[0, 1],
                 'Track_1 x_body': point_a[0, 0],
                 'Track_1 y_body': point_a[0, 1],
                 'Track_1 x_head': a_head[0, 0],
-                'Track_1 x_head': a_head[0, 1],
+                'Track_1 y_head': a_head[0, 1],
 
                 ## Track 2 coord
                 'Track_2 x_tail': b_tail[0, 0],
-                'Track_2 x_tail': b_tail[0, 1],
+                'Track_2 y_tail': b_tail[0, 1],
                 'Track_2 x_body': point_b[0, 0],
                 'Track_2 y_body': point_b[0, 1],
                 'Track_2 x_head': b_head[0, 0],
@@ -103,101 +105,356 @@ if not results_df.empty:
     results_df.to_csv(full_path, index=False)
 
 
+# %% IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES
 
-# ### VIDEO FILES
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
 
-# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-df-2/proximity_results.csv')
+min_distance_frames = df.groupby("Interaction Number")["Distance"].idxmin() #identify row with smallest dist
 
-# # pixel_columns = ['Track A X Body',  'Track A Y Body',  'Track B X Body',  'Track B Y Body']
-# # df[pixel_columns] = df[pixel_columns] * (1032/90)
+def normalize_frames(group):
+    min_frame = group.loc[min_distance_frames[group.name], "Frame"]  # Get the min distance frame
+    group["Normalized Frame"] = group["Frame"] - min_frame  # Subtract min frame from all frames in group
+    return group
 
-# columns = [col for col in df.columns if col.startswith("Interaction")]
+# Apply normalization within each group
+df = df.groupby("Interaction Number", group_keys=False).apply(normalize_frames)
 
+desired_order = ["Frame", "Interaction Number", "Normalized Frame"]
 
-# video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-df-2/2024-07-15_12-10-38_td2.mp4'
-# output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-df-2'
-# os.makedirs(output_dir, exist_ok=True)
+# Reorder the DataFrame
+df = df[desired_order + [col for col in df.columns if col not in desired_order]]
 
-
-# # Open the video file
-# cap = cv2.VideoCapture(video_path)
-# fps = cap.get(cv2.CAP_PROP_FPS)
-# frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-# frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-# for column in columns:
-
-#     match = re.search(r"(\d+),(\d+)", column)
-#     if not match:
-#         continue  # Skip if no match found
-
-#     track_A, track_B = match.groups()
-#     track_A_x = f"track_{track_A} x_body"
-#     track_A_y = f"track_{track_A} y_body"
-#     track_B_x = f"track_{track_B} x_body"
-#     track_B_y = f"track_{track_B} y_body"
-
-#     # Ensure track columns exist in DataFrame
-#     if track_A_x not in df.columns or track_A_y not in df.columns or track_B_x not in df.columns or track_B_y not in df.columns:
-#         print(f"Skipping {column} because track columns are missing.")
-#         continue
+filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2'
+filename =  'interactions.csv'
+df.to_csv(os.path.join(filepath, filename), index=False)
 
 
 
-#     true_frames = df.loc[df[column] == True]['Frame'].sort_values().reset_index(drop=True)
 
 
-    
-#     segments = []
-#     start_frame = true_frames.iloc[0]
-#     prev_frame = start_frame
+# %% KEYPOINT VIDEO OVERLAY FILES
 
-#     for current_frame in true_frames.iloc[1:]:
-#         if current_frame - prev_frame != 1:  # If gap detected, close the segment
-#             segments.append((start_frame, prev_frame))
-#             start_frame = current_frame
-#         prev_frame = current_frame
+import pandas as pd
+import ast
+import cv2
+import os
 
-#     segments.append((start_frame, prev_frame))  # Add last segment
+# Load the DataFrame
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
 
-#         # Process each segment
-#     for idx, (start, end) in enumerate(segments):
-#         output_filename = f"{column.replace(' ', '_')}_{start}-{end}.mp4"
-#         output_filepath = os.path.join(output_dir, output_filename)
+columns = [
+    "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
+    "Track_2 x_tail", "Track_2 y_tail", "Track_2 x_body", "Track_2 y_body", "Track_2 x_head", "Track_2 y_head"
+]
 
-#         # Open video writer
-#         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-#         out = cv2.VideoWriter(output_filepath, fourcc, fps, (frame_width, frame_height))
+df[columns] *= (1032 / 90)
 
-#         # Extract frames
-#         for frame_num in range(start, end + 1):
-#             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-#             ret, frame = cap.read()
+# Convert 'Interaction Pair' column from string to list
+df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)  # Convert "[0,1]" → [0,1]
 
-#             if not ret:
-#                 break
-            
-#             # Get track positions for this frame
-#             # frame_data = true_frames[true_frames['Frame'] == frame_num]
-#             # if not frame_data.empty:
-#             #     x_A, y_A = int(frame_data[track_A_x].values[0]), int(frame_data[track_A_y].values[0])
-#             #     x_B, y_B = int(frame_data[track_B_x].values[0]), int(frame_data[track_B_y].values[0])
+# # Extract Track A (Left) and Track B (Right)
+# df["Track A"] = df["Interaction Pair"].apply(lambda x: x[0])
+# df["Track B"] = df["Interaction Pair"].apply(lambda x: x[1])
 
-#             #     # Draw circles on video frame at track locations
-#             #     cv2.circle(frame, (x_A, y_A), 10, (0, 0, 255), -1)  # Red for Track A
-#             #     cv2.circle(frame, (x_B, y_B), 10, (255, 0, 0), -1)  # Blue for Track B
+# Define video paths
+video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/2024-07-12_13-18-27_td1.mp4'
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2'
+os.makedirs(output_dir, exist_ok=True)
 
-#             #     # Add text labels
-#             #     cv2.putText(frame, f"Track {track_A}", (x_A + 15, y_A - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-#             #     cv2.putText(frame, f"Track {track_B}", (x_B + 15, y_B - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+# Open the video file
+cap = cv2.VideoCapture(video_path)
+fps = cap.get(cv2.CAP_PROP_FPS)
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-#             # # Add label overlay (frame number & interaction name)
-#             label = f"{column} - Frame {frame_num}"
-#             cv2.putText(frame, label, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+# Iterate through each unique interaction
+for interaction in df["Interaction Number"].unique():
+    interaction_data = df[df["Interaction Number"] == interaction]  # Select frames for this interaction
 
-#             # Write frame to output video
-#             out.write(frame)
+    output_filename = f"interaction_{interaction}.mp4"
+    output_filepath = os.path.join(output_dir, output_filename)
 
-#         out.release()  # Close writer
-    
-# cap.release()
+    # Open video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filepath, fourcc, fps, (frame_width, frame_height))
+
+    for _, row in interaction_data.iterrows():
+        frame_num = row["Frame"]
+        track_1, track_2 = row["Interaction Pair"]  # Extract both track IDs dynamically
+
+        # Read the video frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Get coordinates for Track_1 and Track_2 (column names are fixed)
+        coords_1 = {
+            "head": (row["Track_1 x_head"], row["Track_1 y_head"]),
+            "body": (row["Track_1 x_body"], row["Track_1 y_body"]),
+            "tail": (row["Track_1 x_tail"], row["Track_1 y_tail"]),
+        }
+        coords_2 = {
+            "head": (row["Track_2 x_head"], row["Track_2 y_head"]),
+            "body": (row["Track_2 x_body"], row["Track_2 y_body"]),
+            "tail": (row["Track_2 x_tail"], row["Track_2 y_tail"]),
+        }
+
+        # Draw circles for Track_1
+        cv2.circle(frame, (int(coords_1["head"][0]), int(coords_1["head"][1])), 2, (0, 255, 0), -1)  
+        cv2.circle(frame, (int(coords_1["body"][0]), int(coords_1["body"][1])), 2, (0, 255, 0), -1)  
+        cv2.circle(frame, (int(coords_1["tail"][0]), int(coords_1["tail"][1])), 2, (0, 255, 0), -1) 
+
+        # Draw circles for Track_2
+        cv2.circle(frame, (int(coords_2["head"][0]), int(coords_2["head"][1])), 2, (255, 0, 255), -1)  
+        cv2.circle(frame, (int(coords_2["body"][0]), int(coords_2["body"][1])), 2, (255, 0, 255), -1)  
+        cv2.circle(frame, (int(coords_2["tail"][0]), int(coords_2["tail"][1])), 2, (255, 0, 255), -1) 
+
+        track_1_id, track_2_id = row["Interaction Pair"] 
+
+        # Add Labels
+        cv2.putText(frame, f"Track {track_1_id}", (int(coords_1["body"][0]) + 15, int(coords_1["body"][1]) - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(frame, f"Track {track_2_id}", (int(coords_2["body"][0]) + 15, int(coords_2["body"][1]) - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
+
+        # Write frame to output video
+        out.write(frame)
+
+    out.release()  # Close writer
+
+# Release the video file
+cap.release()
+print("Annotated interaction videos saved successfully.")
+
+
+# %% KEYPOINT VIDEOS B4 NORMALISATION
+
+import pandas as pd
+import ast
+import cv2
+import numpy as np
+import os
+
+# Load the DataFrame
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+
+columns = [
+    "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
+    "Track_2 x_tail", "Track_2 y_tail", "Track_2 x_body", "Track_2 y_body", "Track_2 x_head", "Track_2 y_head"
+]
+df[columns] *= (1032 / 90)
+
+# Convert 'Interaction Pair' column from string to list
+df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)
+
+# Define output directory
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/keypoints-only'
+os.makedirs(output_dir, exist_ok=True)
+
+# Video settings
+fps = 30  
+frame_width = 1400  # Using original resolution
+frame_height = 1400
+
+# Iterate through each unique interaction
+for interaction in df["Interaction Number"].unique():
+    interaction_data = df[df["Interaction Number"] == interaction]
+
+    output_filename = f"interaction_{interaction}_keypoints.mp4"
+    output_filepath = os.path.join(output_dir, output_filename)
+
+    # Open video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filepath, fourcc, fps, (frame_width, frame_height))
+
+    for _, row in interaction_data.iterrows():
+        frame_num = row["Frame"]
+        track_1, track_2 = row["Interaction Pair"]
+
+        # Create a black background
+        frame = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
+
+        # Get coordinates for Track_1 and Track_2
+        coords_1 = {
+            "head": (row["Track_1 x_head"], row["Track_1 y_head"]),
+            "body": (row["Track_1 x_body"], row["Track_1 y_body"]),
+            "tail": (row["Track_1 x_tail"], row["Track_1 y_tail"]),
+        }
+        coords_2 = {
+            "head": (row["Track_2 x_head"], row["Track_2 y_head"]),
+            "body": (row["Track_2 x_body"], row["Track_2 y_body"]),
+            "tail": (row["Track_2 x_tail"], row["Track_2 y_tail"]),
+        }
+
+        # Draw circles for Track_1 (Green)
+        cv2.circle(frame, (int(coords_1["head"][0]), int(coords_1["head"][1])), 5, (0, 255, 0), -1)  
+        cv2.circle(frame, (int(coords_1["body"][0]), int(coords_1["body"][1])), 5, (0, 255, 0), -1)  
+        cv2.circle(frame, (int(coords_1["tail"][0]), int(coords_1["tail"][1])), 5, (0, 255, 0), -1) 
+
+        # Draw circles for Track_2 (Magenta)
+        cv2.circle(frame, (int(coords_2["head"][0]), int(coords_2["head"][1])), 5, (255, 0, 255), -1)  
+        cv2.circle(frame, (int(coords_2["body"][0]), int(coords_2["body"][1])), 5, (255, 0, 255), -1)  
+        cv2.circle(frame, (int(coords_2["tail"][0]), int(coords_2["tail"][1])), 5, (255, 0, 255), -1) 
+
+        # Add Labels
+        cv2.putText(frame, f"Track {track_1}", (int(coords_1["body"][0]) + 15, int(coords_1["body"][1]) - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(frame, f"Track {track_2}", (int(coords_2["body"][0]) + 15, int(coords_2["body"][1]) - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
+
+        # Write frame to output video
+        out.write(frame)
+
+    out.release()  # Close writer
+
+print("Keypoint-only interaction videos saved successfully.")
+
+
+
+# %% CENTRED KEYPOINT VIDEOS B4 NORMALISATION
+
+
+import pandas as pd
+import ast
+import cv2
+import numpy as np
+import os
+
+# Load the DataFrame
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+
+columns = [
+    "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
+    "Track_2 x_tail", "Track_2 y_tail", "Track_2 x_body", "Track_2 y_body", "Track_2 x_head", "Track_2 y_head"
+]
+df[columns] *= (1032 / 90)
+
+# Convert 'Interaction Pair' column from string to list
+df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)
+
+# Define output directory
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/keypoints-only'
+os.makedirs(output_dir, exist_ok=True)
+
+# Video settings
+fps = 30  
+original_width = 1400  
+original_height = 1400
+crop_size = 500  
+buffer = 150  
+
+# Iterate through each unique interaction
+for interaction in df["Interaction Number"].unique():
+    interaction_data = df[df["Interaction Number"] == interaction]
+
+    output_filename = f"interaction_{interaction}_cropped.mp4"
+    output_filepath = os.path.join(output_dir, output_filename)
+
+    # Open video writer at final output size
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filepath, fourcc, fps, (crop_size, crop_size))
+
+    for _, row in interaction_data.iterrows():
+        frame_num = row["Frame"]
+        track_1, track_2 = row["Interaction Pair"]
+
+        # Get keypoint coordinates
+        keypoints = np.array([
+            [row["Track_1 x_head"], row["Track_1 y_head"]],
+            [row["Track_1 x_body"], row["Track_1 y_body"]],
+            [row["Track_1 x_tail"], row["Track_1 y_tail"]],
+            [row["Track_2 x_head"], row["Track_2 y_head"]],
+            [row["Track_2 x_body"], row["Track_2 y_body"]],
+            [row["Track_2 x_tail"], row["Track_2 y_tail"]],
+        ])
+
+        # Compute bounding box around interaction
+        x_min, y_min = np.min(keypoints, axis=0) - buffer
+        x_max, y_max = np.max(keypoints, axis=0) + buffer
+
+        # Ensure bounding box is within frame limits
+        x_min = max(0, x_min)
+        y_min = max(0, y_min)
+        x_max = min(original_width, x_max)
+        y_max = min(original_height, y_max)
+
+        # Compute the center of the interaction
+        x_center = (x_min + x_max) // 2
+        y_center = (y_min + y_max) // 2
+
+        # Define the cropping box to be centered
+        crop_x_min = max(0, x_center - crop_size // 2)
+        crop_x_max = min(original_width, crop_x_min + crop_size)
+        crop_y_min = max(0, y_center - crop_size // 2)
+        crop_y_max = min(original_height, crop_y_min + crop_size)
+
+        # Create a black background **AT THE CROP SIZE**
+        cropped_frame = np.zeros((crop_size, crop_size, 3), dtype=np.uint8)
+
+        # Shift keypoints so they fit within the crop
+        keypoints_shifted = keypoints - np.array([crop_x_min, crop_y_min])
+
+        # Ensure keypoints stay inside the cropped region
+        keypoints_shifted = np.clip(keypoints_shifted, 0, crop_size - 1)
+
+        # Extract new positions
+        coords_1 = {
+            "head": tuple(keypoints_shifted[0].astype(int)),
+            "body": tuple(keypoints_shifted[1].astype(int)),
+            "tail": tuple(keypoints_shifted[2].astype(int)),
+        }
+        coords_2 = {
+            "head": tuple(keypoints_shifted[3].astype(int)),
+            "body": tuple(keypoints_shifted[4].astype(int)),
+            "tail": tuple(keypoints_shifted[5].astype(int)),
+        }
+
+        # # Ensure keypoints are inside the frame
+        # if np.any(keypoints_shifted < 0) or np.any(keypoints_shifted >= crop_size):
+        #     print("⚠️ Warning: Some keypoints are out of bounds!")
+
+        # Draw keypoints directly onto the cropped frame (not full-size frame)
+        cv2.circle(cropped_frame, coords_1["head"], 5, (0, 255, 0), -1)  
+        cv2.circle(cropped_frame, coords_1["body"], 5, (0, 255, 0), -1)  
+        cv2.circle(cropped_frame, coords_1["tail"], 5, (0, 255, 0), -1) 
+
+        cv2.circle(cropped_frame, coords_2["head"], 5, (255, 0, 255), -1)  
+        cv2.circle(cropped_frame, coords_2["body"], 5, (255, 0, 255), -1)  
+        cv2.circle(cropped_frame, coords_2["tail"], 5, (255, 0, 255), -1) 
+
+        # Add Labels
+        cv2.putText(cropped_frame, f"Track {track_1}", (coords_1["body"][0] + 15, coords_1["body"][1] - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(cropped_frame, f"Track {track_2}", (coords_2["body"][0] + 15, coords_2["body"][1] - 15), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
+
+        # Write frame to output video
+        out.write(cropped_frame)
+
+    out.release()  # Close writer
+
+print("Cropped interaction videos saved successfully.")
+
+
+
+# %% NORMALISE COORDINATES TO MIDPOINT OF MINIMUM DISTANCE
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+
+
+
+
+
+# %%
+
+# %% KEYPOINT VIDEOS POST NORMALISATION
+
+
+
+
+
+
+
+# %%
