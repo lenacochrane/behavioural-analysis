@@ -12,10 +12,10 @@ import cv2
 import ast
 import re
 
+######################
+# %% IDETNFIY INTERACTIONS AND CREATE CSV 
 
-# %% CREATE INTERACTIONS CSV 
-
-df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/cleaned_tracks.feather')
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/2025-03-04_17-08-33_td2.tracks.feather')
 
 pixel_columns = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']
 df[pixel_columns] = df[pixel_columns] * (90/1032)
@@ -34,7 +34,6 @@ prev_frame = None  # Keep track of previous frame
 
 for track_a, track_b in track_combinations:
 
-    
 
     track_a_data = df[df['track_id'] == track_a]
     track_b_data = df[df['track_id'] == track_b]
@@ -85,7 +84,6 @@ for track_a, track_b in track_combinations:
                 'Track_2 x_head': b_head[0, 0],
                 'Track_2 y_head': b_head[0, 1]
                 
-
             })
 
             prev_frame = frame  # Increment interaction count
@@ -98,40 +96,192 @@ if not results_df.empty:
     results_df.set_index('Frame', inplace=True, drop=False)
 
 
-    filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2'
-    filename =  'interactions.csv'
+    filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap'
+    filename =  'interactions_group.csv'
     full_path = os.path.join(filepath, filename)
 
     results_df.to_csv(full_path, index=False)
 
 
+
+
+######################
+#%% DISTANCES BETWEEN ALL BODY PART COMBINATIONS 
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/interactions_group.csv')
+
+
+
+def euclidean_distance(df, x1, y1, x2, y2):
+    return np.sqrt((df[x1] - df[x2])**2 + (df[y1] - df[y2])**2)
+
+## need to compute per row the distances between body parts (interaction doesnt matter its per row)
+
+df['t1_tail-tail_t2'] = euclidean_distance(df, 'Track_1 x_tail', 'Track_1 y_tail', 'Track_2 x_tail', 'Track_2 y_tail')
+df['t1_tail-body_t2'] = euclidean_distance(df, 'Track_1 x_tail', 'Track_1 y_tail', 'Track_2 x_body', 'Track_2 y_body')
+df['t1_tail-head_t2'] = euclidean_distance(df, 'Track_1 x_tail', 'Track_1 y_tail', 'Track_2 x_head', 'Track_2 y_head')
+
+df['t1_body-tail_t2'] = euclidean_distance(df,'Track_1 x_body', 'Track_1 y_body', 'Track_2 x_tail', 'Track_2 y_tail')
+df['t1_body-body_t2'] = euclidean_distance(df, 'Track_1 x_body', 'Track_1 y_body', 'Track_2 x_body', 'Track_2 y_body')
+df['t1_body-head_t2'] = euclidean_distance(df, 'Track_1 x_body', 'Track_1 y_body', 'Track_2 x_head', 'Track_2 y_head')
+
+df['t1_head-tail_t2'] = euclidean_distance(df, 'Track_1 x_head', 'Track_1 y_head', 'Track_2 x_tail', 'Track_2 y_tail')
+df['t1_head-body_t2'] = euclidean_distance(df, 'Track_1 x_head', 'Track_1 y_head', 'Track_2 x_body', 'Track_2 y_body')
+df['t1_head-head_t2'] = euclidean_distance(df, 'Track_1 x_head', 'Track_1 y_head', 'Track_2 x_head', 'Track_2 y_head')
+
+
+filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap'
+filename =  'interactions_group.csv'
+full_path = os.path.join(filepath, filename)
+
+df.to_csv(full_path, index=False)
+
+
+#%% QUANTIFICATIONS OF INTERACTIONS FOR UMAP
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/interactions_group.csv')
+
+df['Frame'] = df['Frame'].astype(int)
+
+# SPEED
+
+def speed(group, x, y):
+
+    dx = group[x].diff()
+    dy = group[y].diff()
+    
+    distance = np.sqrt(dx**2 + dy**2)
+    dt = group['Frame'].diff()
+    
+    # Avoid division by zero
+    speed = distance / dt.replace(0, np.nan)
+    
+    return speed
+
+df['track1_speed'] = df.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_1 x_body', 'Track_1 y_body')).reset_index(level=0, drop=True)
+
+df['track2_speed'] = df.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_2 x_body', 'Track_2 y_body')).reset_index(level=0, drop=True)
+
+
+# ACCELERATION
+
+df['track1_acceleration'] = df.groupby('Interaction Number')['track1_speed'].diff() / df.groupby('Interaction Number')['Frame'].diff()
+df['track2_acceleration'] = df.groupby('Interaction Number')['track2_speed'].diff() / df.groupby('Interaction Number')['Frame'].diff()
+
+# TAIL-BODY-HEAD LENGTH
+
+
+import numpy as np
+
+df['track1_length'] = (
+    np.sqrt((df['Track_1 x_body'] - df['Track_1 x_tail'])**2 + 
+            (df['Track_1 y_body'] - df['Track_1 y_tail'])**2) 
+    +
+    np.sqrt((df['Track_1 x_head'] - df['Track_1 x_body'])**2 + 
+            (df['Track_1 y_head'] - df['Track_1 y_body'])**2)
+)
+
+
+df['track2_length'] = (
+    np.sqrt((df['Track_2 x_body'] - df['Track_2 x_tail'])**2 + 
+            (df['Track_2 y_body'] - df['Track_2 y_tail'])**2) 
+    +
+    np.sqrt((df['Track_2 x_head'] - df['Track_2 x_body'])**2 + 
+            (df['Track_2 y_head'] - df['Track_2 y_body'])**2)
+)
+
+# ANGLE BETWEEN TAIL-BODY AND BODY-HEAD PARTS
+
+# Tail-Body Vector for Track 1
+df['track1 TB_x'] =  df['Track_1 x_tail'] - df['Track_1 x_body'] 
+df['track1 TB_y'] =  df['Track_1 y_tail'] - df['Track_1 y_body'] 
+# Body-Head Vector for Track 1
+df['track1 BH_x'] = df['Track_1 x_head'] - df['Track_1 x_body']
+df['track1 BH_y'] = df['Track_1 y_head'] - df['Track_1 y_body']
+# Tail-Body Vector for Track 2
+df['track2 TB_x'] = df['Track_2 x_tail'] - df['Track_2 x_body'] 
+df['track2 TB_y'] = df['Track_2 y_tail'] - df['Track_2 y_body'] 
+# Body-Head Vector for Track 2
+df['track2 BH_x'] = df['Track_2 x_head'] - df['Track_2 x_body']
+df['track2 BH_y'] = df['Track_2 y_head'] - df['Track_2 y_body']
+
+
+def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
+    dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
+
+    magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2)
+    magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
+    
+    # Avoid division by zero
+    cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
+    
+    return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
+
+
+# Calculate angles for each track
+df['track1_angle'] = calculate_angle(df,'track1 TB_x', 'track1 TB_y', 'track1 BH_x', 'track1 BH_y')
+df['track2_angle'] = calculate_angle(df, 'track2 TB_x', 'track2 TB_y', 'track2 BH_x', 'track2 BH_y')
+
+
+filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/interactions_group.csv'
+full_path = os.path.join(filepath)
+
+df.to_csv(full_path, index=False)
+
+# ANGLE BETWEEN INTERACTION PARTNERS
+
+
+
+
+######################
 # %% IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/interactions_group.csv')
 
-min_distance_frames = df.groupby("Interaction Number")["Distance"].idxmin() #identify row with smallest dist
 
+# this
+
+# Define distance columns
+distance_columns = [
+    't1_tail-tail_t2', 't1_tail-body_t2', 't1_tail-head_t2',
+    't1_body-tail_t2', 't1_body-body_t2', 't1_body-head_t2',
+    't1_head-tail_t2', 't1_head-body_t2', 't1_head-head_t2'
+]
+
+df["min_distance"] = df[distance_columns].min(axis=1) # identifies smallest numerical value
+df["interaction_type"] = df[distance_columns].idxmin(axis=1) # returns column name holding smallest value
+df["interaction_type"] = df["interaction_type"].str.extract(r"t1_(.*-.*)_t2")
+
+
+min_distance_frames = df.groupby("Interaction Number")["min_distance"].idxmin()
+
+# Function to normalize frames based on min distance
 def normalize_frames(group):
     min_frame = group.loc[min_distance_frames[group.name], "Frame"]  # Get the min distance frame
-    group["Normalized Frame"] = group["Frame"] - min_frame  # Subtract min frame from all frames in group
+    group["Normalized Frame"] = group["Frame"] - min_frame  # Normalize all frames in the group
     return group
 
 # Apply normalization within each group
 df = df.groupby("Interaction Number", group_keys=False).apply(normalize_frames)
 
-desired_order = ["Frame", "Interaction Number", "Normalized Frame"]
 
-# Reorder the DataFrame
+desired_order = ["Frame", "Interaction Number", "Normalized Frame"]
 df = df[desired_order + [col for col in df.columns if col not in desired_order]]
 
-filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2'
-filename =  'interactions.csv'
+
+filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap'
+filename = 'interactions_group.csv'
 df.to_csv(os.path.join(filepath, filename), index=False)
 
+#df.to_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-3/interactions.feather')
 
 
 
 
+
+#####################
 # %% KEYPOINT VIDEO OVERLAY FILES
 
 import pandas as pd
@@ -140,7 +290,7 @@ import cv2
 import os
 
 # Load the DataFrame
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-3/interactions.csv')
 
 columns = [
     "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
@@ -157,8 +307,8 @@ df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)  # Conve
 # df["Track B"] = df["Interaction Pair"].apply(lambda x: x[1])
 
 # Define video paths
-video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/2024-07-12_13-18-27_td1.mp4'
-output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2'
+video_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-3/n9_agarose-2024-08-27_16-15-39_td3.mp4'
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-3'
 os.makedirs(output_dir, exist_ok=True)
 
 # Open the video file
@@ -228,6 +378,8 @@ cap.release()
 print("Annotated interaction videos saved successfully.")
 
 
+
+#####################
 # %% KEYPOINT VIDEOS B4 NORMALISATION
 
 import pandas as pd
@@ -311,7 +463,7 @@ for interaction in df["Interaction Number"].unique():
 print("Keypoint-only interaction videos saved successfully.")
 
 
-
+#####################
 # %% CENTRED KEYPOINT VIDEOS B4 NORMALISATION
 
 
@@ -434,50 +586,78 @@ for interaction in df["Interaction Number"].unique():
 
     out.release()  # Close writer
 
-print("Cropped interaction videos saved successfully.")
 
 
-
-# %% NORMALISE COORDINATES TO MIDPOINT OF MINIMUM DISTANCE BETWEEN BODY COORDINATES (POTENTIALLY ISSUE ITS BODY COORDINATES)
+#####################
+# %% NORMALISE COORDINATES TO MIDPOINT OF BODY COORDINATES AT THE CLOSEST DISTANCE  
 
 import pandas as pd
+import numpy as np
+import os
 
 # Load DataFrame
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap/interactions_group.csv')
 
-# Define columns to normalize
+distance_columns = [
+    't1_tail-tail_t2', 't1_tail-body_t2', 't1_tail-head_t2',
+    't1_body-tail_t2', 't1_body-body_t2', 't1_body-head_t2',
+    't1_head-tail_t2', 't1_head-body_t2', 't1_head-head_t2'
+]
+
+# Ensure all distance columns are numeric
+df[distance_columns] = df[distance_columns].apply(pd.to_numeric, errors='coerce')
+print(df[distance_columns].dtypes) # floats
+
+
 coordinate_columns = [
     "Track_1 x_body", "Track_1 y_body", "Track_2 x_body", "Track_2 y_body",
     "Track_1 x_tail", "Track_1 y_tail", "Track_2 x_tail", "Track_2 y_tail",
     "Track_1 x_head", "Track_1 y_head", "Track_2 x_head", "Track_2 y_head"
 ]
 
-# Iterate through each unique interaction
 for interaction in df["Interaction Number"].unique():
-    # Filter for the current interaction
     interaction_data = df[df["Interaction Number"] == interaction]
 
-    # Find the row where Normalized Frame == 0 (should be the minimum distance frame)
-    min_distance_rows = interaction_data[interaction_data["Normalized Frame"] == 0]
+    min_distance_row = interaction_data[interaction_data["Normalized Frame"] == 0]
 
-    min_distance_row = min_distance_rows.iloc[0]  # Get the first occurrence
+    if min_distance_row.empty:
+        continue  # Skip if no frame is marked as "0"
 
-    # Compute midpoint using body coordinates
-    mid_x = (min_distance_row["Track_1 x_body"] + min_distance_row["Track_2 x_body"]) / 2
-    mid_y = (min_distance_row["Track_1 y_body"] + min_distance_row["Track_2 y_body"]) / 2
+    min_distance_row = min_distance_row.iloc[0]  # Get the first occurrence #idk why more than 1 
 
-    # Normalize all coordinates within this interaction
+    # Step 2: Identify which body part pair had the smallest distance at this frame
+    closest_part = min_distance_row[distance_columns].astype(float).idxmin()  # Ensure numeric dtype
+    closest_part = str(closest_part)  # Force conversion to string
+
+    # Step 3: Extract the x and y coordinates for that closest part
+    part1, part2 = closest_part.split("-")  # Extract body part names from column name
+
+    # Convert body part names into corresponding coordinate column names
+    part1_x = f"Track_1 x_{part1.split('_')[-1]}"
+    part1_y = f"Track_1 y_{part1.split('_')[-1]}"
+    part2_x = f"Track_2 x_{part2.split('_')[0]}"
+    part2_y = f"Track_2 y_{part2.split('_')[0]}"
+
+    # Compute midpoint of the closest body part pair
+    mid_x = (min_distance_row[part1_x] + min_distance_row[part2_x]) / 2
+    mid_y = (min_distance_row[part1_y] + min_distance_row[part2_y]) / 2
+
+    # Step 4: Normalize all coordinates for this interaction
     for col in coordinate_columns:
         if "x_" in col:
             df.loc[df["Interaction Number"] == interaction, col] -= mid_x
         elif "y_" in col:
             df.loc[df["Interaction Number"] == interaction, col] -= mid_y
 
-# Save the updated DataFrame
-df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions_normalized.csv', index=False)
+# Save DataFrame
+filepath = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/test-umap'
+filename = 'interactions_group_normalised.csv'
+df.to_csv(os.path.join(filepath, filename), index=False)
 
 
 
+
+######################
 # %% KEYPOINT VIDEOS POST NORMALISATION
 
 import pandas as pd
@@ -574,6 +754,226 @@ for interaction in df["Interaction Number"].unique():
     out.release()  # Close writer
 
 
+
+#####################
+# %% UMAP 
+
+
+## confused different sizes is an issue apparanelt 
+### i shd do a pairplot first 
+
+
+import pandas as pd
+import numpy as np
+import umap
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+
+# 📌 Load interaction dataset
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-interaction-3/interactions.csv')
+
+
+feature_columns = [
+    "min_distance",  
+    "track1_speed", "track2_speed", 
+    "track1_acceleration", "track2_acceleration",
+    "track1_length", "track2_length",  
+    "track1_angle", "track2_angle"]
+
+
+# 📌 Function to crop interaction to [-15, +15] around Normalized Frame == 0
+def crop_interaction(group):
+    center_frame = group.loc[group["Normalized Frame"] == 0]  # Find the reference frame
+    if center_frame.empty:
+        return None  # Skip if there's no frame == 0
+
+    center_index = center_frame.index[0]  # Get index of the frame == 0
+    start_index = max(center_index - 15, group.index.min())  # Ensure within range
+    end_index = min(center_index + 15, group.index.max())  # Ensure within range
+    
+    return group.loc[start_index:end_index]  # Crop the dataframe
+
+# 📌 Apply cropping to all interactions
+df_cropped = df.groupby("Interaction Number", group_keys=False).apply(crop_interaction)
+print(df_cropped.head(100))
+
+# 📌 Pivot to turn cropped interactions into fixed-length vectors
+df_vectorized = df_cropped.pivot_table(index="Interaction Number", columns="Normalized Frame", values=feature_columns)
+
+print(df_vectorized.shape)  # Should be (num_interactions, num_features)
+print(df_vectorized.index.nunique())  # Should match number of interactions
+
+
+# 📌 Flatten multi-index column names (e.g., "track1_speed_-10" instead of multi-index)
+df_vectorized.columns = [f"{col[0]}_frame{col[1]}" for col in df_vectorized.columns]
+
+# 📌 Fill missing values if any interaction has fewer than 31 frames (unlikely)
+df_vectorized = df_vectorized.fillna(0)
+
+
+# 📌 Normalize the feature vectors (UMAP works best with normalized input)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df_vectorized)
+
+# 📌 Apply UMAP
+umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
+X_umap = umap_model.fit_transform(X_scaled)
+
+# 📌 Store UMAP results
+df_vectorized["UMAP_1"], df_vectorized["UMAP_2"] = X_umap[:, 0], X_umap[:, 1]
+
+# 📌 Plot UMAP projection
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x="UMAP_1", y="UMAP_2", data=df_vectorized, alpha=0.7)
+plt.title("UMAP Projection of Cropped Interactions")
+plt.xlabel("UMAP Dimension 1")
+plt.ylabel("UMAP Dimension 2")
+plt.show()
+
+
+
+
+
+
+# %%
+#####################################################
+
+
+import pandas as pd
+import numpy as np
+import umap
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+
+print("📥 Loading CSVs...")
+
+df_group = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/interactions.csv')
+df_group['condition'] = 'group'
+
+df_iso = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/interactions.csv')
+df_iso['condition'] = 'iso'
+
+df = pd.concat([df_iso, df_group], ignore_index=True)
+
+print("Checking Normalized Frame distribution in 'group' interactions:")
+print(df_group["Normalized Frame"].describe())
+print("\nHow many group interactions contain a frame close to 0 (+/-5)?")
+close_to_zero = df_group[df_group["Normalized Frame"].between(-5, 5)]
+print(close_to_zero["Interaction Number"].nunique(), "interactions found.")
+
+
+
+print("\n✅ CSVs loaded and combined.")
+print(df['condition'].value_counts())
+print("Total rows:", len(df))
+
+
+feature_columns = [
+    "min_distance",  
+    "track1_speed", "track2_speed", 
+    "track1_acceleration", "track2_acceleration",
+    "track1_length", "track2_length",  
+    "track1_angle", "track2_angle"
+]
+
+def crop_interaction(group):
+    # ✅ Find the frame closest to Normalized Frame == 0
+    if group.empty or "Normalized Frame" not in group.columns:
+        return None
+    
+    center_idx = (group["Normalized Frame"].abs()).idxmin()  # Get index of closest-to-zero
+    if pd.isna(center_idx):
+        return None
+
+    center_pos = group.index.get_loc(center_idx)  # position within group
+    start = max(center_pos - 15, 0)
+    end = min(center_pos + 15, len(group) - 1)
+
+    cropped = group.iloc[start:end + 1].copy()
+    cropped["condition"] = group["condition"].iloc[0]
+    return cropped
+
+
+print("\n✂️ Cropping interactions (using closest to frame 0)...")
+df_cropped = df.groupby(["condition", "Interaction Number"], group_keys=False).apply(crop_interaction)
+
+print("✅ Cropping complete.")
+print("Cropped rows:", len(df_cropped))
+print("Cropped conditions:")
+print(df_cropped["condition"].value_counts())
+
+
+
+
+# 🧱 Pivot to vectorized format
+print("\n🔁 Pivoting to vectorized format...")
+df_vectorized = df_cropped.pivot_table(
+    index="Interaction Number",
+    columns="Normalized Frame",
+    values=feature_columns
+)
+
+print("✅ Pivot complete.")
+print("Vectorized shape:", df_vectorized.shape)
+
+# 🧼 Flatten column names
+df_vectorized.columns = [f"{col[0]}_frame{col[1]}" for col in df_vectorized.columns]
+df_vectorized = df_vectorized.fillna(0)
+
+# 🔗 Merge condition back in using interaction number
+print("\n🔗 Merging condition into vectorized dataframe...")
+interaction_conditions = df_cropped.groupby("Interaction Number")["condition"].first().reset_index()
+df_vectorized = df_vectorized.reset_index().merge(
+    interaction_conditions,
+    on="Interaction Number",
+    how="left"
+).set_index("Interaction Number")
+
+print("✅ Condition merged.")
+print(df_vectorized['condition'].value_counts())
+
+
+# 📏 Standardize features
+print("\n📐 Scaling features...")
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df_vectorized.drop(columns="condition"))
+print("✅ Scaling done.")
+
+
+# 🧬 Run UMAP
+print("\n🌍 Running UMAP...")
+umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
+X_umap = umap_model.fit_transform(X_scaled)
+print("✅ UMAP done.")
+print("UMAP shape:", X_umap.shape)
+
+
+# 📎 Store UMAP in dataframe
+df_vectorized["UMAP_1"] = X_umap[:, 0]
+df_vectorized["UMAP_2"] = X_umap[:, 1]
+df_vectorized["condition"] = df_vectorized["condition"].astype(str)
+
+print("\n📊 Ready to plot. Final condition count:")
+print(df_vectorized["condition"].value_counts())
+
+# 🖼 Plot
+plt.figure(figsize=(8, 6))
+sns.scatterplot(
+    x="UMAP_1",
+    y="UMAP_2",
+    data=df_vectorized,
+    hue="condition",
+    palette="Set2",
+    alpha=0.8
+)
+plt.title("UMAP Projection of Interactions by Condition")
+plt.xlabel("UMAP Dimension 1")
+plt.ylabel("UMAP Dimension 2")
+plt.legend(title="Condition")
+plt.tight_layout()
+plt.show()
 
 
 
