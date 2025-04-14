@@ -474,19 +474,22 @@ import numpy as np
 import os
 
 # Load the DataFrame
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-n2/interactions.csv')
 
 columns = [
     "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
     "Track_2 x_tail", "Track_2 y_tail", "Track_2 x_body", "Track_2 y_body", "Track_2 x_head", "Track_2 y_head"
+
 ]
 df[columns] *= (1032 / 90)
 
 # Convert 'Interaction Pair' column from string to list
+
+
 df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)
 
 # Define output directory
-output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/keypoints-only'
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-n2'
 os.makedirs(output_dir, exist_ok=True)
 
 # Video settings
@@ -657,7 +660,7 @@ df.to_csv(os.path.join(filepath, filename), index=False)
 
 
 
-######################
+#######################################################
 # %% KEYPOINT VIDEOS POST NORMALISATION
 
 import pandas as pd
@@ -667,7 +670,7 @@ import numpy as np
 import os
 
 # Load the DataFrame
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/interactions_normalized.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-n2/interactions.csv')
 
 columns = [
     "Track_1 x_tail", "Track_1 y_tail", "Track_1 x_body", "Track_1 y_body", "Track_1 x_head", "Track_1 y_head",
@@ -679,7 +682,7 @@ df[columns] *= (1032 / 90)
 df["Interaction Pair"] = df["Interaction Pair"].apply(ast.literal_eval)
 
 # Define output directory
-output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/interaction-test-2/normalised-keypoints'
+output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-proximal-interactions/test-n2/'
 os.makedirs(output_dir, exist_ok=True)
 
 # Video settings
@@ -833,147 +836,6 @@ plt.show()
 
 
 
-
-
-
-# %%
-#####################################################
-
-
-import pandas as pd
-import numpy as np
-import umap
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.preprocessing import StandardScaler
-
-print("📥 Loading CSVs...")
-
-df_group = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/interactions.csv')
-df_group['condition'] = 'group'
-
-df_iso = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/interactions.csv')
-df_iso['condition'] = 'iso'
-
-df = pd.concat([df_iso, df_group], ignore_index=True)
-
-print("Checking Normalized Frame distribution in 'group' interactions:")
-print(df_group["Normalized Frame"].describe())
-print("\nHow many group interactions contain a frame close to 0 (+/-5)?")
-close_to_zero = df_group[df_group["Normalized Frame"].between(-5, 5)]
-print(close_to_zero["Interaction Number"].nunique(), "interactions found.")
-
-
-
-print("\n✅ CSVs loaded and combined.")
-print(df['condition'].value_counts())
-print("Total rows:", len(df))
-
-
-feature_columns = [
-    "min_distance",  
-    "track1_speed", "track2_speed", 
-    "track1_acceleration", "track2_acceleration",
-    "track1_length", "track2_length",  
-    "track1_angle", "track2_angle"
-]
-
-def crop_interaction(group):
-    # ✅ Find the frame closest to Normalized Frame == 0
-    if group.empty or "Normalized Frame" not in group.columns:
-        return None
-    
-    center_idx = (group["Normalized Frame"].abs()).idxmin()  # Get index of closest-to-zero
-    if pd.isna(center_idx):
-        return None
-
-    center_pos = group.index.get_loc(center_idx)  # position within group
-    start = max(center_pos - 15, 0)
-    end = min(center_pos + 15, len(group) - 1)
-
-    cropped = group.iloc[start:end + 1].copy()
-    cropped["condition"] = group["condition"].iloc[0]
-    return cropped
-
-
-print("\n✂️ Cropping interactions (using closest to frame 0)...")
-df_cropped = df.groupby(["condition", "Interaction Number"], group_keys=False).apply(crop_interaction)
-
-print("✅ Cropping complete.")
-print("Cropped rows:", len(df_cropped))
-print("Cropped conditions:")
-print(df_cropped["condition"].value_counts())
-
-
-
-
-# 🧱 Pivot to vectorized format
-print("\n🔁 Pivoting to vectorized format...")
-df_vectorized = df_cropped.pivot_table(
-    index="Interaction Number",
-    columns="Normalized Frame",
-    values=feature_columns
-)
-
-print("✅ Pivot complete.")
-print("Vectorized shape:", df_vectorized.shape)
-
-# 🧼 Flatten column names
-df_vectorized.columns = [f"{col[0]}_frame{col[1]}" for col in df_vectorized.columns]
-df_vectorized = df_vectorized.fillna(0)
-
-# 🔗 Merge condition back in using interaction number
-print("\n🔗 Merging condition into vectorized dataframe...")
-interaction_conditions = df_cropped.groupby("Interaction Number")["condition"].first().reset_index()
-df_vectorized = df_vectorized.reset_index().merge(
-    interaction_conditions,
-    on="Interaction Number",
-    how="left"
-).set_index("Interaction Number")
-
-print("✅ Condition merged.")
-print(df_vectorized['condition'].value_counts())
-
-
-# 📏 Standardize features
-print("\n📐 Scaling features...")
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(df_vectorized.drop(columns="condition"))
-print("✅ Scaling done.")
-
-
-# 🧬 Run UMAP
-print("\n🌍 Running UMAP...")
-umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
-X_umap = umap_model.fit_transform(X_scaled)
-print("✅ UMAP done.")
-print("UMAP shape:", X_umap.shape)
-
-
-# 📎 Store UMAP in dataframe
-df_vectorized["UMAP_1"] = X_umap[:, 0]
-df_vectorized["UMAP_2"] = X_umap[:, 1]
-df_vectorized["condition"] = df_vectorized["condition"].astype(str)
-
-print("\n📊 Ready to plot. Final condition count:")
-print(df_vectorized["condition"].value_counts())
-
-# 🖼 Plot
-plt.figure(figsize=(8, 6))
-sns.scatterplot(
-    x="UMAP_1",
-    y="UMAP_2",
-    data=df_vectorized,
-    hue="condition",
-    palette="Set2",
-    alpha=0.8
-)
-plt.title("UMAP Projection of Interactions by Condition")
-plt.xlabel("UMAP Dimension 1")
-plt.ylabel("UMAP Dimension 2")
-plt.legend(title="Condition")
-plt.tight_layout()
-plt.show()
 
 
 

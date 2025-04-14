@@ -59,7 +59,7 @@ def pseudo_population_euclidean_distance(directory):
         df.to_csv(output_file, index=False)
         return df
 
-pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+#pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 
 def time_average_msd(directory, taus):
 
@@ -125,7 +125,7 @@ def time_average_msd(directory, taus):
         return tau_msd_df
 
 
-time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model', list(range(1, 101, 1)))
+#time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated', list(range(1, 101, 1)))
 
 
 def ensemble_msd(directory):
@@ -169,7 +169,7 @@ def ensemble_msd(directory):
         return df 
 
 
-ensemble_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+#ensemble_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
 
 
 def speed(directory):
@@ -219,7 +219,7 @@ def speed(directory):
         return speed_values, speed_over_time
     
 
-# speed('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+#speed('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 
 
 def distance_from_centre(directory): 
@@ -243,15 +243,15 @@ def distance_from_centre(directory):
             x, y = row['x_body'], row['y_body']
             distance = np.sqrt((centre_x - x)**2 + (centre_y - y)**2)
             
-            data.append({'file': row['filename'], 'frame': row['frame'], 'distance_from_centre': distance})
+            data.append({'file': row['filename'], 'track': row['track_id'], 'frame': row['frame'], 'distance_from_centre': distance})
         
     df_distance_over_time = pd.DataFrame(data)
     df_distance_over_time.to_csv(os.path.join(directory, 'distance_over_time.csv'), index=False)
 
     return df_distance_over_time
 
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
-
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 def interaction_types(directory,threshold=1):
     data = []
@@ -315,7 +315,7 @@ def interaction_types(directory,threshold=1):
     melted_df.to_csv(os.path.join(directory, 'interaction_types.csv'), index=False)
 
 
-interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+#interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 
 
 def trajectory(directory):
@@ -397,7 +397,7 @@ def trajectory(directory):
 
 
 
-trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+#trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 # trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10-pseudo-population-model')
 
  

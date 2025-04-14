@@ -18,6 +18,7 @@ from shapely.wkt import loads as load_wkt
 import random
 from itertools import combinations
 from joblib import Parallel, delayed
+import re
 
 
 class HoleAnalysis:
@@ -83,7 +84,6 @@ class HoleAnalysis:
             print(f"Shortened file saved: {shortened_path}")
 
     # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 
-    # # 2) FILLS INCREMENTALLY- REMOVED 
 
     def post_processing(self):
         
@@ -259,7 +259,8 @@ class HoleAnalysis:
                     
             # Append the matched data to the matching_pairs list
             self.matching_pairs.append(matched_data)
-
+    
+    # METHOD CONVERSION:CONVERTS EACH FILE FROM PIXELS INTO MM
 
     def conversion(self):
 
@@ -334,31 +335,6 @@ class HoleAnalysis:
                 print(f"Conversion applied for {track_file} with conversion factor: {conversion_factor:.3f}")
 
 
-                
-
-                
-
-
-    # def match_files(self):
-
-    #     for track_file in self.track_files:
-   
-    #         track_prefix = '_'.join(track_file.split('_')[:3])
-    #         track_prefix = track_prefix.replace('.tracks.feather', '')
-
-    #         for i, coordinates_file in enumerate(self.coordinate_files):
-    #             hole_prefix = '_'.join(coordinates_file.split('_')[:3])
-    #             hole_prefix = hole_prefix.rsplit('.', 1)[0]  # Remove the extension
-
-    #             if hole_prefix == track_prefix:
-    #                 print(f"Match found: {track_file} with {coordinates_file}")
-    #                 self.matching_pairs.append((track_file, self.hole_boundaries[i]))
-
-        
-    #     print(f"Matching pairs: {self.matching_pairs}")
-    #     print(f"Track data keys: {self.track_data.keys()}")
-
-
     # METHOD HOLE_CENTROID: REPLACE THE HOLE BOUNDARY WITH A HOLE CENTROID COORDINATE 
 
     def hole_centroid(self):
@@ -422,7 +398,6 @@ class HoleAnalysis:
 
     def distance_from_centre(self): 
 
-        distances_from_centre = []
         data = []
 
         for match in self.matching_pairs:
@@ -440,18 +415,14 @@ class HoleAnalysis:
             for index, row in predictions.iterrows():
                 x, y = row['x_body'], row['y_body']
                 distance = np.sqrt((centre_x - x)**2 + (centre_y - y)**2)
-                distances_from_centre.append(distance)
-                data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
 
-        df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
-        df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
-        print(f"Distance from centre saved: {df_distances}")
+                data.append({'file': track_file, 'frame': row['frame'], 'track': row['track_id'], 'distance_from_centre': distance})
 
         df_distance_over_time = pd.DataFrame(data)
-        df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
+        df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_from_centre.csv'), index=False)
         print(f'Distance over time saved: {df_distance_over_time}')
 
-        return df_distances, df_distance_over_time
+        return df_distance_over_time
 
     # def distance_from_centre(self): 
 
@@ -490,9 +461,6 @@ class HoleAnalysis:
         for track_file in self.track_files:
             track_data = self.track_data[track_file]
 
-            # files should already have been joined and read above 
-
-            # iterate over each unique frame in the file and calculate the average distance between the larvae  
             for frame in track_data['frame'].unique():
 
                 unique_frame =  track_data[track_data['frame'] == frame]
@@ -534,9 +502,6 @@ class HoleAnalysis:
 
         distance_variance_df = distance_variance.reset_index()
         distance_variance_df.columns = ['file', 'variance']
-
-        # print(distance_variance_df.head())
-        # print("DataFrame before saving:\n", distance_variance_df.info())
 
         distance_variance_df.to_csv(os.path.join(self.directory, 'average_distance_variance.csv'), index=False)
         return distance_variance
@@ -633,7 +598,6 @@ class HoleAnalysis:
 
     def speed(self):
 
-        speed = []
         data = []
 
         for track_file in self.track_files:
@@ -654,26 +618,23 @@ class HoleAnalysis:
 
                     time = time2 - time1
 
+                    if time > 2:
+                        continue
+
                     speed_value = distance / time 
 
-                    speed.append(speed_value)
-
                     data.append({'time': time2, 'speed': speed_value, 'file': track_file})
-       
-        speed_values = pd.DataFrame(speed)
-        speed_values.to_csv(os.path.join(self.directory, 'speed_values.csv'), index=False)
-
+    
         speed_over_time = pd.DataFrame(data)
         speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
         speed_over_time.to_csv(os.path.join(self.directory, 'speed_over_time.csv'), index=False)
 
-        return speed_values, speed_over_time
+        return speed_over_time
 
-    # DEF ACCELERATION: 
+    # METHOD ACCELERATION: 
 
     def acceleration(self):
 
-        acceleration = []
         data = []
 
         for track_file in self.track_files:
@@ -696,25 +657,24 @@ class HoleAnalysis:
                     time2 = next_row['frame']
 
                     time = time2 - time1
+                    if time > 2:
+                        continue
 
                     speed_value = distance / time 
 
                     if previous_speed is not None and previous_time is not None:
                         acceleration_value = (speed_value - previous_speed) / time 
-                        acceleration.append(acceleration_value)
                         data.append({'time': time2, 'acceleration': acceleration_value, 'file': track_file})
 
                     previous_speed = speed_value
                     previous_time = time
-        
-        acceleration = pd.DataFrame(acceleration)
-        acceleration.to_csv(os.path.join(self.directory, 'acceleration.csv'), index=False)
+    
 
         acceleration_accross_time = pd.DataFrame(data)
         acceleration_accross_time = acceleration_accross_time.sort_values(by=['time'], ascending=True)
         acceleration_accross_time.to_csv(os.path.join(self.directory, 'acceleration_accross_time.csv'), index=False)
 
-        return acceleration, acceleration_accross_time
+        return acceleration_accross_time
     
     # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM THE CENTROID COORDINATES
     
@@ -954,43 +914,6 @@ class HoleAnalysis:
         angle_over_time.to_csv(os.path.join(self.directory, 'angle_over_time.csv'), index=False)
 
         return angle_values, angle_over_time   
-
-    # METHOD PROXIMITY: CALCULATES NUMBER OF 'PROXIMAL ENCOUNTERS' 1) AVERAGE  2) AVERAGE OVER TIME
-      # CURRENTLY ACCOUNTS ONLY FOR BODY-BODY CONTACTS 
-
-    def proximity(self, pixel=(50*(90/1032))):
-
-        count = []
-        data = []
-
-        for track_file in self.track_files:
-            track_data = self.track_data[track_file]
-            track_data.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/plain-petri/test2.csv')
-
-            # count for each frame 
-            for frame in track_data['frame'].unique():
-                unique_frame = track_data[track_data['frame'] == frame]
-
-                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy() # cdist requires 2D NumPy array as input
-
-                euclidean_distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-
-                proximity = (euclidean_distance < pixel) & (euclidean_distance > 0) # above 0 so track1 != track1 proximity 
-
-                proximal_counters = np.sum(proximity)
-
-                count.append(proximal_counters)
-                data.append({'time': frame, 'proximity count': proximal_counters, 'file': track_file})
-
-        
-        proximal_counters = pd.DataFrame(count)
-        proximal_counters.to_csv(os.path.join(self.directory, 'proximal_counters.csv'), index=False)
-
-        proximity_over_time = pd.DataFrame(data)
-        proximity_over_time = proximity_over_time.sort_values(by=['time'], ascending=True)
-        proximity_over_time.to_csv(os.path.join(self.directory, 'proximity_over_time.csv'), index=False)
-
-        return proximal_counters, proximity_over_time
     
     # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE + IF LARVAE OUTSIDE HOLE IS IT MOVING (IDENTIFYING THOSE CLOSE AND BURROWING BENEATH SURFACE)
     # ALSO CHANGED IT SUCH THAT IT KEEPS THE ORIGINAL DATAFRAME SO I CAN DO A VIDEO CHECK 
@@ -1269,108 +1192,173 @@ class HoleAnalysis:
     
     
     # METHOD NUMBER_DIGGING: THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
-    # MODIFYING 2024-10-28
 
-    def number_digging(self, total_larvae):
+    # def number_digging(self, total_larvae):
 
-        dataframe_list = [] 
+    #     dataframe_list = [] 
+
+    #     for match in self.matching_pairs:
+    #         track_file = match['track_file']
+    #         df = self.track_data[track_file]
+
+    #         perimeter = match.get('perimeter_polygon')
+
+    #         df = df.sort_values(by=['track_id', 'frame'])
+
+    #         # DISTANCE MOVED 
+
+    #         # Smooth the positions with a rolling window to reduce noise
+    #         df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
+    #         df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+
+    #         # Calculate the difference between consecutive rows for body coordinates
+    #         df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
+    #         df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
+
+    #         # Calculate the Euclidean distance 
+    #         df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
+
+    #         # Create a boolean mask where x,y movement is greater than 0.1 MM 
+    #         df['is_moving'] = df['distance'] > 0.1
+
+    #         # CUMALTIVE DISTANCE 
+
+    #         df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
+
+    #         df['cumulative_displacement_rate'] = df.groupby('track_id', group_keys=False)['cumulative_displacement', ].apply(lambda x: x.diff(5) / 5).fillna(0) # unsure what groupkeys is but it asked me to put it in cause kept getting lengthy like use this for future
+            
+    #         # STANDARD DEVIATION OF BODY X, Y COORDINATES 
+
+    #         df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+    #         df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+    #         df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
+
+    #         # FINAL MOVEMENT - THEY ARE BOTH QUITE GOOD TBF 
+
+    #         # df['final_movement'] = (df['is_moving']) | ((df['overall_std'] > 0.09) & (df['cumulative_displacement_rate'] > 0.1))
+    #         df['final_movement'] = (df['cumulative_displacement_rate'] > 0.05) | ((df['overall_std'] > 0.09) & (df['is_moving']))
+
+    #         # SMOOTH ROLLING WINDOW FOR FINAL MOVEMENT 
+
+    #         # Apply a rolling window with majority voting to smooth out the 'final_movement' column
+    #         window_size = 20 # Adjust the window size as needed
+    #         df['smoothed_final_movement'] = (df['final_movement']
+    #                                          .rolling(window=window_size, center=True) # centre rolling window
+    #                                          .apply(lambda x: x.sum() >= (window_size / 2)) # Majority 
+    #                                          .fillna(0) # start and end fill with 0 = False
+    #                                          .astype(bool)) # all returned True/False
+
+
+    #         # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-number-digging/withrollingwindow.csv')
+
+    #         df['count'] = total_larvae
+
+
+    #         if perimeter: # ACOUNTS FOR NO PERIMETER FILES 
+    #             # IF PERIMETER FILES BAD WANT TO IGNORE- ONLY DETECT GOOD ONES 
+    #             minx, miny, maxx, maxy = perimeter.bounds
+    #             diameter = maxx - minx  
+        
+    #             if diameter > 89:
+    #                 print(track_file)
+    #                 df = self.detect_larvae_leaving(df, perimeter, total_larvae)
+
+
+    #         # Now count the moving frames per frame_idx
+    #         moving_counts = df.groupby('frame')['smoothed_final_movement'].sum().reset_index()
+    #         # Rename the column for clarity
+    #         moving_counts.columns = ['frame', 'moving_count']
+
+    #         full_frame_counts = df[['frame', 'count']].drop_duplicates().merge(moving_counts, on='frame', how='left')
+    #         full_frame_counts['moving_count'] = full_frame_counts['moving_count'].fillna(0).astype(int)
+
+    #         full_frame_counts.loc[full_frame_counts['moving_count'] > total_larvae, 'moving_count'] = total_larvae
+
+    #         full_frame_counts = full_frame_counts.sort_values(by='frame', ascending=True)
+
+    #         full_frame_counts['number_digging'] = full_frame_counts['count'] - full_frame_counts['moving_count']
+
+    #         full_frame_counts.loc[full_frame_counts['number_digging'] < 0, 'number_digging'] = full_frame_counts['count']
+
+    #         full_frame_counts['file'] = track_file
+    #         print(track_file)
+    #         full_frame_counts['normalised_digging'] = (full_frame_counts['number_digging'] / total_larvae) * 100
+
+
+    #         dataframe_list.append(full_frame_counts)
+        
+    #     number_digging = pd.concat(dataframe_list, ignore_index=True)
+    #     number_digging = number_digging.sort_values(by=['frame'], ascending=True)
+    #     number_digging.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
+
+    #     return number_digging
+    
+
+
+    # METHOD NUMBER_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE
+
+    def digging(self, df):
+        # Smooth the positions
+        df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
+        df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+
+        # Differences
+        df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
+        df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
+
+        # Distance and moving status
+        df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
+        df['is_moving'] = df['distance'] > 0.1
+
+        # Cumulative and std
+        df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
+        df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(5) / 5).fillna(0)
+
+        df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+        df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+        df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
+
+        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.05) | ((df['overall_std'] > 0.09) & (df['is_moving']))
+        
+        ## smoothed final movement
+        window_size = 20
+        df['digging_status'] = (~df['final_movement']).rolling(window=window_size, center=True).apply(lambda x: x.sum() >= (window_size / 2)).fillna(0).astype(bool)
+
+        return df
+
+    # METHOD TOTAL_DIGGING: THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING 
+
+    def total_digging(self, total_larvae=None, cleaned=False):
+
+        data = []
 
         for match in self.matching_pairs:
             track_file = match['track_file']
             df = self.track_data[track_file]
+            df = self.digging(df)  # apply dynamic method
 
-            perimeter = match.get('perimeter_polygon')
+            if cleaned:
+                df['count'] = df.groupby('frame')['track_id'].transform('nunique')
+            else:
+                df['count'] = total_larvae
 
-            df = df.sort_values(by=['track_id', 'frame'])
+            summary = df.groupby('frame').agg(
+                number_digging=('digging_status', 'sum'),
+                count=('count', 'first')  # same for all rows in group
+            ).reset_index()
 
-            # DISTANCE MOVED 
+            summary['moving'] = summary['count'] - summary['number_digging']
 
-            # Smooth the positions with a rolling window to reduce noise
-            df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
-            df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
-
-            # Calculate the difference between consecutive rows for body coordinates
-            df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
-            df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
-
-            # Calculate the Euclidean distance 
-            df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
-
-            # Create a boolean mask where x,y movement is greater than 0.1 MM 
-            df['is_moving'] = df['distance'] > 0.1
-
-            # CUMALTIVE DISTANCE 
-
-            df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
-
-            df['cumulative_displacement_rate'] = df.groupby('track_id', group_keys=False)['cumulative_displacement', ].apply(lambda x: x.diff(5) / 5).fillna(0) # unsure what groupkeys is but it asked me to put it in cause kept getting lengthy like use this for future
-            
-            # STANDARD DEVIATION OF BODY X, Y COORDINATES 
-
-            df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
-            df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
-            df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
-
-            # FINAL MOVEMENT - THEY ARE BOTH QUITE GOOD TBF 
-
-            # df['final_movement'] = (df['is_moving']) | ((df['overall_std'] > 0.09) & (df['cumulative_displacement_rate'] > 0.1))
-            df['final_movement'] = (df['cumulative_displacement_rate'] > 0.05) | ((df['overall_std'] > 0.09) & (df['is_moving']))
-
-            # SMOOTH ROLLING WINDOW FOR FINAL MOVEMENT 
-
-            # Apply a rolling window with majority voting to smooth out the 'final_movement' column
-            window_size = 20 # Adjust the window size as needed
-            df['smoothed_final_movement'] = (df['final_movement']
-                                             .rolling(window=window_size, center=True) # centre rolling window
-                                             .apply(lambda x: x.sum() >= (window_size / 2)) # Majority 
-                                             .fillna(0) # start and end fill with 0 = False
-                                             .astype(bool)) # all returned True/False
+            summary['normalised_digging'] = (summary['number_digging'] / summary['count']) * 100
+            summary['file'] = track_file
+            data.append(summary)
 
 
-            # df.to_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/test-number-digging/withrollingwindow.csv')
+        result = pd.concat(data, ignore_index=True)
+        result = result.sort_values(by='frame', ascending=True)
+        result.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
+        return result
 
-            df['count'] = total_larvae
-
-
-            if perimeter: # ACOUNTS FOR NO PERIMETER FILES 
-                # IF PERIMETER FILES BAD WANT TO IGNORE- ONLY DETECT GOOD ONES 
-                minx, miny, maxx, maxy = perimeter.bounds
-                diameter = maxx - minx  
-        
-                if diameter > 89:
-                    print(track_file)
-                    df = self.detect_larvae_leaving(df, perimeter, total_larvae)
-
-
-            # Now count the moving frames per frame_idx
-            moving_counts = df.groupby('frame')['smoothed_final_movement'].sum().reset_index()
-            # Rename the column for clarity
-            moving_counts.columns = ['frame', 'moving_count']
-
-            full_frame_counts = df[['frame', 'count']].drop_duplicates().merge(moving_counts, on='frame', how='left')
-            full_frame_counts['moving_count'] = full_frame_counts['moving_count'].fillna(0).astype(int)
-
-            full_frame_counts.loc[full_frame_counts['moving_count'] > total_larvae, 'moving_count'] = total_larvae
-
-            full_frame_counts = full_frame_counts.sort_values(by='frame', ascending=True)
-
-            full_frame_counts['number_digging'] = full_frame_counts['count'] - full_frame_counts['moving_count']
-
-            full_frame_counts.loc[full_frame_counts['number_digging'] < 0, 'number_digging'] = full_frame_counts['count']
-
-            full_frame_counts['file'] = track_file
-            print(track_file)
-            full_frame_counts['normalised_digging'] = (full_frame_counts['number_digging'] / total_larvae) * 100
-
-
-            dataframe_list.append(full_frame_counts)
-        
-        number_digging = pd.concat(dataframe_list, ignore_index=True)
-        number_digging = number_digging.sort_values(by=['frame'], ascending=True)
-        number_digging.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
-
-        return number_digging
-    
 
     def detect_larvae_leaving(self, df, perimeter, total_larvae):
         
@@ -1547,6 +1535,7 @@ class HoleAnalysis:
         summary_path = os.path.join(self.directory, "summary.csv")
         summary_df.to_csv(summary_path, index=False)
 
+    # METHOD PSEUDO_POPULATION_MODEL:
 
     def pseudo_population_model(self, number_of_iterations, number_of_animals):
 
@@ -1876,57 +1865,139 @@ class HoleAnalysis:
         #### IDENTIFY INTERACTIONS
 
         dfs = []
-        proximity_threshold = 20  # 10mm
+
+        # proximity_threshold = 20  # 10mm
+
+        # def process_track_pair(track_a, track_b, df, track_file):
+        #     results = []
+        #     track_a_data = df[df['track_id'] == track_a]
+        #     track_b_data = df[df['track_id'] == track_b]
+
+        #     common_frames = set(track_a_data['frame']).intersection(track_b_data['frame'])
+        #     common_frames = sorted(common_frames)
+
+        #     prev_frame = None
+        #     interaction_id_local = 0
+
+        #     for frame in common_frames:
+        #         point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+        #         point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+        #         a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+        #         b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+
+        #         a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+        #         b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+
+        #         dist = np.linalg.norm(point_a - point_b)
+        #         if dist < proximity_threshold:
+        #             if prev_frame is None or frame != prev_frame + 1:
+        #                 interaction_id_local += 1
+
+        #             results.append({
+        #                 'Frame': frame,
+        #                 'Local Interaction ID': interaction_id_local,
+        #                 'file': track_file,
+        #                 'Interaction Pair': (track_a, track_b),  # hashable + order-independent
+        #                 'Distance': dist,
+        #                 'Track_1 x_tail': a_tail[0, 0],
+        #                 'Track_1 y_tail': a_tail[0, 1],
+        #                 'Track_1 x_body': point_a[0, 0],
+        #                 'Track_1 y_body': point_a[0, 1],
+        #                 'Track_1 x_head': a_head[0, 0],
+        #                 'Track_1 y_head': a_head[0, 1],
+        #                 'Track_2 x_tail': b_tail[0, 0],
+        #                 'Track_2 y_tail': b_tail[0, 1],
+        #                 'Track_2 x_body': point_b[0, 0],
+        #                 'Track_2 y_body': point_b[0, 1],
+        #                 'Track_2 x_head': b_head[0, 0],
+        #                 'Track_2 y_head': b_head[0, 1]
+        #             })
+
+        #             prev_frame = frame
+
+        #     return results
+
+        proximity_threshold = 10  # 10mm
+        min_interaction_frames = 5
+        frame_buffer = 20  # Extend interaction by this many frames before and after
 
         def process_track_pair(track_a, track_b, df, track_file):
             results = []
             track_a_data = df[df['track_id'] == track_a]
             track_b_data = df[df['track_id'] == track_b]
 
-            common_frames = set(track_a_data['frame']).intersection(track_b_data['frame'])
-            common_frames = sorted(common_frames)
-
-            prev_frame = None
+            common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
             interaction_id_local = 0
+            i = 0
 
-            for frame in common_frames:
-                point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+            while i < len(common_frames):
+                current_interaction = []
 
-                a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
-                b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+                # Try to detect an interaction sequence
+                while i < len(common_frames):
+                    frame = common_frames[i]
 
-                a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
-                b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+                    point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                    point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
 
-                dist = np.linalg.norm(point_a - point_b)
-                if dist < proximity_threshold:
-                    if prev_frame is None or frame != prev_frame + 1:
-                        interaction_id_local += 1
+                    dist = np.linalg.norm(point_a - point_b)
+                    if dist < proximity_threshold:
+                        current_interaction.append(frame)
+                        i += 1
+                    elif current_interaction:
+                        break
+                    else:
+                        i += 1
 
-                    results.append({
-                        'Frame': frame,
-                        'Local Interaction ID': interaction_id_local,
-                        'file': track_file,
-                        'Interaction Pair': (track_a, track_b),  # hashable + order-independent
-                        'Distance': dist,
-                        'Track_1 x_tail': a_tail[0, 0],
-                        'Track_1 y_tail': a_tail[0, 1],
-                        'Track_1 x_body': point_a[0, 0],
-                        'Track_1 y_body': point_a[0, 1],
-                        'Track_1 x_head': a_head[0, 0],
-                        'Track_1 y_head': a_head[0, 1],
-                        'Track_2 x_tail': b_tail[0, 0],
-                        'Track_2 y_tail': b_tail[0, 1],
-                        'Track_2 x_body': point_b[0, 0],
-                        'Track_2 y_body': point_b[0, 1],
-                        'Track_2 x_head': b_head[0, 0],
-                        'Track_2 y_head': b_head[0, 1]
-                    })
+                # Only process if interaction is long enough
+                if len(current_interaction) >= min_interaction_frames:
+                    # Add buffer before and after
+                    start_idx = max(0, common_frames.index(current_interaction[0]) - frame_buffer)
+                    end_idx = min(len(common_frames), common_frames.index(current_interaction[-1]) + frame_buffer + 1)
+                    interaction_frames = common_frames[start_idx:end_idx]
 
-                    prev_frame = frame
+                    interaction_id_local += 1
+
+                    for frame in interaction_frames:
+                        point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                        point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+                        a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+                        b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
+
+                        a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+                        b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
+
+                        dist = np.linalg.norm(point_a - point_b)
+
+                        results.append({
+                            'Frame': frame,
+                            'Local Interaction ID': interaction_id_local,
+                            'file': track_file,
+                            'Interaction Pair': (track_a, track_b),
+                            'Distance': dist,
+                            'Track_1 x_tail': a_tail[0, 0],
+                            'Track_1 y_tail': a_tail[0, 1],
+                            'Track_1 x_body': point_a[0, 0],
+                            'Track_1 y_body': point_a[0, 1],
+                            'Track_1 x_head': a_head[0, 0],
+                            'Track_1 y_head': a_head[0, 1],
+                            'Track_2 x_tail': b_tail[0, 0],
+                            'Track_2 y_tail': b_tail[0, 1],
+                            'Track_2 x_body': point_b[0, 0],
+                            'Track_2 y_body': point_b[0, 1],
+                            'Track_2 x_head': b_head[0, 0],
+                            'Track_2 y_head': b_head[0, 1]
+                        })
+
+                    # Skip ahead to the frame after the current interaction to avoid overlap
+                    i = end_idx
+                else:
+                    i += 1
 
             return results
+
 
         for match in self.matching_pairs:
             track_file = match['track_file']
@@ -2055,11 +2126,7 @@ class HoleAnalysis:
         interaction_data['track2_angle'] = calculate_angle(interaction_data, 'track2 TB_x', 'track2 TB_y', 'track2 BH_x', 'track2 BH_y')
 
 
-        #### ANGLE OF APPROACH BETWEEN INTERACTION PARTNERS
-
-
-
-        #### IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES
+        #### == DEFINE CLOSEST BODY PARTS BETWEEN TRACKS == ####
 
         # Define distance columns
         distance_columns = [
@@ -2071,7 +2138,78 @@ class HoleAnalysis:
         interaction_data["min_distance"] = interaction_data[distance_columns].min(axis=1) # identifies smallest numerical value
         interaction_data["interaction_type"] = interaction_data[distance_columns].idxmin(axis=1) # returns column name holding smallest value
         interaction_data["interaction_type"] = interaction_data["interaction_type"].str.extract(r"t1_(.*-.*)_t2")
+        
+        #### == ANGLE OF APPROACH BETWEEN INTERACTION PARTNERS == ####
+            
 
+        # Mapping from interaction_type (e.g., 'body-head') to coordinate columns
+        part_mapping = {
+            'tail-tail': ('x_tail', 'y_tail'),
+            'tail-body': ('x_body', 'y_body'),
+            'tail-head': ('x_head', 'y_head'),
+            'body-tail': ('x_tail', 'y_tail'),
+            'body-body': ('x_body', 'y_body'),
+            'body-head': ('x_head', 'y_head'),
+            'head-tail': ('x_tail', 'y_tail'),
+            'head-body': ('x_body', 'y_body'),
+            'head-head': ('x_head', 'y_head'),
+        }
+
+        # Function to compute angle between two vectors
+        def angle_between_vectors(x1, y1, x2, y2):
+            dot = x1 * x2 + y1 * y2
+            mag1 = np.hypot(x1, y1)
+            mag2 = np.hypot(x2, y2)
+            cos_theta = np.clip(dot / (mag1 * mag2), -1.0, 1.0)
+            return np.degrees(np.arccos(cos_theta))
+
+        def get_track1_approach_angle(row):
+            try:
+                x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
+                if x_part is None:
+                    return np.nan
+
+                # Make both vectors start at the head
+                hx = row['Track_1 x_body'] - row['Track_1 x_head']
+                hy = row['Track_1 y_body'] - row['Track_1 y_head']
+
+                ax = row[f'Track_2 {x_part}'] - row['Track_1 x_head']
+                ay = row[f'Track_2 {y_part}'] - row['Track_1 y_head']
+
+                return angle_between_vectors(hx, hy, ax, ay)
+            except Exception as e:
+                print(f"❌ Track 1 error at row {row.name}: {e}")
+                return np.nan
+
+
+        def get_track2_approach_angle(row):
+            try:
+                x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
+                if x_part is None:
+                    return np.nan
+
+                # heading = head - body
+                hx = row['Track_2 x_body'] - row['Track_2 x_head']
+                hy = row['Track_2 y_body'] - row['Track_2 y_head']
+
+                # approach = other part - head
+                ax = row[f'Track_1 {x_part}'] - row['Track_2 x_head']
+                ay = row[f'Track_1 {y_part}'] - row['Track_2 y_head']
+
+                return angle_between_vectors(hx, hy, ax, ay)
+            except Exception as e:
+                print(f"❌ Track 2 error at row {row.name}: {e}")
+                return np.nan
+
+
+        # Apply to DataFrame
+        interaction_data['track1_approach_angle'] = interaction_data.apply(get_track1_approach_angle, axis=1)
+        interaction_data['track2_approach_angle'] = interaction_data.apply(get_track2_approach_angle, axis=1)
+
+
+
+
+         #### == IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES == ####
 
         min_distance_frames = interaction_data.groupby("Interaction Number")["min_distance"].idxmin()
 
@@ -2084,11 +2222,71 @@ class HoleAnalysis:
         # Apply normalization within each group
         interaction_data = interaction_data.groupby("Interaction Number", group_keys=False).apply(normalize_frames)
 
+        #### == NORMALISE TRACK COORDINATES TO MIDPOINT OF BODY COORDINATES AT THE CLOSEST DISTANCE == ####
+
+        # Normalize coordinates based on closest pair at frame 0
+
+        distance_columns = [
+            't1_tail-tail_t2', 't1_tail-body_t2', 't1_tail-head_t2',
+            't1_body-tail_t2', 't1_body-body_t2', 't1_body-head_t2',
+            't1_head-tail_t2', 't1_head-body_t2', 't1_head-head_t2'
+        ]
+
+        coordinate_columns = [
+            "Track_1 x_body", "Track_1 y_body", "Track_2 x_body", "Track_2 y_body",
+            "Track_1 x_tail", "Track_1 y_tail", "Track_2 x_tail", "Track_2 y_tail",
+            "Track_1 x_head", "Track_1 y_head", "Track_2 x_head", "Track_2 y_head"
+        ]
+
+        for interaction in interaction_data["Interaction Number"].unique():
+            interaction_subset = interaction_data[interaction_data["Interaction Number"] == interaction]
+            min_frame_row = interaction_subset[interaction_subset["Normalized Frame"] == 0]
+
+            if min_frame_row.empty:
+                continue
+
+            row = min_frame_row.iloc[0]  # take first in case there are multiple
+
+            closest_part = row[distance_columns].astype(float).idxmin()
+
+
+            match = re.match(r't1_(\w+)-(\w+)_t2', closest_part)
+            if not match:
+                continue  # skip if pattern doesn't match (safety check)
+
+            part1, part2 = match.groups()  # e.g., 'tail', 'head'
+
+            part1_x = f"Track_1 x_{part1}"
+            part1_y = f"Track_1 y_{part1}"
+            part2_x = f"Track_2 x_{part2}"
+            part2_y = f"Track_2 y_{part2}"
+
+            mid_x = (row[part1_x] + row[part2_x]) / 2
+            mid_y = (row[part1_y] + row[part2_y]) / 2
+
+            # Subtract midpoint from all coordinate columns for this interaction
+            for col in coordinate_columns:
+                if "x_" in col:
+                    interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_x
+                elif "y_" in col:
+                    interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_y
+
+
 
         desired_order = ['file', "Frame", "Interaction Number", "Normalized Frame"]
         interaction_data = interaction_data[desired_order + [col for col in interaction_data.columns if col not in desired_order]]
 
+        print("Number of interaction rows:", interaction_data.shape[0])
+        print("Interaction DataFrame head:\n", interaction_data.head())
+
+
         interaction_data.to_csv(os.path.join(self.directory, 'interactions.csv'), index=False)
+
+
+
+
+
+
 
     
     #MAKE VIDEOS FROM INTERACTIONS OK 
