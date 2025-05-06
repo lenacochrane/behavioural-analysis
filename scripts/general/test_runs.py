@@ -68,8 +68,43 @@ from shapely import wkt
 #         print("-" * 60)
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated/number_digging.csv')
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed/number_digging.csv')
-sns.lineplot(data=df, x='frame', y='number_digging', label='si')
-sns.lineplot(data=df1, x='frame', y='number_digging', label='gh')
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated/number_digging.csv')
+# df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed/number_digging.csv')
+# sns.lineplot(data=df, x='frame', y='number_digging', label='si')
+# sns.lineplot(data=df1, x='frame', y='number_digging', label='gh')
+# plt.show()
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/contacts.csv')
+df['condition'] = 'gh'
+
+df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/contacts.csv')
+df1['condition'] = 'si'
+
+
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/contacts.csv')
+df2['condition'] = 'gh_pseudo'
+
+
+df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/contacts.csv')
+df3['condition'] = 'si_pseudo'
+
+
+
+df0 = pd.concat([df, df1, df2, df3], ignore_index=True)
+
+
+sns.barplot(data=df0, x='condition', y='avg_duration_seconds')
+plt.title('cropped 10 mins-number')
+plt.show()
+
+
+# sns.lineplot(data=df0, x='time', y='average_distance', hue='condition')
+# sns.lineplot(data=df, x='time', y='average_distance', label='gh')
+# sns.lineplot(data=df1, x='time', y='average_distance', label='si')
+# sns.lineplot(data=df2, x='frame', y='average_distance', label='gh_pseudo')
+# sns.lineplot(data=df3, x='frame', y='average_distance', label='si_pseudo')
+
+plt.xlim(0,600)
 plt.show()

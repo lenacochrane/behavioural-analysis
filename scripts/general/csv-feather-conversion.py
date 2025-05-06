@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/cleaned-tracks/socially-isolated/n10/GROUP-HOUSED/2025-03-04_17-08-33_td2.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/2025-02-24_11-49-59_td12.tracks.000_2025-02-24_11-49-59_td12.analysis.csv')
 
 print(df['track'].unique())
 
@@ -65,7 +65,7 @@ print(jumped_tracks)
 
 # %% PRINT FRAMES OF CERTAIN TRACK
 
-print(df[df['track'] == 'track_80']['frame_idx'])
+print(df[df['track'] == 'track_69']['frame_idx'])
 
 
 ######################
@@ -100,7 +100,7 @@ print(df.head())
 
 # %% CSV -> FEATHER AND SLP
 
-df.to_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/cleaned-tracks/socially-isolated/n10/GROUP-HOUSED/feather.feather')
+df.to_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/feather.feather')
 
 
 

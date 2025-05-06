@@ -32,7 +32,7 @@ def perform_analysis(directory):
     # analysis.hole_boundary(scale_factor=1.5)
 
     #METHOD TO SHORTEN
-    # analysis.shorten(frame=600)
+    analysis.shorten(frame=600)
     
     # CALL METHODS FOR LARVAEL BEHAVIOUR 
     # analysis.trajectory()
@@ -52,7 +52,7 @@ def perform_analysis(directory):
 
 
     # DIGGING IN ABSENCE OF HOLES
-    analysis.total_digging(cleaned=True) #HAVE TO MODIFY
+    # analysis.total_digging(cleaned=True) #HAVE TO MODIFY
 
     # HOLE ANALYSIS METHODS 
 
@@ -72,6 +72,7 @@ def perform_analysis(directory):
 
 
     # analysis.interactions()
+    analysis.contacts(proximity_threshold=1)
 
 
     print("Analysis Completed")
@@ -84,13 +85,16 @@ if __name__ == "__main__":
         run_gui()    
 
 
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-number-digging/test-cleaned")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-number-digging/test-cleaned")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-umap/gh')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-umap/si')
 
 
 

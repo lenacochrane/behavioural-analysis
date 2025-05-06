@@ -59,7 +59,8 @@ def pseudo_population_euclidean_distance(directory):
         df.to_csv(output_file, index=False)
         return df
 
-#pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 def time_average_msd(directory, taus):
 
@@ -250,72 +251,16 @@ def distance_from_centre(directory):
 
     return df_distance_over_time
 
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
-
-def interaction_types(directory,threshold=1):
-    data = []
-
-    files = os.listdir(directory)
-    pseudo_files = [f for f in files if f.startswith('pseudo_population_') and f.endswith('.csv')]
-
-    for pseudo_track in pseudo_files:
-        file_path = os.path.join(directory, pseudo_track)
-        df = pd.read_csv(file_path)
-        df.sort_values(by='frame', ascending=True)
-        df = df[df['frame'] < 601]
-        # track_ids = df['track_id'].unique()
-        
-        # Prepare to count interactions per file
-        interaction_counts = {
-            'head_head': 0,
-            'tail_tail': 0,
-            'body_body': 0,
-            'head_tail': 0,
-            'body_head': 0,
-            'body_tail': 0,
-            'file': pseudo_track,
-        }
-        
-        for frame in df['frame'].unique():
-            print(frame)
-            frame_data = df[df['frame'] == frame]
-
-            if len(frame_data) < 2:
-                # Skip frames with fewer than two tracks
-                continue
-            
-            # Create arrays for each body part including track ID for identification
-            head_positions = frame_data[['track_id', 'x_head', 'y_head']].to_numpy()
-            body_positions = frame_data[['track_id', 'x_body', 'y_body']].to_numpy()
-            tail_positions = frame_data[['track_id', 'x_tail', 'y_tail']].to_numpy()
-            
-            # Calculate distances and find minimum interaction
-            for interaction_type, (positions1, positions2) in {
-                'head_head': (head_positions, head_positions),
-                'tail_tail': (tail_positions, tail_positions),
-                'body_body': (body_positions, body_positions),
-                'head_tail': (head_positions, tail_positions),
-                'body_head': (body_positions, head_positions),
-                'body_tail': (body_positions, tail_positions),
-            }.items():
-                # Exclude same animal interaction by track_id
-                mask = positions1[:, 0][:, None] != positions2[:, 0]
-                distances = cdist(positions1[:, 1:], positions2[:, 1:])
-                distances[~mask] = np.inf  # Invalidate same animal distances
-                
-                min_distance = np.min(distances)
-                if min_distance < threshold:
-                    interaction_counts[interaction_type] += 1
-        
-        data.append(interaction_counts)
-    
-    interaction_df = pd.DataFrame(data)
-    melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
-    melted_df.to_csv(os.path.join(directory, 'interaction_types.csv'), index=False)
+# distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 
-#interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+
+
+
+
+# interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 
 def trajectory(directory):
@@ -400,4 +345,139 @@ def trajectory(directory):
 #trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 # trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10-pseudo-population-model')
 
+
  
+
+
+
+
+from itertools import combinations
+from joblib import Parallel, delayed
+import numpy as np
+import pandas as pd
+import os
+
+def contact(directory, proximity_threshold=1):
+
+    def process_track_pair(track_a, track_b, df, track_file):
+        results = []
+
+        track_a_data = df[df['track_id'] == track_a]
+        track_b_data = df[df['track_id'] == track_b]
+
+        common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+        interaction_id_local = 0
+        i = 0
+
+        while i < len(common_frames):
+            frame = common_frames[i]
+            point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+            point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+            dist = np.linalg.norm(point_a - point_b)
+
+            if dist < proximity_threshold:
+                current_interaction = []
+                while i < len(common_frames):
+                    frame = common_frames[i]
+                    point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                    point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                    dist = np.linalg.norm(point_a - point_b)
+
+                    if dist < proximity_threshold:
+                        current_interaction.append((frame, dist))
+                        i += 1
+                    else:
+                        break
+
+                interaction_id_local += 1
+                for frame, dist in current_interaction:
+                    results.append({
+                        'file': track_file,
+                        'interaction': interaction_id_local,
+                        'frame': frame,
+                        'Interaction Pair': (track_a, track_b),
+                        'Distance': dist,
+                    })
+            else:
+                i += 1
+        return results
+
+    all_data = []
+    no_contacts = []
+
+    files = os.listdir(directory)
+    pseudo_files = [f for f in files if f.startswith('pseudo_population_') and f.endswith('.csv')]
+
+    for pseudo_track in pseudo_files:
+        print(pseudo_track)
+        file_path = os.path.join(directory, pseudo_track)
+        df = pd.read_csv(file_path)
+        df = df.sort_values(by='frame')
+        df = df[df['frame'] < 600]
+
+        track_ids = df['track_id'].unique()
+        track_combinations = list(combinations(track_ids, 2))
+
+        all_results = Parallel(n_jobs=-1)(
+            delayed(process_track_pair)(track_a, track_b, df, pseudo_track)
+            for track_a, track_b in track_combinations
+        )
+
+        flattened_results = [item for sublist in all_results for item in sublist]
+
+        if not flattened_results:
+            print(f"No contact results for {pseudo_track}")
+            no_contacts.append(pseudo_track)
+            continue
+
+        results_df = pd.DataFrame(flattened_results)
+        results_df.set_index('frame', inplace=True, drop=False)
+        all_data.append(results_df)
+
+    if not all_data:
+        print("No contacts detected in any file.")
+        return None
+
+    interaction_data = pd.concat(all_data, ignore_index=True)
+    # Assign global interaction IDs across files and pairs
+    interaction_data['Interaction Number'] = (
+        interaction_data
+        .groupby(['file', 'interaction'])
+        .ngroup() + 1  # make it start at 1
+    )
+    interaction_data.drop(columns=['interaction'], inplace=True)  # Drop the local ID if you don't need it
+
+
+
+    durations = (
+        interaction_data.groupby("Interaction Number")
+        .agg(
+            duration_seconds=("frame", "count"),
+            file=("file", "first")
+        )
+    )
+
+    contact_counts = durations.groupby("file").size().reset_index(name="contact_bouts")
+    avg_durations = durations.groupby("file")["duration_seconds"].mean().reset_index(name="avg_duration_seconds")
+
+    summary = pd.merge(contact_counts, avg_durations, on="file")
+
+    if no_contacts:
+        no_contact_df = pd.DataFrame({
+            'file': no_contacts,
+            'contact_bouts': 0,
+            'avg_duration_seconds': np.nan
+        })
+        summary = pd.concat([summary, no_contact_df], ignore_index=True)
+
+    summary = summary.sort_values("file")
+    summary.to_csv(os.path.join(directory, 'contacts.csv'), index=False)
+
+    return summary
+
+
+
+
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+

@@ -1581,14 +1581,33 @@ class HoleAnalysis:
         # plt.show()  
         
         ### RANDOMLY SELECT FILES AND CONCAT THEM
+        # for iteration in range(number_of_iterations):
+        #     selected_files = random.sample(data, number_of_animals)
+        #     concatenated_df = pd.concat(selected_files, ignore_index=True)
+        #     concatenated_df = concatenated_df.sort_values(by='frame', ascending=True)
+
+
+        #     filepath = os.path.join(self.directory, f'pseudo_population_{iteration+1}.csv')
+        #     concatenated_df.to_csv(filepath, index=False)
+
         for iteration in range(number_of_iterations):
             selected_files = random.sample(data, number_of_animals)
-            concatenated_df = pd.concat(selected_files, ignore_index=True)
-            concatenated_df = concatenated_df.sort_values(by='frame', ascending=True)
 
+            renamed_files = []
+            for i, df in enumerate(selected_files):
+                df_new = df.copy()             # make a safe copy
+                df_new['track_id'] = i         # assign unique ID
+                renamed_files.append(df_new)
+
+            concatenated_df = pd.concat(renamed_files, ignore_index=True)
+            concatenated_df = concatenated_df.sort_values(by='frame', ascending=True)
 
             filepath = os.path.join(self.directory, f'pseudo_population_{iteration+1}.csv')
             concatenated_df.to_csv(filepath, index=False)
+
+
+
+
     
 
     # def proximity_speed_encounters(self, threshold=5, window=5): # threshold: proximity distance threshold; window: frames before and after
@@ -1692,12 +1711,150 @@ class HoleAnalysis:
                     min_distance = np.min(distances)
                     if min_distance < threshold:
                         interaction_counts[interaction_type] += 1
+                        # interaction_counts[interaction_type] += np.sum(np.triu(distances < threshold, k=1))
             
             data.append(interaction_counts)
         
         interaction_df = pd.DataFrame(data)
         melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
         melted_df.to_csv(os.path.join(self.directory, 'interaction_types.csv'), index=False)
+
+
+    def contacts(self, proximity_threshold=1):
+
+        data = []
+        no_contacts = []
+
+        proximity_threshold = 1  # 1mm
+
+        def process_track_pair(track_a, track_b, df, track_file):
+            results = []
+
+            track_a_data = df[df['track_id'] == track_a]
+            track_b_data = df[df['track_id'] == track_b]
+
+            common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+            interaction_id_local = 0
+            i = 0
+
+            while i < len(common_frames):
+                frame = common_frames[i]
+
+                point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+                dist = np.linalg.norm(point_a - point_b)
+
+                if dist < proximity_threshold:
+                    current_interaction = []  # start new bout
+
+                    # collect consecutive frames below threshold
+                    while dist < proximity_threshold and i < len(common_frames):
+                        frame = common_frames[i]
+
+                        point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                        point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+                        dist = np.linalg.norm(point_a - point_b)
+
+                        if dist < proximity_threshold:
+                            current_interaction.append((frame, dist))
+                            i += 1
+                        else:
+                            break
+
+                    # save the bout
+                    interaction_id_local += 1
+                    for frame, dist in current_interaction:
+                        results.append({
+                            'file': track_file,
+                            'interaction': interaction_id_local,
+                            'frame': frame,
+                            'Interaction Pair': (track_a, track_b),
+                            'Distance': dist,
+                        })
+
+                else:
+                    i += 1  # not in contact, move to next frame
+
+            return results
+    
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+            df = df.sort_values(by='frame', ascending=True)
+            df['filename'] = track_file
+
+            track_ids = df['track_id'].unique()
+            track_combinations = list(combinations(track_ids, 2))
+
+            all_results = Parallel(n_jobs=-1)(
+                delayed(process_track_pair)(track_a, track_b, df, track_file)
+                for track_a, track_b in track_combinations
+            )
+
+            # Flatten results
+            flattened_results = [item for sublist in all_results for item in sublist]
+            # if not flattened_results: # IF NO CONTACTS IN THIS FILE
+            #     print(f"No contact results for {track_file}")
+            #     continue
+            if not flattened_results:
+                print(f"No contact results for {track_file}")
+                no_contacts.append(track_file)
+                continue
+
+
+            results_df = pd.DataFrame(flattened_results)
+            results_df.set_index('frame', inplace=True, drop=False)
+            data.append(results_df)
+
+
+        interaction_data = pd.concat(data, ignore_index=True)
+
+        # Assign global interaction IDs across files and pairs
+        interaction_data['Interaction Number'] = (
+            interaction_data
+            .groupby(['file', 'interaction'])
+            .ngroup() + 1  # make it start at 1
+        )
+        interaction_data.drop(columns=['interaction'], inplace=True)  # Drop the local ID if you don't need it
+
+
+        ### this shd be added into the main contacts 
+        durations = (
+            interaction_data.groupby("Interaction Number")
+            .agg(
+                duration_seconds=("frame", "count"),  # 1 frame = 1 second
+                file=("file", "first")                # what file this interaction came from
+            )
+        )
+
+        contact_counts = durations.groupby("file").size().reset_index(name="contact_bouts")
+
+        avg_durations = durations.groupby("file")["duration_seconds"].mean().reset_index()
+        avg_durations.rename(columns={"duration_seconds": "avg_duration_seconds"}, inplace=True)
+
+        summary = pd.merge(contact_counts, avg_durations, on="file")
+
+        no_contact_df = pd.DataFrame({
+            'file': no_contacts,
+            'contact_bouts': 0,
+            'avg_duration_seconds': np.nan
+        })
+
+        summary = pd.concat([summary, no_contact_df], ignore_index=True).sort_values("file")
+
+        summary.to_csv(os.path.join(self.directory, 'contacts.csv'), index=False)
+
+
+
+
+
+        
+
+
+
+
 
 
 
@@ -1770,95 +1927,7 @@ class HoleAnalysis:
         data.to_csv(os.path.join(self.directory, 'correlations.csv'), index=False)
 
         return data
-    
-
-    # def interactions(self):
-
-    #     dfs = []
-
-    #     for match in self.matching_pairs:
-    #         track_file = match['track_file']
-    #         df = self.track_data[track_file]
-
-    #         df = df.sort_values(by='frame', ascending=True)
-    #         df['filename'] = track_file
-
-    #         proximity_threshold = 20 # 10mm
-
-    #         results = []
-
-    #         track_ids = df['track_id'].unique()
-    #         track_combinations = list(combinations(track_ids, 2))
-    #         interaction_id = 0  # Start interaction ID
-    #         # prev_frame = None  # Keep track of previous frame
-
-    #         for track_a, track_b in track_combinations:
-
-    #             track_a_data = df[df['track_id'] == track_a]
-    #             track_b_data = df[df['track_id'] == track_b]
-
-    #             common_frames = set(track_a_data['frame']).intersection(track_b_data['frame'])
-    #             common_frames = sorted(common_frames)
-
-    #             prev_frame = None
-
-    #             for frame in common_frames:
-
-    #                 # body
-    #                 point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-    #                 point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-
-    #                 ## tail
-    #                 a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
-    #                 b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
-
-    #                 ## head
-    #                 a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
-    #                 b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
-
-
-    #                 dist = np.linalg.norm(point_a - point_b)
-    #                 if dist < proximity_threshold:
-
-    #                     if prev_frame is None or frame != prev_frame + 1:
-    #                         # If it's the first interaction OR there's a gap, start a new interaction
-    #                         interaction_id += 1
-
-    #                     results.append({
-    #                     'Frame': frame,
-    #                     'Interaction Number': interaction_id,  # Assign interaction number
-    #                     'file': track_file,
-    #                     'Interaction Pair': [track_a, track_b],
-    #                     'Distance': dist,
-    #                     ## Track 1 coord
-    #                     'Track_1 x_tail': a_tail[0, 0],
-    #                     'Track_1 y_tail': a_tail[0, 1],
-    #                     'Track_1 x_body': point_a[0, 0],
-    #                     'Track_1 y_body': point_a[0, 1],
-    #                     'Track_1 x_head': a_head[0, 0],
-    #                     'Track_1 y_head': a_head[0, 1],
-
-    #                     ## Track 2 coord
-    #                     'Track_2 x_tail': b_tail[0, 0],
-    #                     'Track_2 y_tail': b_tail[0, 1],
-    #                     'Track_2 x_body': point_b[0, 0],
-    #                     'Track_2 y_body': point_b[0, 1],
-    #                     'Track_2 x_head': b_head[0, 0],
-    #                     'Track_2 y_head': b_head[0, 1]
-                        
-    #                 })
-
-    #                     prev_frame = frame  # Increment interaction count
-
-    #         results_df = pd.DataFrame(results)
-    #         results_df.set_index('Frame', inplace=True, drop=False)
-    #         dfs.append(results_df)  
-        
-    #     interaction_data = pd.concat(dfs, ignore_index=True)
-    #     interaction_data.to_csv(os.path.join(self.directory, 'interactions.csv'), index=False)
-
-
-        
+     
 
     def interactions(self):
 
@@ -2163,40 +2232,77 @@ class HoleAnalysis:
             cos_theta = np.clip(dot / (mag1 * mag2), -1.0, 1.0)
             return np.degrees(np.arccos(cos_theta))
 
+        # def get_track1_approach_angle(row):
+        #     try:
+        #         x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
+        #         if x_part is None:
+        #             return np.nan
+
+        #         # Make both vectors start at the head
+        #         hx = row['Track_1 x_body'] - row['Track_1 x_head']
+        #         hy = row['Track_1 y_body'] - row['Track_1 y_head']
+
+        #         ax = row[f'Track_2 {x_part}'] - row['Track_1 x_head']
+        #         ay = row[f'Track_2 {y_part}'] - row['Track_1 y_head']
+
+        #         return angle_between_vectors(hx, hy, ax, ay)
+        #     except Exception as e:
+        #         print(f"❌ Track 1 error at row {row.name}: {e}")
+        #         return np.nan
+
+
+        # def get_track2_approach_angle(row):
+        #     try:
+        #         x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
+        #         if x_part is None:
+        #             return np.nan
+
+        #         # heading = head - body
+        #         hx = row['Track_2 x_body'] - row['Track_2 x_head']
+        #         hy = row['Track_2 y_body'] - row['Track_2 y_head']
+
+        #         # approach = other part - head
+        #         ax = row[f'Track_1 {x_part}'] - row['Track_2 x_head']
+        #         ay = row[f'Track_1 {y_part}'] - row['Track_2 y_head']
+
+        #         return angle_between_vectors(hx, hy, ax, ay)
+        #     except Exception as e:
+        #         print(f"❌ Track 2 error at row {row.name}: {e}")
+        #         return np.nan
+
         def get_track1_approach_angle(row):
             try:
-                x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
-                if x_part is None:
-                    return np.nan
+                part1, part2 = row["interaction_type"].split("-")
 
-                # Make both vectors start at the head
+                # Track 1 heading: body → head
                 hx = row['Track_1 x_body'] - row['Track_1 x_head']
                 hy = row['Track_1 y_body'] - row['Track_1 y_head']
 
-                ax = row[f'Track_2 {x_part}'] - row['Track_1 x_head']
-                ay = row[f'Track_2 {y_part}'] - row['Track_1 y_head']
+                # Approach vector: Track_2 part2 - Track_1 head
+                ax = row[f'Track_2 x_{part2}'] - row['Track_1 x_head']
+                ay = row[f'Track_2 y_{part2}'] - row['Track_1 y_head']
 
                 return angle_between_vectors(hx, hy, ax, ay)
+
             except Exception as e:
                 print(f"❌ Track 1 error at row {row.name}: {e}")
                 return np.nan
-
-
+            
+        
         def get_track2_approach_angle(row):
             try:
-                x_part, y_part = part_mapping.get(row['interaction_type'], (None, None))
-                if x_part is None:
-                    return np.nan
+                part1, part2 = row["interaction_type"].split("-")
 
-                # heading = head - body
+                # Track 2 heading: body → head
                 hx = row['Track_2 x_body'] - row['Track_2 x_head']
                 hy = row['Track_2 y_body'] - row['Track_2 y_head']
 
-                # approach = other part - head
-                ax = row[f'Track_1 {x_part}'] - row['Track_2 x_head']
-                ay = row[f'Track_1 {y_part}'] - row['Track_2 y_head']
+                # Approach vector: Track_1 part1 - Track_2 head
+                ax = row[f'Track_1 x_{part1}'] - row['Track_2 x_head']
+                ay = row[f'Track_1 y_{part1}'] - row['Track_2 y_head']
 
                 return angle_between_vectors(hx, hy, ax, ay)
+
             except Exception as e:
                 print(f"❌ Track 2 error at row {row.name}: {e}")
                 return np.nan

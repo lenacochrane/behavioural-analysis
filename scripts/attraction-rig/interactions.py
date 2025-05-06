@@ -234,7 +234,6 @@ df.to_csv(full_path, index=False)
 
 
 
-
 ######################
 # %% IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES
 

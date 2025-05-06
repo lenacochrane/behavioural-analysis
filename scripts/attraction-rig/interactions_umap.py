@@ -4,6 +4,8 @@ import umap
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
+import os
+from sklearn.cluster import DBSCAN
 
 print("📥 Loading CSVs...")
 
@@ -16,21 +18,14 @@ df_iso['condition'] = 'iso'
 df = pd.concat([df_iso, df_group], ignore_index=True)
 
 
-##### CHANGE AND CHANGE SAVING FILE
-df = df[df['Frame'] <= 1800]
-
-print("Checking Normalized Frame distribution in 'group' interactions:")
-print(df_group["Normalized Frame"].describe())
-print("\nHow many group interactions contain a frame close to 0 (+/-5)?")
-close_to_zero = df_group[df_group["Normalized Frame"].between(-5, 5)]
-print(close_to_zero["Interaction Number"].nunique(), "interactions found.")
-
-
+####-- DECIDE LENGTH OF DATAFRAME --####
+# df = df[df['Frame'] <= 1800]
 
 print("\n✅ CSVs loaded and combined.")
 print(df['condition'].value_counts())
-print("Total rows:", len(df))
 
+
+####-- DECIDE FEATURE COLUMNS --####
 
 # feature_columns = [
 #     "min_distance",  
@@ -44,19 +39,19 @@ feature_columns = [
     "min_distance",  
     "track1_speed", "track2_speed", 
     "track1_acceleration", "track2_acceleration",
-    "track1_length", "track2_length",  
+    # "track1_length", "track2_length",  
     "track1_angle", "track2_angle", 
     "track1_approach_angle", "track2_approach_angle",
 
-    # # Coordinates for Track 1
-    "Track_1 x_tail", "Track_1 y_tail",
-    "Track_1 x_body", "Track_1 y_body",
-    "Track_1 x_head", "Track_1 y_head",
+    # # # Coordinates for Track 1
+    # "Track_1 x_tail", "Track_1 y_tail",
+    # "Track_1 x_body", "Track_1 y_body",
+    # "Track_1 x_head", "Track_1 y_head",
 
-    # Coordinates for Track 2
-    "Track_2 x_tail", "Track_2 y_tail",
-    "Track_2 x_body", "Track_2 y_body",
-    "Track_2 x_head", "Track_2 y_head"
+    # # Coordinates for Track 2
+    # "Track_2 x_tail", "Track_2 y_tail",
+    # "Track_2 x_body", "Track_2 y_body",
+    # "Track_2 x_head", "Track_2 y_head"
 ]
 
 # feature_columns = [
@@ -72,33 +67,42 @@ feature_columns = [
 #     "Track_2 x_head", "Track_2 y_head"
 # ]
 
+####-- CROP INTERACTIONS --####
+
 
 def crop_interaction(group):
-    # ✅ Find the frame closest to Normalized Frame == 0
     if group.empty or "Normalized Frame" not in group.columns:
         return None
-    
-    center_idx = (group["Normalized Frame"].abs()).idxmin()  # Get index of closest-to-zero
+
+    center_idx = (group["Normalized Frame"].abs()).idxmin()
     if pd.isna(center_idx):
         return None
 
-    center_pos = group.index.get_loc(center_idx)  # position within group
-    start = max(center_pos - 22, 0)
-    end = min(center_pos + 22, len(group) - 1)
+    center_pos = group.index.get_loc(center_idx)
 
-    cropped = group.iloc[start:end + 1].copy()
-    # cropped["condition"] = group["condition"].iloc[0]
+    # Enforce symmetrical crop range
+    if center_pos < 20 or (center_pos + 20) >= len(group):
+        return None
+
+    cropped = group.iloc[center_pos - 20 : center_pos + 21].copy()
     cropped["interaction_id"] = group["interaction_id"].iloc[0]
+
+    # ✅ Make sure resulting Normalized Frame values are correct
+    expected_frames = list(range(-20, 21))
+    actual_frames = list(cropped["Normalized Frame"])
+
+    if sorted(actual_frames) != expected_frames:
+        return None  # reject if it's not exactly -20 to +20
 
     return cropped
 
+
+####-- UNIQUE ID PER INTERACTION --####
 df["interaction_id"] = df["condition"] + "_" + df["Interaction Number"].astype(str)
 
 
-
-
 print("\n✂️ Cropping interactions (using closest to frame 0)...")
-# df_cropped = df.groupby(["condition", "Interaction Number"], group_keys=False).apply(crop_interaction)
+
 df_cropped = df.groupby("interaction_id", group_keys=False).apply(crop_interaction)
 
 print("✅ Cropping complete.")
@@ -106,16 +110,27 @@ print("Cropped rows:", len(df_cropped))
 print("Cropped conditions:")
 print(df_cropped["condition"].value_counts())
 
+# ✅ INSERT THIS BLOCK HERE
+interaction_lengths = df_cropped.groupby("interaction_id").size()
+print("\n🧪 Frame counts per cropped interaction:")
+print(interaction_lengths.value_counts().sort_index())
+
+if (interaction_lengths != 41).any():
+    print("❗Warning: Some cropped interactions are not 41 frames long.")
+else:
+    print("✅ All cropped interactions are exactly 41 frames long.")
+
+
+# GET RID
+print("📈 Checking unique normalized frames before pivoting:")
+print(sorted(df_cropped["Normalized Frame"].unique()))
 
 
 
-# 🧱 Pivot to vectorized format
+####-- PIVOTING TO VECTORISED FORMAT --####
+
 print("\n🔁 Pivoting to vectorized format...")
-# df_vectorized = df_cropped.pivot_table(
-#     index="Interaction Number",
-#     columns="Normalized Frame",
-#     values=feature_columns
-# )
+
 
 df_vectorized = df_cropped.pivot_table(
     index="interaction_id",
@@ -124,22 +139,20 @@ df_vectorized = df_cropped.pivot_table(
 )
 
 
-
 print("✅ Pivot complete.")
 print("Vectorized shape:", df_vectorized.shape)
 
-# 🧼 Flatten column names
-df_vectorized.columns = [f"{col[0]}_frame{col[1]}" for col in df_vectorized.columns]
+df_vectorized.columns = [f"{col[0]}_frame{col[1]}" for col in df_vectorized.columns] # 🧼 Flatten column names
 df_vectorized = df_vectorized.fillna(0)
 
-# 🔗 Merge condition back in using interaction number
+print("Feature variance check:")
+print(df_vectorized.var().sort_values(ascending=True).head(10))
+
+
+
+####-- MERGE CONDITIONS WITH INTERACTIONS  --####
+
 print("\n🔗 Merging condition into vectorized dataframe...")
-# interaction_conditions = df_cropped.groupby("Interaction Number")["condition"].first().reset_index()
-# df_vectorized = df_vectorized.reset_index().merge(
-#     interaction_conditions,
-#     on="Interaction Number",
-#     how="left"
-# ).set_index("Interaction Number")
 
 interaction_conditions = df_cropped.groupby("interaction_id")["condition"].first().reset_index()
 
@@ -154,20 +167,26 @@ print("✅ Condition merged.")
 print(df_vectorized['condition'].value_counts())
 
 
-# 📏 Standardize features
+
+####-- STANDARDISES EACH FEATURE  --####
+
 print("\n📐 Scaling features...")
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(df_vectorized.drop(columns="condition"))
 print("✅ Scaling done.")
 
 
-# 🧬 Run UMAP
+
+####-- UMAP  --####
+
+
 print("\n🌍 Running UMAP...")
-umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
+# umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42) # old one
+# umap_model = umap.UMAP(n_neighbors=10, min_dist=0.01, n_components=2, random_state=42) WORKED BETTER
+umap_model = umap.UMAP(n_neighbors=5, min_dist=0.01, n_components=2, random_state=42)
+
 X_umap = umap_model.fit_transform(X_scaled)
 print("✅ UMAP done.")
-print("UMAP shape:", X_umap.shape)
-
 
 # 📎 Store UMAP in dataframe
 df_vectorized["UMAP_1"] = X_umap[:, 0]
@@ -178,7 +197,16 @@ df_vectorized["condition"] = df_vectorized["condition"].astype(str)
 print("\n📊 Ready to plot. Final condition count:")
 print(df_vectorized["condition"].value_counts())
 
-# 🖼 Plot
+
+####-- CREATE DIRECTORY TO SAVE RESULTS  --####
+
+output_dir = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/test"
+os.makedirs(output_dir, exist_ok=True)
+
+
+####-- PLOT THE UMAP  --####
+
+
 plt.figure(figsize=(8, 6))
 sns.scatterplot(
     x="UMAP_1",
@@ -193,24 +221,18 @@ plt.xlabel("UMAP Dimension 1")
 plt.ylabel("UMAP Dimension 2")
 plt.legend(title="Condition")
 plt.tight_layout()
+plt.savefig(os.path.join(output_dir, "umap.png"))
 plt.show()
 
 
 
+####-- RUN DBSCAN ON UMAP  --####
 
 
-import os
-from sklearn.cluster import DBSCAN
-
-# 📁 Create output folder
-output_dir = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/umap-clusters-1800-frames"
-os.makedirs(output_dir, exist_ok=True)
-
-# 🤝 Run DBSCAN on UMAP
 print("\n🔍 Running DBSCAN clustering on UMAP projection...")
 clustering = DBSCAN(eps=0.5, min_samples=5).fit(df_vectorized[["UMAP_1", "UMAP_2"]])
 df_vectorized["cluster"] = clustering.labels_
-print("✅ Clustering complete. Cluster label counts:")
+print("✅ Clustering complete Cluster label counts:")
 print(df_vectorized["cluster"].value_counts())
 
 # 🔗 Merge cluster labels into the cropped interactions dataframe
@@ -221,12 +243,14 @@ df_cropped_with_clusters = df_cropped.merge(
     how="left"
 )
 
-# 💾 Export cropped interaction data with cluster + UMAP info
-cropped_output_path = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/combined_interactions_clusters.csv.csv"
+####-- SAVE CSV CONTAINING CLUSTER AND UMAP INFORMATION  --####
+
+
+cropped_output_path = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/n10.csv"
 df_cropped_with_clusters.to_csv(cropped_output_path, index=False)
-print(f"✅ Saved cropped interactions with cluster & UMAP to: {cropped_output_path}")
 
 
+####-- PLOT THE UMAP WITH CLUSTER ANALYSIS --####
 
 # 📊 Plot UMAP colored by cluster
 plt.figure(figsize=(8, 6))
@@ -244,6 +268,8 @@ plt.legend(title="Cluster")
 plt.tight_layout()
 plt.savefig(os.path.join(output_dir, "umap_clusters.png"))
 plt.close()
+
+####-- SAVE MEAN FEATURES PER CLUSTER --####
 
 # 🧠 Save mean feature values per cluster
 cluster_means = df_vectorized.groupby("cluster").mean(numeric_only=True)
