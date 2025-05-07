@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/2025-02-24_11-49-59_td12.tracks.000_2025-02-24_11-49-59_td12.analysis.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/2025-03-10_15-37-02_td9.tracks.000_2025-03-10_15-37-02_td9.analysis.csv')
 
 print(df['track'].unique())
 
@@ -65,7 +65,7 @@ print(jumped_tracks)
 
 # %% PRINT FRAMES OF CERTAIN TRACK
 
-print(df[df['track'] == 'track_69']['frame_idx'])
+print(df[df['track'] == 'track_50']['frame_idx'])
 
 
 ######################

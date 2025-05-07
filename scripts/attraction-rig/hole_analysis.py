@@ -39,6 +39,10 @@ class HoleAnalysis:
         self.match_files()
         self.conversion()
 
+        self.use_shorten = True 
+        self.shorten_duration = None
+
+
 
     # METHOD COORDINATES: IDENTIFIES AND STORES THE HOLE COORDINATE FILES
 
@@ -76,12 +80,16 @@ class HoleAnalysis:
             df = df[df['frame'] <= frame]
             self.track_data[track_file] = df # update the track data 
 
-            # create path 
-            shortened_path = os.path.join(self.directory, track_file.replace('.feather', f'_shortened_{frame}.feather'))
-            # save 
-            df.reset_index(drop=True, inplace=True)  # Feather requires a default integer index
-            df.to_feather(shortened_path)  # Save the DataFrame without 'index=False'
-            print(f"Shortened file saved: {shortened_path}")
+            # # create path 
+            # shortened_path = os.path.join(self.directory, track_file.replace('.feather', f'_shortened_{frame}.feather'))
+            # # save 
+            # df.reset_index(drop=True, inplace=True)  # Feather requires a default integer index
+            # df.to_feather(shortened_path)  # Save the DataFrame without 'index=False'
+            # print(f"Shortened file saved: {shortened_path}")
+        self.use_shorten = True
+        self.shorten_duration = frame  # e.g., 600
+
+
 
     # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 
 
@@ -419,7 +427,15 @@ class HoleAnalysis:
                 data.append({'file': track_file, 'frame': row['frame'], 'track': row['track_id'], 'distance_from_centre': distance})
 
         df_distance_over_time = pd.DataFrame(data)
-        df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_from_centre.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"distance_from_centre{suffix}.csv"
+    
+        df_distance_over_time.to_csv(os.path.join(self.directory, filename), index=False)
         print(f'Distance over time saved: {df_distance_over_time}')
 
         return df_distance_over_time

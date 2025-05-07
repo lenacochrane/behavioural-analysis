@@ -42,13 +42,13 @@ def perform_analysis(directory):
     # analysis.acceleration()
     # analysis.euclidean_distance()
     # analysis.euclidean_distance_variance(200, 600) # currently plotting the plataeu but arbitary time start for plateu 
-    # analysis.distance_from_centre()
+    analysis.distance_from_centre()
 
 
     ### PSEUDO POPULATION MODEL
 
     # analysis.pseudo_population_model()
-    # analysis.pseudo_population_model(number_of_iterations=40, number_of_animals=10)
+    # analysis.pseudo_population_model(number_of_iterations=40, number_of_animals=2)
 
 
     # DIGGING IN ABSENCE OF HOLES
@@ -72,7 +72,7 @@ def perform_analysis(directory):
 
 
     # analysis.interactions()
-    analysis.contacts(proximity_threshold=1)
+    # analysis.contacts(proximity_threshold=1)
 
 
     print("Analysis Completed")
@@ -85,16 +85,14 @@ if __name__ == "__main__":
         run_gui()    
 
 
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-number-digging/test-cleaned")
+
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-umap/gh')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-umap/si')
 
 
 

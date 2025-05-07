@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import math
 
 
 ### N2
@@ -23,40 +24,51 @@ df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analy
 
 
 
-plt.figure(figsize=(8,6))
+# Group the DataFrame by 'file'
+grouped = df9.groupby('file')
 
+# How many unique files?
+n = len(grouped)
 
-### N2
-# sns.lineplot(data=df3, x='time', y='average_distance',  color='#629677', ci='sd', label='gh_n2')
-# sns.lineplot(data=df4, x='time', y='average_distance',  color='#F39B6D', ci='sd', label='si_n2')
+# Grid layout setup
+ncols = 5
+nrows = math.ceil(n / ncols)
 
-### N10
-sns.lineplot(data=df5, x='time', y='average_distance',  color='#85C7DE', ci='sd', label='gh_n10')
-sns.lineplot(data=df6, x='time', y='average_distance',  color='#7EBC66', ci='sd', label='si_n10')
+# Create subplots
+fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 4, nrows * 3), sharex=True)
+axes = axes.flatten()  # make it iterable
 
-### PSEUDO N2
-# sns.lineplot(data=df7, x='frame', y='average_distance', color='#F2CD60', ci='sd', label='pseudo-gh-n2')
-# sns.lineplot(data=df8, x='frame', y='average_distance', color='#7CB0B5', ci='sd', label='pseudo-si-n2')
+# Plot each group
+for ax, (file_name, group_data) in zip(axes, grouped):
+    sns.lineplot(data=group_data, x='frame', y='average_distance', color='#85C7DE', ci='sd', ax=ax, label='gh_n10')
+    ax.set_title(file_name, fontsize=8)
+    ax.set_xlabel('Time (s)', fontsize=8)
+    ax.set_ylabel('Distance (mm)', fontsize=8)
+    # ax.set_xlim(0, 600)
+    ax.legend(fontsize=6, title='Number of Larvae', title_fontsize=7)
 
-### PSEUDO N10
-sns.lineplot(data=df9, x='frame', y='average_distance',  color='#F08080', ci='sd', label='pseudo-gh-n10')
-sns.lineplot(data=df10, x='frame', y='average_distance',  color='#6F5E76', ci='sd', label='pseudo-si-n10')
+# Turn off unused subplots
+for ax in axes[n:]:
+    ax.axis('off')
 
+# Set a global title
+fig.suptitle('Euclidean Distances', fontsize=16, fontweight='bold')
 
-# plt.xlim(0,600)
+# Adjust spacing to fit global title and avoid overlap
+plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave space for suptitle
 
-
-plt.xlabel('Time (S)', fontsize=12, fontweight='bold')
-plt.ylabel('Average Distance (mm)', fontsize=12, fontweight='bold')
-
-
-plt.title('Euclidean Distances', fontsize=16, fontweight='bold')
-
-
-plt.legend(title='Number of Larvae')
-
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/euclidean-distance/euclidean-distance-N10-pseudo.png', dpi=300, bbox_inches='tight')
-
-
-# Show the plot
+# Save the full figure
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/euclidean-distance/n10-pseudo-grouphoused-subplot.png',
+            dpi=300, bbox_inches='tight')
 plt.show()
+
+
+
+
+
+
+
+
+
+
+

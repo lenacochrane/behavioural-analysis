@@ -34,8 +34,6 @@ def pseudo_population_euclidean_distance(directory):
             df = pd.read_csv(file_path)
             df.sort_values(by='frame', ascending=True)
 
-            df = df[df['frame'] < 601]
-
             for frame in df['frame'].unique():
                 unique_frame = df[df['frame'] == frame]
 
@@ -49,18 +47,16 @@ def pseudo_population_euclidean_distance(directory):
                 np.fill_diagonal(distance, np.nan)
                 average_distance = np.nanmean(distance)
 
-                data.append({'frame': frame, 'average_distance': average_distance, 'file': pseudo_track})
+                data.append({'time': frame, 'average_distance': average_distance, 'file': pseudo_track})
 
         df = pd.DataFrame(data)
-        df = df.sort_values(by=['frame', 'file'], ascending=True)
+        df = df.sort_values(by=['time', 'file'], ascending=True)
 
         output_file = os.path.join(directory, 'euclidean_distances.csv')
 
         df.to_csv(output_file, index=False)
         return df
 
-# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 def time_average_msd(directory, taus):
 
@@ -75,58 +71,52 @@ def time_average_msd(directory, taus):
         df.sort_values(by='frame', ascending=True)
         # df['file'] = pseudo_track
 
-        df = df[df['frame'] < 601]
-
         dfs.append(df)
 
-        df = pd.concat(dfs, ignore_index=True)
-        df = df[["filename", "track_id", "frame", "x_body", "y_body"]]
+    df = pd.concat(dfs, ignore_index=True)
+    df = df[["filename", "track_id", "frame", "x_body", "y_body"]]
 
- 
-        # one value per tau 
-        def msd_per_tau(df, tau):
+    # one value per tau 
+    def msd_per_tau(df, tau):
 
-            squared_displacements = []
-            # for unique_track in df['track_id'].unique():
-            grouped_data = df.groupby(['filename', 'track_id'])
-            for (file, track_id), unique_track in grouped_data:
+        squared_displacements = []
+        # for unique_track in df['track_id'].unique():
+        grouped_data = df.groupby(['filename', 'track_id'])
+        for (file, track_id), unique_track in grouped_data:
 
-                unique_track = unique_track.sort_values(by='frame').reset_index(drop=True)
-               
+            unique_track = unique_track.sort_values(by='frame').reset_index(drop=True)
+            
 
-                if len(unique_track) > tau:
+            if len(unique_track) > tau:
 
-                    initial_positions = unique_track[['x_body', 'y_body']].values[:-tau] # values up till tau as a NumPy array # positions from t to t-N-tau # represent starting points
-                    tau_positions = unique_track[['x_body', 'y_body']].values[tau:] # values from tau onwards # t+tau to t-N # representing ending points 
-                    disp = np.sum((tau_positions - initial_positions) ** 2, axis=1) # squared displacement for each pair
-                    squared_displacements.append(disp)  
+                initial_positions = unique_track[['x_body', 'y_body']].values[:-tau] # values up till tau as a NumPy array # positions from t to t-N-tau # represent starting points
+                tau_positions = unique_track[['x_body', 'y_body']].values[tau:] # values from tau onwards # t+tau to t-N # representing ending points 
+                disp = np.sum((tau_positions - initial_positions) ** 2, axis=1) # squared displacement for each pair
+                squared_displacements.append(disp)  
 
-            if squared_displacements:
-            # Flatten the list of arrays into a single NumPy array
-                flattened_displacements = np.concatenate(squared_displacements)
+        if squared_displacements:
+        # Flatten the list of arrays into a single NumPy array
+            flattened_displacements = np.concatenate(squared_displacements)
 
-            # Filter out NaN and inf values
-                valid_displacements = flattened_displacements[np.isfinite(flattened_displacements)]
+        # Filter out NaN and inf values
+            valid_displacements = flattened_displacements[np.isfinite(flattened_displacements)]
 
-                if valid_displacements.size > 0:
-                    mean_disp = np.mean(valid_displacements)
-                    return mean_disp
-
-
-        msds = []
-        for tau in taus:
-            msd = msd_per_tau(df, tau)
-            msds.append(msd)
-
-        tau_msd_df = pd.DataFrame({'tau': taus, 'msd': msds})
-        tau_msd_df = tau_msd_df.sort_values(by='tau', ascending=True)
-        file_path = os.path.join(directory,'time_average_msd.csv')
-        tau_msd_df.to_csv(file_path, index=False)
-   
-        return tau_msd_df
+            if valid_displacements.size > 0:
+                mean_disp = np.mean(valid_displacements)
+                return mean_disp
 
 
-#time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated', list(range(1, 101, 1)))
+    msds = []
+    for tau in taus:
+        msd = msd_per_tau(df, tau)
+        msds.append(msd)
+
+    tau_msd_df = pd.DataFrame({'tau': taus, 'msd': msds})
+    tau_msd_df = tau_msd_df.sort_values(by='tau', ascending=True)
+    file_path = os.path.join(directory,'time_average_msd.csv')
+    tau_msd_df.to_csv(file_path, index=False)
+
+    return tau_msd_df
 
 
 def ensemble_msd(directory):
@@ -140,8 +130,6 @@ def ensemble_msd(directory):
         file_path = os.path.join(directory, pseudo_track)
         df = pd.read_csv(file_path)
         df.sort_values(by='frame', ascending=True)
-
-        df = df[df['frame'] < 601]
 
         ## CENTRE COORDINATES SHOULD ALL BE 0,0 ACTUALLY DUE TO CENTROID NORMALISATION 
         centre_x = 0
@@ -159,18 +147,15 @@ def ensemble_msd(directory):
                     'file': row['filename']
                 })
                     
-        # Create a DataFrame from the MSD data
-        df = pd.DataFrame(data)
-        df = df.sort_values(by=['time'], ascending=True)
+    # Create a DataFrame from the MSD data
+    df = pd.DataFrame(data)
+    df = df.sort_values(by=['time'], ascending=True)
 
-        # Save the DataFrame as a CSV file
-        output_path = os.path.join(directory, 'ensemble_msd.csv')
-        df.to_csv(output_path, index=False)
+    # Save the DataFrame as a CSV file
+    output_path = os.path.join(directory, 'ensemble_msd.csv')
+    df.to_csv(output_path, index=False)
 
-        return df 
-
-
-#ensemble_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n2-pseudo-population-model')
+    return df 
 
 
 def speed(directory):
@@ -185,8 +170,6 @@ def speed(directory):
         file_path = os.path.join(directory, pseudo_track)
         df = pd.read_csv(file_path)
         df.sort_values(by='frame', ascending=True)
-
-        df = df[df['frame'] < 601]
 
         grouped_data = df.groupby(['filename', 'track_id'])
         for (file, track_id), track_unique in grouped_data:
@@ -209,18 +192,13 @@ def speed(directory):
                 speed.append(speed_value)
 
                 data.append({'time': time2, 'speed': speed_value})
-       
-        speed_values = pd.DataFrame(speed)
-        speed_values.to_csv(os.path.join(directory, 'speed_values.csv'), index=False)
 
-        speed_over_time = pd.DataFrame(data)
-        speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
-        speed_over_time.to_csv(os.path.join(directory, 'speed_over_time.csv'), index=False)
+    speed_over_time = pd.DataFrame(data)
+    speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
+    speed_over_time.to_csv(os.path.join(directory, 'speed_over_time.csv'), index=False)
 
-        return speed_values, speed_over_time
+    return speed_over_time
     
-
-#speed('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 
 
 def distance_from_centre(directory): 
@@ -234,8 +212,6 @@ def distance_from_centre(directory):
         file_path = os.path.join(directory, pseudo_track)
         df = pd.read_csv(file_path)
         df.sort_values(by='frame', ascending=True)
-
-        df = df[df['frame'] < 601]
 
         centre_x = 0
         centre_y = 0
@@ -251,17 +227,6 @@ def distance_from_centre(directory):
 
     return df_distance_over_time
 
-# distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
-
-
-
-
-
-
-# interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# interaction_types('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
-
 
 def trajectory(directory):
 
@@ -274,7 +239,7 @@ def trajectory(directory):
         file_path = os.path.join(directory, pseudo_track)
         df = pd.read_csv(file_path)
         df.sort_values(by='frame', ascending=True)
-        df = df[df['frame'] < 601]
+
         df['file'] = pseudo_track
         dfs.append(df)
 
@@ -342,15 +307,6 @@ def trajectory(directory):
 
 
 
-#trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10-pseudo-population-model')
-
-
- 
-
-
-
-
 from itertools import combinations
 from joblib import Parallel, delayed
 import numpy as np
@@ -413,7 +369,7 @@ def contact(directory, proximity_threshold=1):
         file_path = os.path.join(directory, pseudo_track)
         df = pd.read_csv(file_path)
         df = df.sort_values(by='frame')
-        df = df[df['frame'] < 600]
+        # df = df[df['frame'] < 600]
 
         track_ids = df['track_id'].unique()
         track_combinations = list(combinations(track_ids, 2))
@@ -478,6 +434,32 @@ def contact(directory, proximity_threshold=1):
 
 
 
-contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+# contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+
+# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10-pseudo-population-model')
+
+
+# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated', list(range(1, 101, 1)))
+# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed', list(range(1, 101, 1)))
+# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated', list(range(1, 101, 1)))
+# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed', list(range(1, 101, 1)))
+
+pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
+pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
+pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+
+
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+
+
+trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
+trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
+trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
