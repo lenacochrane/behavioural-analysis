@@ -440,34 +440,6 @@ class HoleAnalysis:
 
         return df_distance_over_time
 
-    # def distance_from_centre(self): 
-
-    #     factor = 700 * (90/1032)
-
-    #     centre = (factor, factor) 
-
-    #     distances_from_centre = []
-    #     data = []
-
-    #     for track_file in self.track_files:
-            
-    #         predictions = self.track_data[track_file]
-
-    #         for index, row in predictions.iterrows():
-    #             x, y = row['x_body'], row['y_body']
-    #             distance = np.sqrt((centre[0] - x)**2 + (centre[1] - y)**2)
-    #             distances_from_centre.append(distance)
-    #             data.append({'file': track_file, 'frame': row['frame'], 'distance_from_centre': distance})
-
-    #     df_distances = pd.DataFrame(distances_from_centre, columns=['Distance from centre'])
-    #     df_distances.to_csv(os.path.join(self.directory, 'distances_from_centre.csv'), index=False)
-    #     print(f"Distance from centre saved: {df_distances}")
-
-    #     df_distance_over_time = pd.DataFrame(data)
-    #     df_distance_over_time.to_csv(os.path.join(self.directory, 'distance_over_time.csv'), index=False)
-
-    #     return df_distances
-
     # METHOD EUCLIDEAN_DISTANCE: CALCULATES THE AVERAGE DISTANCE BETWEEN LARVAE ACCROSS FRAMES
 
     def euclidean_distance(self):
@@ -499,8 +471,14 @@ class HoleAnalysis:
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time', 'file'], ascending=True)
 
-        df.to_csv(os.path.join(self.directory, 'euclidean_distances.csv'), index=False)
-        print(f"Euclidean distance saved: {df}")
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"euclidean_distances{suffix}.csv"
+        df.to_csv(os.path.join(self.directory, filename), index=False)
+
         return df
     
 
@@ -643,9 +621,19 @@ class HoleAnalysis:
     
         speed_over_time = pd.DataFrame(data)
         speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
-        speed_over_time.to_csv(os.path.join(self.directory, 'speed_over_time.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"speed_over_time{suffix}.csv"
+
+        speed_over_time.to_csv(os.path.join(self.directory, filename), index=False)
 
         return speed_over_time
+    
+
 
     # METHOD ACCELERATION: 
 
@@ -688,9 +676,18 @@ class HoleAnalysis:
 
         acceleration_accross_time = pd.DataFrame(data)
         acceleration_accross_time = acceleration_accross_time.sort_values(by=['time'], ascending=True)
-        acceleration_accross_time.to_csv(os.path.join(self.directory, 'acceleration_accross_time.csv'), index=False)
 
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"acceleration_accross_time{suffix}.csv"
+
+        acceleration_accross_time.to_csv(os.path.join(self.directory, filename), index=False)
         return acceleration_accross_time
+        
+
     
     # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM THE CENTROID COORDINATES
     
@@ -727,14 +724,18 @@ class HoleAnalysis:
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time'], ascending=True)
 
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"ensemble_msd{suffix}.csv"
+
         # Save the DataFrame as a CSV file
-        output_path = os.path.join(self.directory, 'ensemble_msd.csv')
+        output_path = os.path.join(self.directory, filename)
         df.to_csv(output_path, index=False)
         print(f"Ensemble MSD saved to {output_path}")
         return df 
-
-
-
 
 
     # # METHOD ENSEMBLE_MSD: CALCULATES SQUARED DISTANCE FOR EVERY POSITION FROM FIRST TRACK APPEARANCE
@@ -847,7 +848,15 @@ class HoleAnalysis:
 
         tau_msd_df = pd.DataFrame({'tau': taus, 'msd': msds})
         tau_msd_df = tau_msd_df.sort_values(by='tau', ascending=True)
-        tau_msd_df.to_csv(os.path.join(self.directory, 'time_average_msd.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"time_average_msd{suffix}.csv"
+
+        tau_msd_df.to_csv(os.path.join(self.directory, filename), index=False)
    
         return tau_msd_df #.dropna()
     
@@ -922,14 +931,20 @@ class HoleAnalysis:
                 angles.append(angle)
                 data.append({'time': frame, 'angle': angle, 'file': file})
         
-        angle_values = pd.DataFrame(angles)
-        angle_values.to_csv(os.path.join(self.directory, 'angle_values.csv'), index=False)
 
         angle_over_time = pd.DataFrame(data)
         angle_over_time = angle_over_time.sort_values(by=['time'], ascending=True)
-        angle_over_time.to_csv(os.path.join(self.directory, 'angle_over_time.csv'), index=False)
 
-        return angle_values, angle_over_time   
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"angle_over_time{suffix}.csv"
+
+        angle_over_time.to_csv(os.path.join(self.directory, filename), index=False)
+
+        return angle_over_time   
     
     # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE + IF LARVAE OUTSIDE HOLE IS IT MOVING (IDENTIFYING THOSE CLOSE AND BURROWING BENEATH SURFACE)
     # ALSO CHANGED IT SUCH THAT IT KEEPS THE ORIGINAL DATAFRAME SO I CAN DO A VIDEO CHECK 
@@ -1311,7 +1326,7 @@ class HoleAnalysis:
     
 
 
-    # METHOD NUMBER_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE
+    # METHOD NUMBER_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
 
     def digging(self, df):
         # Smooth the positions
@@ -1372,7 +1387,15 @@ class HoleAnalysis:
 
         result = pd.concat(data, ignore_index=True)
         result = result.sort_values(by='frame', ascending=True)
-        result.to_csv(os.path.join(self.directory, 'number_digging.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"number_digging{suffix}.csv"
+
+        result.to_csv(os.path.join(self.directory, filename), index=False)
         return result
 
 
@@ -1733,7 +1756,15 @@ class HoleAnalysis:
         
         interaction_df = pd.DataFrame(data)
         melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
-        melted_df.to_csv(os.path.join(self.directory, 'interaction_types.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"interaction_types{suffix}.csv"
+
+        melted_df.to_csv(os.path.join(self.directory, filename), index=False)
 
 
     def contacts(self, proximity_threshold=1):
@@ -1860,7 +1891,14 @@ class HoleAnalysis:
 
         summary = pd.concat([summary, no_contact_df], ignore_index=True).sort_values("file")
 
-        summary.to_csv(os.path.join(self.directory, 'contacts.csv'), index=False)
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"contacts{suffix}.csv"
+
+        summary.to_csv(os.path.join(self.directory, filename), index=False)
 
 
 
@@ -1940,7 +1978,15 @@ class HoleAnalysis:
                 # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
         
         data = pd.concat(dfs, ignore_index=True)
-        data.to_csv(os.path.join(self.directory, 'correlations.csv'), index=False)
+
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"correlations{suffix}.csv"
+
+        data.to_csv(os.path.join(self.directory, filename), index=False)
 
         return data
      
@@ -2401,8 +2447,15 @@ class HoleAnalysis:
         print("Number of interaction rows:", interaction_data.shape[0])
         print("Interaction DataFrame head:\n", interaction_data.head())
 
+        if self.shorten:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
 
-        interaction_data.to_csv(os.path.join(self.directory, 'interactions.csv'), index=False)
+        filename = f"interactions{suffix}.csv"
+
+
+        interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
 
