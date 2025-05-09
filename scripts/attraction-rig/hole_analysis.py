@@ -42,6 +42,8 @@ class HoleAnalysis:
         self.use_shorten = True 
         self.shorten_duration = None
 
+        self.digging = None
+
 
 
     # METHOD COORDINATES: IDENTIFIES AND STORES THE HOLE COORDINATE FILES
@@ -88,6 +90,17 @@ class HoleAnalysis:
             # print(f"Shortened file saved: {shortened_path}")
         self.use_shorten = True
         self.shorten_duration = frame  # e.g., 600
+
+        
+    ### METHOD DIGGING_MASK: FILTERS FOR NON-DIGGING LARVAE
+
+    def digging_mask(self):
+
+        for track_file in self.track_files:
+            df = self.track_data[track_file]
+            df = self.compute_digging(df)
+            df.to_csv(os.path.join(self.directory, 'digging.csv'), index=False) # get rid 
+            self.track_data[track_file] = df[df['digging_status'] == False].copy()
 
 
 
@@ -428,7 +441,7 @@ class HoleAnalysis:
 
         df_distance_over_time = pd.DataFrame(data)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -448,6 +461,7 @@ class HoleAnalysis:
 
         for track_file in self.track_files:
             track_data = self.track_data[track_file]
+
 
             for frame in track_data['frame'].unique():
 
@@ -471,7 +485,7 @@ class HoleAnalysis:
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time', 'file'], ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -622,7 +636,7 @@ class HoleAnalysis:
         speed_over_time = pd.DataFrame(data)
         speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -677,7 +691,7 @@ class HoleAnalysis:
         acceleration_accross_time = pd.DataFrame(data)
         acceleration_accross_time = acceleration_accross_time.sort_values(by=['time'], ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -724,7 +738,7 @@ class HoleAnalysis:
         df = pd.DataFrame(data)
         df = df.sort_values(by=['time'], ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -849,7 +863,7 @@ class HoleAnalysis:
         tau_msd_df = pd.DataFrame({'tau': taus, 'msd': msds})
         tau_msd_df = tau_msd_df.sort_values(by='tau', ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -935,7 +949,7 @@ class HoleAnalysis:
         angle_over_time = pd.DataFrame(data)
         angle_over_time = angle_over_time.sort_values(by=['time'], ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -1326,9 +1340,9 @@ class HoleAnalysis:
     
 
 
-    # METHOD NUMBER_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
+    # METHOD COMPUTE_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
 
-    def digging(self, df):
+    def compute_digging(self, df):
         # Smooth the positions
         df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
         df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
@@ -1339,7 +1353,7 @@ class HoleAnalysis:
 
         # Distance and moving status
         df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
-        df['is_moving'] = df['distance'] > 0.1
+        df['is_moving'] = df['distance'] > 0.3
 
         # Cumulative and std
         df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
@@ -1349,13 +1363,17 @@ class HoleAnalysis:
         df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
         df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
 
-        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.05) | ((df['overall_std'] > 0.09) & (df['is_moving']))
-        
+        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.25) | ((df['overall_std'] > 0.5) & (df['is_moving']))
+
         ## smoothed final movement
-        window_size = 20
-        df['digging_status'] = (~df['final_movement']).rolling(window=window_size, center=True).apply(lambda x: x.sum() >= (window_size / 2)).fillna(0).astype(bool)
+        window_size = 50
+        df['digging_status'] = (
+            df.groupby('track_id')['final_movement']
+            .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size / 2)).fillna(0).astype(bool))
+        )
 
         return df
+
 
     # METHOD TOTAL_DIGGING: THIS METHOD DETECTS HOW MANY LARVAE ARE DIGGING 
 
@@ -1388,7 +1406,7 @@ class HoleAnalysis:
         result = pd.concat(data, ignore_index=True)
         result = result.sort_values(by='frame', ascending=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -1757,7 +1775,7 @@ class HoleAnalysis:
         interaction_df = pd.DataFrame(data)
         melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -1811,18 +1829,21 @@ class HoleAnalysis:
                             break
 
                     # save the bout
-                    interaction_id_local += 1
-                    for frame, dist in current_interaction:
-                        results.append({
-                            'file': track_file,
-                            'interaction': interaction_id_local,
-                            'frame': frame,
-                            'Interaction Pair': (track_a, track_b),
-                            'Distance': dist,
-                        })
 
-                else:
-                    i += 1  # not in contact, move to next frame
+                    frames = [f for f, _ in current_interaction]
+                    if frames[-1] - frames[0] + 1 == len(frames):  # no jumps
+                        interaction_id_local += 1
+                        for frame, dist in current_interaction:
+                            results.append({
+                                'file': track_file,
+                                'interaction': interaction_id_local,
+                                'frame': frame,
+                                'Interaction Pair': (track_a, track_b),
+                                'Distance': dist,
+                            })
+
+                    else:
+                        i += 1  # not in contact, move to next frame
 
             return results
     
@@ -1891,7 +1912,7 @@ class HoleAnalysis:
 
         summary = pd.concat([summary, no_contact_df], ignore_index=True).sort_values("file")
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -1917,6 +1938,8 @@ class HoleAnalysis:
         # EXTRACTED FROM THE ABOVE !
 
 
+
+    ### METHOD CORRELATIONS: QUANTIFY RELATIONSHIPS BETWEEN NEAREST NEIGHOUR DISTANCE AND SPEED ETC 
     def correlations(self):
 
         dfs = []
@@ -1979,7 +2002,7 @@ class HoleAnalysis:
         
         data = pd.concat(dfs, ignore_index=True)
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
@@ -1991,65 +2014,15 @@ class HoleAnalysis:
         return data
      
 
+
+
     def interactions(self):
 
         #### IDENTIFY INTERACTIONS
 
         dfs = []
 
-        # proximity_threshold = 20  # 10mm
-
-        # def process_track_pair(track_a, track_b, df, track_file):
-        #     results = []
-        #     track_a_data = df[df['track_id'] == track_a]
-        #     track_b_data = df[df['track_id'] == track_b]
-
-        #     common_frames = set(track_a_data['frame']).intersection(track_b_data['frame'])
-        #     common_frames = sorted(common_frames)
-
-        #     prev_frame = None
-        #     interaction_id_local = 0
-
-        #     for frame in common_frames:
-        #         point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-        #         point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-
-        #         a_tail = track_a_data[track_a_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
-        #         b_tail = track_b_data[track_b_data['frame'] == frame][['x_tail', 'y_tail']].to_numpy(dtype=float)
-
-        #         a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
-        #         b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
-
-        #         dist = np.linalg.norm(point_a - point_b)
-        #         if dist < proximity_threshold:
-        #             if prev_frame is None or frame != prev_frame + 1:
-        #                 interaction_id_local += 1
-
-        #             results.append({
-        #                 'Frame': frame,
-        #                 'Local Interaction ID': interaction_id_local,
-        #                 'file': track_file,
-        #                 'Interaction Pair': (track_a, track_b),  # hashable + order-independent
-        #                 'Distance': dist,
-        #                 'Track_1 x_tail': a_tail[0, 0],
-        #                 'Track_1 y_tail': a_tail[0, 1],
-        #                 'Track_1 x_body': point_a[0, 0],
-        #                 'Track_1 y_body': point_a[0, 1],
-        #                 'Track_1 x_head': a_head[0, 0],
-        #                 'Track_1 y_head': a_head[0, 1],
-        #                 'Track_2 x_tail': b_tail[0, 0],
-        #                 'Track_2 y_tail': b_tail[0, 1],
-        #                 'Track_2 x_body': point_b[0, 0],
-        #                 'Track_2 y_body': point_b[0, 1],
-        #                 'Track_2 x_head': b_head[0, 0],
-        #                 'Track_2 y_head': b_head[0, 1]
-        #             })
-
-        #             prev_frame = frame
-
-        #     return results
-
-        proximity_threshold = 10  # 10mm
+        proximity_threshold = 5  # 5mm
         min_interaction_frames = 5
         frame_buffer = 20  # Extend interaction by this many frames before and after
 
@@ -2072,7 +2045,8 @@ class HoleAnalysis:
                     point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
                     point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
 
-                    dist = np.linalg.norm(point_a - point_b)
+                    dist = float(np.linalg.norm(point_a - point_b))
+                    
                     if dist < proximity_threshold:
                         current_interaction.append(frame)
                         i += 1
@@ -2088,8 +2062,15 @@ class HoleAnalysis:
                     end_idx = min(len(common_frames), common_frames.index(current_interaction[-1]) + frame_buffer + 1)
                     interaction_frames = common_frames[start_idx:end_idx]
 
+                    max_allowed_gap = 2  # or 1 if you want stricter
+                    if np.any(np.diff(interaction_frames) > max_allowed_gap): ## check there arent jumps in frames if one larvae left or was disclided in digging idk 
+                        i = end_idx
+                        continue
+
+
                     interaction_id_local += 1
 
+    
                     for frame in interaction_frames:
                         point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
                         point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
@@ -2100,7 +2081,7 @@ class HoleAnalysis:
                         a_head = track_a_data[track_a_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
                         b_head = track_b_data[track_b_data['frame'] == frame][['x_head', 'y_head']].to_numpy(dtype=float)
 
-                        dist = np.linalg.norm(point_a - point_b)
+                        dist = float(np.linalg.norm(point_a - point_b))
 
                         results.append({
                             'Frame': frame,
@@ -2166,7 +2147,6 @@ class HoleAnalysis:
         interaction_data = interaction_data[['Frame', 'Interaction Number',*[col for col in interaction_data.columns if col not in ['Frame', 'Interaction Number']]]]
         
         
-
         #### DISTANCES BETWEEN ALL BODY PART COMBINATIONS 
 
         def euclidean_distance(df, x1, y1, x2, y2):
@@ -2222,7 +2202,6 @@ class HoleAnalysis:
                     (interaction_data['Track_2 y_head'] - interaction_data['Track_2 y_body'])**2)
         )
 
-
         #### ANGLE BETWEEN TAIL-BODY AND BODY-HEAD PARTS
 
         # Tail-Body Vector for Track 1
@@ -2274,17 +2253,17 @@ class HoleAnalysis:
             
 
         # Mapping from interaction_type (e.g., 'body-head') to coordinate columns
-        part_mapping = {
-            'tail-tail': ('x_tail', 'y_tail'),
-            'tail-body': ('x_body', 'y_body'),
-            'tail-head': ('x_head', 'y_head'),
-            'body-tail': ('x_tail', 'y_tail'),
-            'body-body': ('x_body', 'y_body'),
-            'body-head': ('x_head', 'y_head'),
-            'head-tail': ('x_tail', 'y_tail'),
-            'head-body': ('x_body', 'y_body'),
-            'head-head': ('x_head', 'y_head'),
-        }
+        # part_mapping = {
+        #     'tail-tail': ('x_tail', 'y_tail'),
+        #     'tail-body': ('x_body', 'y_body'),
+        #     'tail-head': ('x_head', 'y_head'),
+        #     'body-tail': ('x_tail', 'y_tail'),
+        #     'body-body': ('x_body', 'y_body'),
+        #     'body-head': ('x_head', 'y_head'),
+        #     'head-tail': ('x_tail', 'y_tail'),
+        #     'head-body': ('x_body', 'y_body'),
+        #     'head-head': ('x_head', 'y_head'),
+        # }
 
         # Function to compute angle between two vectors
         def angle_between_vectors(x1, y1, x2, y2):
@@ -2376,19 +2355,29 @@ class HoleAnalysis:
 
 
 
-
          #### == IDENTIFY CLOSEST POINT OF INTERACTION AND NORMALISE FRAMES == ####
 
-        min_distance_frames = interaction_data.groupby("Interaction Number")["min_distance"].idxmin()
+        # min_distance_frames = interaction_data.groupby("Interaction Number")["min_distance"].idxmin()
 
-        # Function to normalize frames based on min distance
+
+        # min_distance_frames = interaction_data.groupby("Interaction Number")["min_distance"].idxmin()
+
+        ### NORMALISE FRAMES TO FRAME OF CLOSEST NODE-NODE CONTACT E.G. HEAD-TAIL 
+
         def normalize_frames(group):
-            min_frame = group.loc[min_distance_frames[group.name], "Frame"]  # Get the min distance frame
-            group["Normalized Frame"] = group["Frame"] - min_frame  # Normalize all frames in the group
+            # min_frame = group.loc[min_distance_frames[group.name], "Frame"]  # Get the min distance frame
+            # group["Normalized Frame"] = group["Frame"] - min_frame  # Normalize all frames in the group
+            # return group
+        
+            min_distance_position = group["min_distance"].values.argmin()
+            min_frame = group.iloc[min_distance_position]["Frame"]
+            
+            group["Normalized Frame"] = group["Frame"] - min_frame
             return group
 
-        # Apply normalization within each group
         interaction_data = interaction_data.groupby("Interaction Number", group_keys=False).apply(normalize_frames)
+ 
+
 
         #### == NORMALISE TRACK COORDINATES TO MIDPOINT OF BODY COORDINATES AT THE CLOSEST DISTANCE == ####
 
@@ -2447,7 +2436,7 @@ class HoleAnalysis:
         print("Number of interaction rows:", interaction_data.shape[0])
         print("Interaction DataFrame head:\n", interaction_data.head())
 
-        if self.shorten:
+        if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
         else:
             suffix = ""
