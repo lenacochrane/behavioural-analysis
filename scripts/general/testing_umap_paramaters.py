@@ -117,75 +117,126 @@ os.makedirs(output_dir, exist_ok=True)
 
 print("\n🔁 Running UMAP + DBSCAN grid search...")
 
-neighbors_list = [2, 4, 3, 5, 8, 10, 15, 30, 55]
-min_dist_list = [0.01, 0.03, 0.1, 0.5]
+neighbors_list = [2, 4, 3, 5, 6, 7, 8, 10, 15, 30, 55]
+min_dist_list = [0.01, 0.02, 0.03, 0.5, 0.1, 0.5]
+metrics_list = ["cosine", "euclidean", "manhattan", "correlation"]
+
 summary = []
 
-for n in neighbors_list:
-    for d in min_dist_list:
-        print(f"\n🌍 UMAP: n_neighbors={n}, min_dist={d}")
-        umap_model = umap.UMAP(n_neighbors=n, min_dist=d, n_components=2,  metric='cosine', random_state=42)
-        X_umap = umap_model.fit_transform(X_scaled)
+for metric in metrics_list:
+    for n in neighbors_list:
+        for d in min_dist_list:
+            print(f"\n🌍 UMAP: metric={metric}, n_neighbors={n}, min_dist={d}")
+            umap_model = umap.UMAP(n_neighbors=n, min_dist=d, n_components=2,  metric=metric, random_state=42)
+            X_umap = umap_model.fit_transform(X_scaled)
 
-        # Save UMAP coordinates with condition label before clustering
-        umap_df = pd.DataFrame(X_umap, columns=["UMAP1", "UMAP2"], index=df_vectorized.index)
-        umap_df["condition"] = df_vectorized["condition"]
-        # umap_csv_path = os.path.join(output_dir, f"umap_coords_n{n}_d{d}.csv")
-        # umap_df.to_csv(umap_csv_path)
+            # Continue with everything else unchanged, but now include metric in filenames and plots
+            umap_df = pd.DataFrame(X_umap, columns=["UMAP1", "UMAP2"], index=df_vectorized.index)
+            umap_df["condition"] = df_vectorized["condition"]
 
-        # Save iso and group in the same figure side by side
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
-        for i, cond in enumerate(["iso", "group"]):
-            cond_df = umap_df[umap_df["condition"] == cond]
-            sns.scatterplot(data=cond_df, x="UMAP1", y="UMAP2", ax=axes[i], alpha=0.8)
-            axes[i].set_title(f"{cond} – n_neighbors={n}, min_dist={d}")
-            axes[i].set_xlabel("UMAP Dimension 1")
-            axes[i].set_ylabel("UMAP Dimension 2")
+            # Side-by-side iso/group plots
+            fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+            for i, cond in enumerate(["iso", "group"]):
+                cond_df = umap_df[umap_df["condition"] == cond]
+                sns.scatterplot(data=cond_df, x="UMAP1", y="UMAP2", ax=axes[i], alpha=0.8)
+                axes[i].set_title(f"{cond} – metric={metric}, n_neighbors={n}, min_dist={d}")
+                axes[i].set_xlabel("UMAP Dimension 1")
+                axes[i].set_ylabel("UMAP Dimension 2")
 
-        fig.suptitle(f"UMAP Projections by Condition – n_neighbors={n}, min_dist={d}", fontsize=14)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        joint_fname = f"umap_n{n}_d{d}_iso_vs_group.png"
-        plt.savefig(os.path.join(output_dir, joint_fname))
-        plt.close()
+            fig.suptitle(f"UMAP Projections – metric={metric}, n_neighbors={n}, min_dist={d}", fontsize=14)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            joint_fname = f"umap_{metric}_n{n}_d{d}_iso_vs_group.png"
+            plt.savefig(os.path.join(output_dir, joint_fname))
+            plt.close()
+
+            df_vectorized[f"UMAP_1_{metric}_n{n}_d{d}"] = X_umap[:, 0]
+            df_vectorized[f"UMAP_2_{metric}_n{n}_d{d}"] = X_umap[:, 1]
 
 
-        # DBSCAN clustering
-        clustering = DBSCAN(eps=0.5, min_samples=5).fit(X_umap)
-        labels = clustering.labels_
-        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        n_noise = list(labels).count(-1)
 
-        df_vectorized[f"UMAP_1_n{n}_d{d}"] = X_umap[:, 0]
-        df_vectorized[f"UMAP_2_n{n}_d{d}"] = X_umap[:, 1]
-        df_vectorized[f"cluster_n{n}_d{d}"] = labels
+            dbscan_eps_list = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+            dbscan_min_samples_list = [3, 5, 8, 10]
 
-        # Plot full clustered UMAP
-        plt.figure(figsize=(8, 6))
-        sns.scatterplot(
-            x=f"UMAP_1_n{n}_d{d}",
-            y=f"UMAP_2_n{n}_d{d}",
-            hue=f"cluster_n{n}_d{d}",
-            data=df_vectorized,
-            palette="tab10",
-            alpha=0.8,
-            legend=None
-        )
-        plt.title(f"UMAP (n_neighbors={n}, min_dist={d}) – {n_clusters} clusters, {n_noise} noise")
-        plt.xlabel("UMAP Dimension 1")
-        plt.ylabel("UMAP Dimension 2")
-        plt.tight_layout()
+            # DBSCAN clustering
+            
+            for eps in dbscan_eps_list:
+                for min_samp in dbscan_min_samples_list:
+                    clustering = DBSCAN(eps=eps, min_samples=min_samp).fit(X_umap)
+                    labels = clustering.labels_
+                    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+                    n_noise = list(labels).count(-1)
 
-        fname = f"umap_n{n}_d{d}_clusters.png"
-        plt.savefig(os.path.join(output_dir, fname))
-        plt.close()
+                    # Save clustering results to df
+                    label_col = f"cluster_{metric}_n{n}_d{d}_eps{eps}_min{min_samp}"
+                    df_vectorized[label_col] = labels
 
-        summary.append({
-            "n_neighbors": n,
-            "min_dist": d,
-            "n_clusters": n_clusters,
-            "n_noise_points": n_noise,
-            "plot_file": fname
-        })
+                    # Save plot
+                    plt.figure(figsize=(8, 6))
+                    sns.scatterplot(
+                        x=f"UMAP_1_{metric}_n{n}_d{d}",
+                        y=f"UMAP_2_{metric}_n{n}_d{d}",
+                        hue=label_col,
+                        data=df_vectorized,
+                        palette="tab10",
+                        alpha=0.8,
+                        legend=None
+                    )
+                    plt.title(f"UMAP={metric}, n={n}, d={d}\nDBSCAN: eps={eps}, min_samp={min_samp} – {n_clusters} clusters, {n_noise} noise")
+                    plt.xlabel("UMAP Dimension 1")
+                    plt.ylabel("UMAP Dimension 2")
+                    plt.tight_layout()
+
+                    fname = f"umap_{metric}_n{n}_d{d}_eps{eps}_min{min_samp}_clusters.png"
+                    plt.savefig(os.path.join(output_dir, fname))
+                    plt.close()
+
+                    summary.append({
+                        "metric": metric,
+                        "n_neighbors": n,
+                        "min_dist": d,
+                        "dbscan_eps": eps,
+                        "min_samples": min_samp,
+                        "n_clusters": n_clusters,
+                        "n_noise_points": n_noise,
+                        "plot_file": fname
+                    })
+            # clustering = DBSCAN(eps=0.5, min_samples=5).fit(X_umap)
+            # labels = clustering.labels_
+            # n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+            # n_noise = list(labels).count(-1)
+
+            # df_vectorized[f"UMAP_1_{metric}_n{n}_d{d}"] = X_umap[:, 0]
+            # df_vectorized[f"UMAP_2_{metric}_n{n}_d{d}"] = X_umap[:, 1]
+            # df_vectorized[f"cluster_{metric}_n{n}_d{d}"] = labels
+
+            # # Plot clustered
+            # plt.figure(figsize=(8, 6))
+            # sns.scatterplot(
+            #     x=f"UMAP_1_{metric}_n{n}_d{d}",
+            #     y=f"UMAP_2_{metric}_n{n}_d{d}",
+            #     hue=f"cluster_{metric}_n{n}_d{d}",
+            #     data=df_vectorized,
+            #     palette="tab10",
+            #     alpha=0.8,
+            #     legend=None
+            # )
+            # plt.title(f"UMAP ({metric}, n_neighbors={n}, min_dist={d}) – {n_clusters} clusters, {n_noise} noise")
+            # plt.xlabel("UMAP Dimension 1")
+            # plt.ylabel("UMAP Dimension 2")
+            # plt.tight_layout()
+
+            # fname = f"umap_{metric}_n{n}_d{d}_clusters.png"
+            # plt.savefig(os.path.join(output_dir, fname))
+            # plt.close()
+
+            # summary.append({
+            #     "metric": metric,
+            #     "n_neighbors": n,
+            #     "min_dist": d,
+            #     "n_clusters": n_clusters,
+            #     "n_noise_points": n_noise,
+            #     "plot_file": fname
+            # })
 
 summary_df = pd.DataFrame(summary)
 summary_df.to_csv(os.path.join(output_dir, "umap_dbscan_summary.csv"), index=False)
