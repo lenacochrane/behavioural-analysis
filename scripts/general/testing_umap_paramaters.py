@@ -112,7 +112,7 @@ print("✅ Scaling done.")
 
 ####-- GRID SEARCH: UMAP + DBSCAN PARAMETER COMBINATIONS  --####
 
-output_dir = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/test-umap"
+output_dir = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/umap-gridsearch"
 os.makedirs(output_dir, exist_ok=True)
 
 print("\n🔁 Running UMAP + DBSCAN grid search...")
@@ -166,9 +166,24 @@ for metric in metrics_list:
                     n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
                     n_noise = list(labels).count(-1)
 
+
                     # Save clustering results to df
                     label_col = f"cluster_{metric}_n{n}_d{d}_eps{eps}_min{min_samp}"
                     df_vectorized[label_col] = labels
+
+                    # ✅ COUNT iso/group per cluster
+                    cluster_counts = df_vectorized[[label_col, "condition"]].value_counts().reset_index()
+                    cluster_counts.columns = ["cluster_label", "condition", "count"]
+
+                    pivot_counts = cluster_counts.pivot(index="cluster_label", columns="condition", values="count").fillna(0).astype(int)
+
+                    # Save summary CSV for this clustering
+                    cluster_csv_name = f"cluster_counts_{metric}_n{n}_d{d}_eps{eps}_min{min_samp}.csv"
+                    pivot_counts.to_csv(os.path.join(output_dir, cluster_csv_name))
+
+                    # # Save clustering results to df
+                    # label_col = f"cluster_{metric}_n{n}_d{d}_eps{eps}_min{min_samp}"
+                    # df_vectorized[label_col] = labels
 
                     # Save plot
                     plt.figure(figsize=(8, 6))
