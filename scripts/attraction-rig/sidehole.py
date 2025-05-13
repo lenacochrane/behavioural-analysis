@@ -23,6 +23,8 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
+    # analysis.digging_mask()
+
 
     # analysis.post_processing()
     # analysis.quality_control()
@@ -32,7 +34,7 @@ def perform_analysis(directory):
     # analysis.hole_boundary(scale_factor=1.5)
 
     #METHOD TO SHORTEN
-    analysis.shorten(frame=600)
+    # analysis.shorten(frame=600)
     
     # CALL METHODS FOR LARVAEL BEHAVIOUR 
     # analysis.trajectory()
@@ -42,7 +44,7 @@ def perform_analysis(directory):
     # analysis.acceleration()
     # analysis.euclidean_distance()
     # analysis.euclidean_distance_variance(200, 600) # currently plotting the plataeu but arbitary time start for plateu 
-    analysis.distance_from_centre()
+    # analysis.distance_from_centre()
 
 
     ### PSEUDO POPULATION MODEL
@@ -68,7 +70,7 @@ def perform_analysis(directory):
 
     # analysis.hole_euclidean_distance()
 
-    # analysis.interaction_types()
+    analysis.interaction_types()
 
 
     # analysis.interactions()
@@ -87,15 +89,13 @@ if __name__ == "__main__":
 
 
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-
-
-
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-contacts/2-files')
 
 
 

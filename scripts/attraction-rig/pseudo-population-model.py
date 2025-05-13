@@ -16,7 +16,9 @@ import cv2
 from shapely import wkt
 from shapely.affinity import scale
 from shapely.wkt import loads as load_wkt
-import random
+from itertools import combinations
+from joblib import Parallel, delayed
+
 
 
 ### PSEUDO DATAFRAMES: MULTIPLE TRACKS FOR EACH FRAME (EACH TRACK HAS AN ASSOCIATED FILENAME)
@@ -307,56 +309,108 @@ def trajectory(directory):
 
 
 
-from itertools import combinations
-from joblib import Parallel, delayed
-import numpy as np
-import pandas as pd
-import os
-
 def contact(directory, proximity_threshold=1):
 
-    def process_track_pair(track_a, track_b, df, track_file):
+    def process_track_pair(track_a, track_b, df, track_file, proximity_threshold=1):
         results = []
 
         track_a_data = df[df['track_id'] == track_a]
         track_b_data = df[df['track_id'] == track_b]
 
         common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+
+        if not common_frames:
+            return results
+
+        # Precompute node-node distances for all common frames
+        parts = ['head', 'body', 'tail']
+        distance_rows = []
+
+        for frame in common_frames:
+            row_a = track_a_data[track_a_data['frame'] == frame]
+            row_b = track_b_data[track_b_data['frame'] == frame]
+
+            if row_a.empty or row_b.empty:
+                continue
+
+            positions = {}
+            for part in parts:
+                positions[f'a_{part}'] = row_a[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+                positions[f'b_{part}'] = row_b[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+
+            distances = {
+                'head_head': np.linalg.norm(positions['a_head'] - positions['b_head']),
+                'body_body': np.linalg.norm(positions['a_body'] - positions['b_body']),
+                'tail_tail': np.linalg.norm(positions['a_tail'] - positions['b_tail']),
+                'head_tail': np.linalg.norm(positions['a_head'] - positions['b_tail']),
+                'tail_head': np.linalg.norm(positions['a_tail'] - positions['b_head']),
+                'body_head': np.linalg.norm(positions['a_body'] - positions['b_head']),
+                'head_body': np.linalg.norm(positions['a_head'] - positions['b_body']),
+                'body_tail': np.linalg.norm(positions['a_body'] - positions['b_tail']),
+                'tail_body': np.linalg.norm(positions['a_tail'] - positions['b_body']),
+            }
+
+            for interaction_type, dist in distances.items():
+                distance_rows.append({
+                    'frame': frame,
+                    'interaction_type': interaction_type,
+                    'Distance': dist
+                })
+
+        if not distance_rows:
+            return results
+
+        # Convert to DataFrame
+        dist_df = pd.DataFrame(distance_rows)
+
+        # Get min distance & type per frame
+        min_df = dist_df.groupby('frame').apply(
+            lambda g: g.loc[g['Distance'].idxmin()]
+        ).reset_index(drop=True)
+
+        # Now iterate through min_df and build bouts
         interaction_id_local = 0
         i = 0
+        frames = min_df['frame'].values
 
-        while i < len(common_frames):
-            frame = common_frames[i]
-            point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-            point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-            dist = np.linalg.norm(point_a - point_b)
+        while i < len(min_df):
+            frame = frames[i]
+            dist = min_df.loc[i, 'Distance']
+            interaction_type = min_df.loc[i, 'interaction_type']
 
             if dist < proximity_threshold:
-                current_interaction = []
-                while i < len(common_frames):
-                    frame = common_frames[i]
-                    point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                    point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                    dist = np.linalg.norm(point_a - point_b)
+                current_bout = []
+
+                while i < len(min_df):
+                    frame = frames[i]
+                    dist = min_df.loc[i, 'Distance']
+                    interaction_type = min_df.loc[i, 'interaction_type']
 
                     if dist < proximity_threshold:
-                        current_interaction.append((frame, dist))
+                        current_bout.append((frame, dist, interaction_type))
                         i += 1
                     else:
                         break
+            else:
+                i += 1
+                continue
 
+            # Check for frame continuity
+            bout_frames = [f for f, _, _ in current_bout]
+            if bout_frames[-1] - bout_frames[0] + 1 == len(bout_frames):
                 interaction_id_local += 1
-                for frame, dist in current_interaction:
+                for frame, dist, interaction_type in current_bout:
                     results.append({
                         'file': track_file,
                         'interaction': interaction_id_local,
                         'frame': frame,
                         'Interaction Pair': (track_a, track_b),
                         'Distance': dist,
+                        'Interaction Type': interaction_type
                     })
-            else:
-                i += 1
-        return results
+
+        return results 
+
 
     all_data = []
     no_contacts = []
@@ -375,12 +429,11 @@ def contact(directory, proximity_threshold=1):
         track_combinations = list(combinations(track_ids, 2))
 
         all_results = Parallel(n_jobs=-1)(
-            delayed(process_track_pair)(track_a, track_b, df, pseudo_track)
+            delayed(process_track_pair)(track_a, track_b, df, pseudo_track, proximity_threshold)
             for track_a, track_b in track_combinations
         )
 
         flattened_results = [item for sublist in all_results for item in sublist]
-
         if not flattened_results:
             print(f"No contact results for {pseudo_track}")
             no_contacts.append(pseudo_track)
@@ -394,72 +447,126 @@ def contact(directory, proximity_threshold=1):
         print("No contacts detected in any file.")
         return None
 
+    for file in no_contacts:
+        placeholder = pd.DataFrame([{
+            'file': file,
+            'interaction': np.nan,
+            'frame': np.nan,
+            'Interaction Pair': None,
+            'Distance': np.nan,
+            'Interaction Type': None,
+            'Interaction Number': np.nan
+        }])
+        all_data.append(placeholder)
+
     interaction_data = pd.concat(all_data, ignore_index=True)
-    # Assign global interaction IDs across files and pairs
+
     interaction_data['Interaction Number'] = (
         interaction_data
-        .groupby(['file', 'interaction'])
+        .groupby(['file','Interaction Pair', 'interaction'])
         .ngroup() + 1  # make it start at 1
     )
     interaction_data.drop(columns=['interaction'], inplace=True)  # Drop the local ID if you don't need it
 
+    interaction_data = interaction_data.sort_values("file")
+    output_filename = f"contacts_{proximity_threshold}mm.csv"
+    interaction_data.to_csv(os.path.join(directory, output_filename), index=False)
 
-
-    durations = (
-        interaction_data.groupby("Interaction Number")
-        .agg(
-            duration_seconds=("frame", "count"),
-            file=("file", "first")
-        )
-    )
-
-    contact_counts = durations.groupby("file").size().reset_index(name="contact_bouts")
-    avg_durations = durations.groupby("file")["duration_seconds"].mean().reset_index(name="avg_duration_seconds")
-
-    summary = pd.merge(contact_counts, avg_durations, on="file")
-
-    if no_contacts:
-        no_contact_df = pd.DataFrame({
-            'file': no_contacts,
-            'contact_bouts': 0,
-            'avg_duration_seconds': np.nan
-        })
-        summary = pd.concat([summary, no_contact_df], ignore_index=True)
-
-    summary = summary.sort_values("file")
-    summary.to_csv(os.path.join(directory, 'contacts.csv'), index=False)
-
-    return summary
+    return interaction_data
 
 
 
 
-# contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
-# pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-# trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/10-minute-agarose-behaviour/n10-pseudo-population-model')
+def correlations(directory):
+
+    dfs = []
+
+    files = os.listdir(directory)
+    pseudo_files = [f for f in files if f.startswith('pseudo_population_') and f.endswith('.csv')]
+
+    for pseudo_track in pseudo_files:
+        file_path = os.path.join(directory, pseudo_track)
+        df = pd.read_csv(file_path)
+        df = df.sort_values(by='frame', ascending=True)
+
+        def speed(group, x, y):
+            dx = group[x].diff()
+            dy = group[y].diff()
+            distance = np.sqrt(dx**2 + dy**2)
+            dt = group['frame'].diff()
+            speed = distance / dt.replace(0, np.nan) # Avoid division by zero
+            return speed
+
+        df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
+        df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
+       
+
+        def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
+            dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
+            magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
+            magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
+
+            # Avoid division by zero
+            cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+            cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
+            
+            return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
+        
+        df['v1_x'] = df['x_head'] - df['x_body']
+        df['v1_y'] = df['y_head'] - df['y_body']
+        df['v2_x'] = df['x_tail'] - df['x_body']
+        df['v2_y'] = df['y_tail'] - df['y_body']
+
+        # Apply function correctly
+        df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
+
+        df['body-body'] = np.nan 
+
+        for frame in df['frame'].unique():
+            unique_frame =  df[df['frame'] == frame]
+            if len(unique_frame) < 2:
+                continue
+            body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
+            distance = cdist(body_coordinates, body_coordinates, 'euclidean')
+            np.fill_diagonal(distance, np.nan)
+
+            # unique_frame['body-body'] = np.nanmin(distance, axis=1)
+            df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
+
+        dfs.append(df) 
+               
+    data = pd.concat(dfs, ignore_index=True)
+
+    data.to_csv(os.path.join(directory, 'correlations.csv'), index=False)
 
 
-# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated', list(range(1, 101, 1)))
-# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed', list(range(1, 101, 1)))
-# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated', list(range(1, 101, 1)))
-# time_average_msd('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed', list(range(1, 101, 1)))
-
-pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
-pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
-pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-pseudo_population_euclidean_distance('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 
 
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-distance_from_centre('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+#############################
+
+#### FUNCTIONS TO CHOOSE ####
+
+# contact('', proximity_threshold=)
+# time_average_msd('', list(range(1, 101, 1)))
+# correlations
+# pseudo_population_euclidean_distance
+# trajectory
+# distance_from_centre
+
+#############################
 
 
-trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
-trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
-trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-trajectory('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated', proximity_threshold=5)
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed', proximity_threshold=5)
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated', proximity_threshold=5)
+contact('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed', proximity_threshold=5)
+
+
+
+
+
+
+
 

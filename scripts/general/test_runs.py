@@ -11,100 +11,41 @@ import numpy as np
 from shapely.geometry import Point, Polygon
 from shapely import wkt
 
-# directory = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated'
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
+# # Load your data
+# # Load data
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/N10/digging.csv')
 
-# for file in os.listdir(directory):
-#     if file.endswith('tracks.feather'):
-#         path = os.path.join(directory, file)
-#         df = pd.read_feather(path)
-#         print(f"File: {file}")
+# # Convert to int for plotting
+# df['digging_status'] = df['digging_status'].astype(int)
 
-#         # Unique tracks
-#         track_ids = df['track_id'].unique()
-#         print(f"Number of unique tracks: {len(track_ids)}")
+# # Unique tracks
+# track_ids = df['track_id'].unique()
 
-#         # Check for gaps
-#         track_gaps = {}
-#         for track_id in track_ids:
-#             track_df = df[df['track_id'] == track_id].sort_values(by='frame')
-#             frames = track_df['frame'].astype(int).tolist()
+# # Plot setup
+# fig, axes = plt.subplots(len(track_ids), 1, figsize=(12, 3 * len(track_ids)), sharex=True)
 
-#             missing_frames = [f for f in range(min(frames), max(frames) + 1) if f not in frames]
-#             if missing_frames:
-#                 track_gaps[track_id] = missing_frames
+# # Ensure axes is iterable
+# if len(track_ids) == 1:
+#     axes = [axes]
 
-#         if track_gaps:
-#             print("Tracks with missing frames:")
-#             for track, gaps in track_gaps.items():
-#                 print(f"  Track {track} has missing frames: {gaps}")
-#         else:
-#             print("No missing frames detected in any track.")
+# # Plot for each track
+# for i, track in enumerate(track_ids):
+#     ax = axes[i]
+#     track_df = df[df['track_id'] == track]
+#     ax.plot(track_df['frame'], track_df['digging_status'], drawstyle='steps-post')
+#     ax.set_title(f'Track {track} Digging Status')
+#     ax.set_ylabel('Digging (0=No, 1=Yes)')
+#     ax.set_ylim(-0.1, 1.1)
 
-#         # Check for jumps > 30 pixels
-#         big_jumps = []
-#         for track_id in track_ids:
-#             track = df[df['track_id'] == track_id].sort_values('frame')
-#             coords = track[['x_body', 'y_body']].values
-#             frames = track['frame'].values
-#             if len(coords) < 2:
-#                 continue
-#             dists = np.linalg.norm(np.diff(coords, axis=0), axis=1)
-#             for i, dist in enumerate(dists):
-#                 if dist > 30:
-#                     big_jumps.append({
-#                         'track_id': track_id,
-#                         'frame': frames[i+1],  # +1 because diff reduces index
-#                         'jump': dist
-#                     })
-
-#         if big_jumps:
-#             print("Jumps > 30 pixels:")
-#             for jump in big_jumps:
-#                 print(f"  Track {jump['track_id']} - Frame {jump['frame']} - Jump = {jump['jump']:.2f} pixels")
-#         else:
-#             print("No jumps > 30 pixels detected.")
-
-#         print("-" * 60)
-
-
-# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated/number_digging.csv')
-# df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed/number_digging.csv')
-# sns.lineplot(data=df, x='frame', y='number_digging', label='si')
-# sns.lineplot(data=df1, x='frame', y='number_digging', label='gh')
+# # Final formatting
+# axes[-1].set_xlabel('Frame')
+# plt.tight_layout()
 # plt.show()
 
 
-
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/contacts.csv')
-df['condition'] = 'gh'
-
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/contacts.csv')
-df1['condition'] = 'si'
-
-
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/contacts.csv')
-df2['condition'] = 'gh_pseudo'
-
-
-df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/contacts.csv')
-df3['condition'] = 'si_pseudo'
-
-
-
-df0 = pd.concat([df, df1, df2, df3], ignore_index=True)
-
-
-sns.barplot(data=df0, x='condition', y='avg_duration_seconds')
-plt.title('cropped 10 mins-number')
-plt.show()
-
-
-# sns.lineplot(data=df0, x='time', y='average_distance', hue='condition')
-# sns.lineplot(data=df, x='time', y='average_distance', label='gh')
-# sns.lineplot(data=df1, x='time', y='average_distance', label='si')
-# sns.lineplot(data=df2, x='frame', y='average_distance', label='gh_pseudo')
-# sns.lineplot(data=df3, x='frame', y='average_distance', label='si_pseudo')
-
-plt.xlim(0,600)
-plt.show()
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-paramaters-gridsearch/1-grid/n2/2025-03-03_14-03-34_td4.tracks.feather')
+print(df)

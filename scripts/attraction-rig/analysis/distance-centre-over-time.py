@@ -46,7 +46,7 @@ plt.figure(figsize=(8,6))
 # df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
 
 ## N1
-df = pd.concat([df1, df2], ignore_index=True)
+# df = pd.concat([df1, df2], ignore_index=True)
 
 ## N2
 # df = pd.concat([df3, df4], ignore_index=True)
@@ -56,13 +56,14 @@ df = pd.concat([df1, df2], ignore_index=True)
 
 ## PEUDO N10
 # df = pd.concat([df5, df6, df8, df7], ignore_index=True)
+df = pd.concat([df5,  df8], ignore_index=True) # GH
 
 ## PEUDO N2
 # df = pd.concat([df3, df4, df9, df10], ignore_index=True)
 
 
 # Manually assign DataFrames to specific subplots using seaborn.lineplot
-sns.lineplot(data=df, x='frame', y='distance_from_centre')
+sns.lineplot(data=df, x='frame', y='distance_from_centre', hue='condition')
 
 
 plt.xlabel('Time (s)', fontsize=12)
@@ -76,7 +77,7 @@ plt.title('Distance from Centre', fontsize=16, fontweight='bold')
 # Adjust layout to prevent overlap, considering the overall title
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/distance-from-centre-n1.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/distance-from-centre-n10-pseudo-gh-600.png', dpi=300, bbox_inches='tight')
 
 
 # Show the plot

@@ -27,6 +27,19 @@ print(df['condition'].value_counts())
 
 ####-- DECIDE FEATURE COLUMNS --####
 
+feature_columns = [
+    # "min_distance",  
+    "track1_speed", "track2_speed", 
+    "track1_acceleration", "track2_acceleration",
+    "track1_angle", "track2_angle",
+    
+    # NEW spatial features
+    "t1_tail-tail_t2", "t1_tail-body_t2", "t1_tail-head_t2",
+    "t1_body-tail_t2", "t1_body-body_t2", "t1_body-head_t2",
+    "t1_head-tail_t2", "t1_head-body_t2", "t1_head-head_t2"
+]
+
+
 # feature_columns = [
 #     "min_distance",  
 #     "track1_speed", "track2_speed", 
@@ -35,13 +48,13 @@ print(df['condition'].value_counts())
 #     "track1_angle", "track2_angle", "track1_approach_angle", 'track2_approach_angle'
 # ]
 
-feature_columns = [
-    "min_distance",  
-    "track1_speed", "track2_speed", 
-    "track1_acceleration", "track2_acceleration",
-    # "track1_length", "track2_length",  
-    "track1_angle", "track2_angle", 
-    "track1_approach_angle", "track2_approach_angle",
+# feature_columns = [
+#     "min_distance",  
+#     "track1_speed", "track2_speed", 
+#     "track1_acceleration", "track2_acceleration",
+#     "track1_length", "track2_length",  
+#     "track1_angle", "track2_angle", 
+#     # "track1_approach_angle", "track2_approach_angle",
 
     # # # Coordinates for Track 1
     # "Track_1 x_tail", "Track_1 y_tail",
@@ -52,7 +65,7 @@ feature_columns = [
     # "Track_2 x_tail", "Track_2 y_tail",
     # "Track_2 x_body", "Track_2 y_body",
     # "Track_2 x_head", "Track_2 y_head"
-]
+#
 
 # feature_columns = [
 
@@ -81,14 +94,14 @@ def crop_interaction(group):
     center_pos = group.index.get_loc(center_idx)
 
     # Enforce symmetrical crop range
-    if center_pos < 20 or (center_pos + 20) >= len(group):
+    if center_pos < 15 or (center_pos + 15) >= len(group):
         return None
 
-    cropped = group.iloc[center_pos - 20 : center_pos + 21].copy()
+    cropped = group.iloc[center_pos - 15 : center_pos + 16].copy()
     cropped["interaction_id"] = group["interaction_id"].iloc[0]
 
     # ✅ Make sure resulting Normalized Frame values are correct
-    expected_frames = list(range(-20, 21))
+    expected_frames = list(range(-15, 16))
     actual_frames = list(cropped["Normalized Frame"])
 
     if sorted(actual_frames) != expected_frames:
@@ -183,7 +196,7 @@ print("✅ Scaling done.")
 print("\n🌍 Running UMAP...")
 # umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42) # old one
 # umap_model = umap.UMAP(n_neighbors=10, min_dist=0.01, n_components=2, random_state=42) WORKED BETTER
-umap_model = umap.UMAP(n_neighbors=5, min_dist=0.01, n_components=2, random_state=42)
+umap_model = umap.UMAP(n_neighbors=55, min_dist=0.01, n_components=2, random_state=42)
 
 X_umap = umap_model.fit_transform(X_scaled)
 print("✅ UMAP done.")

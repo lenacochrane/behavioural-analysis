@@ -35,40 +35,22 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 
 
-
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df5, df8], ignore_index=True)
+df = pd.concat([df3, df10], ignore_index=True)
 
-bins = list(range(0, 90, 10))  # [0, 10, 20, ..., 100]
-df['distance_bin'] = pd.cut(df['body-body'], bins=bins)
+sns.histplot(data=df, x='body-body', hue='condition', stat='density', common_norm=False, alpha=0.5, binwidth=1, multiple='dodge')
 
+plt.xlabel('Body-Body Distance (mm)', fontsize=12, fontweight='bold')
+plt.ylabel('Probability', fontsize=12, fontweight='bold')
 
-# binned_summary = df.groupby(['distance_bin', 'condition'])['angle'].mean().reset_index()
-
-
-sns.barplot(
-    data=df,
-    x='distance_bin',
-    y='speed',
-    hue='condition',
-    ci='sd',
-    edgecolor='black'
-)
-
-
-plt.xlabel('Body-Body Distance', fontsize=12, fontweight='bold')
-plt.ylabel('Speed', fontsize=12, fontweight='bold')
-
-plt.title('Correlation: Distance and Speed', fontsize=16, fontweight='bold')
+plt.title('Nearest Neighour Distance Distriubtion', fontsize=16, fontweight='bold')
 
 plt.tight_layout(rect=[1, 1, 1, 1])
 
-
 plt.xticks(rotation=45)
 
-
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n10-grouphoused-pseudo-speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n2-group-pseudo-body-proximity-1.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

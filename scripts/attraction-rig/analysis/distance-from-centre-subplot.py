@@ -40,7 +40,7 @@ df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analy
 df10['condition'] = 'PSEUDO-GH_N2'
 
 
-plt.figure(figsize=(8,6))
+
 
 ## ALL DF
 # df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
@@ -55,34 +55,46 @@ plt.figure(figsize=(8,6))
 # df = pd.concat([df5, df6], ignore_index=True)
 
 ## PEUDO N10
-# df = pd.concat([df5, df6, df8, df7], ignore_index=True)
+# df = pd.concat([ df6, df7], ignore_index=True) # si
 # df = pd.concat([df5, df8], ignore_index=True) #gh
 
 ## PEUDO N2
-# df = pd.concat([df3, df4, df9, df10], ignore_index=True)
+# df = pd.concat([df4, df9], ignore_index=True) #si
 df = pd.concat([df3, df10], ignore_index=True) # gh
 
 
-# ###### DF TIME FRAME
-# df = df[df['frame'] < 601]
+
+# Create subplots
+fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
+axes = axes.flatten()
+
+for i in range(6):
+    start = i * 600
+    end = start + 600
+    df_interval = df[(df['frame'] >= start) & (df['frame'] < end)]
+    
+    sns.histplot(
+        data=df_interval,
+        x='distance_from_centre',
+        hue='condition',
+        stat='density',
+        common_norm=False,
+        alpha=0.5,
+        ax=axes[i], bins=50
+    )
+    
+    axes[i].set_title(f'{start}-{end} frames', fontsize=14, fontweight='bold')
+    axes[i].set_xlabel('Distance From Centre (mm)', fontsize=10, fontweight='bold')
+    axes[i].set_ylabel('Density', fontsize=10, fontweight='bold')
+    axes[i].tick_params(axis='x', rotation=45)
+    axes[i].tick_params(axis='both', labelsize=10)
 
 
-sns.histplot(data=df, x='distance_from_centre', hue='condition', stat='density', common_norm=False, alpha=0.5)
-
-
-plt.xlabel('Distance From Centre (mm) ', fontsize=12)
-plt.ylabel('Probability', fontsize=12)
-
-# plt.xlim(800,1000)
-
-# Add an overall title to the entire figure
-plt.title('Distances from the Centre Distribution', fontsize=16, fontweight='bold')
-
-# Adjust layout to prevent overlap, considering the overall title
+# Adjust layout
+plt.suptitle('Distance from Centre Distribution Over Time', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/n2-pseudo-gh.png', dpi=300, bbox_inches='tight')
-
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/subplot-n2-pseudo-gh.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()
