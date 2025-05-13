@@ -1342,10 +1342,20 @@ class HoleAnalysis:
 
     # METHOD COMPUTE_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
 
+    # is_moving>0.1, disp_win=10, rate>0.1, std_win=10, std>0.1, dig_win=50
+
     def compute_digging(self, df):
-        # Smooth the positions
-        df['x'] = df['x_body'].rolling(window=5, min_periods=1).mean()
-        df['y'] = df['y_body'].rolling(window=5, min_periods=1).mean()
+        df = df.sort_values(['track_id', 'frame']).reset_index(drop=True)
+
+        # Smooth x and y
+        df['x'] = (
+            df.groupby('track_id', group_keys=False)['x_body']
+            .apply(lambda x: x.rolling(window=5, min_periods=1).mean())
+        )
+        df['y'] = (
+            df.groupby('track_id', group_keys=False)['y_body']
+            .apply(lambda y: y.rolling(window=5, min_periods=1).mean())
+        )
 
         # Differences
         df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
@@ -1353,17 +1363,17 @@ class HoleAnalysis:
 
         # Distance and moving status
         df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
-        df['is_moving'] = df['distance'] > 0.3
+        df['is_moving'] = df['distance'] > 0.1
 
         # Cumulative and std
         df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
-        df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(5) / 5).fillna(0)
+        df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(10) / 10).fillna(0)
 
-        df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
-        df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=5, min_periods=1).std())
+        df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
+        df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
         df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
 
-        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.25) | ((df['overall_std'] > 0.5) & (df['is_moving']))
+        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.1) | ((df['overall_std'] > 0.1) & (df['is_moving']))
 
         ## smoothed final movement
         window_size = 50
@@ -1384,7 +1394,7 @@ class HoleAnalysis:
         for match in self.matching_pairs:
             track_file = match['track_file']
             df = self.track_data[track_file]
-            df = self.digging(df)  # apply dynamic method
+            df = self.compute_digging(df)  # apply dynamic method
 
             if cleaned:
                 df['count'] = df.groupby('frame')['track_id'].transform('nunique')
@@ -1415,8 +1425,67 @@ class HoleAnalysis:
 
         result.to_csv(os.path.join(self.directory, filename), index=False)
         return result
+    
+
+    ### METHOD DIGGING_BEHAVIOUR:
+
+    def digging_behaviour(self):
+
+        single_larvae = []
+        two_larvae = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+            df = self.compute_digging(df)
+
+            for frame, group in df.groupby('frame'):
+                digging = group[group['digging_status']]
+                not_digging = group[~group['digging_status']]
+
+                # Exactly 1 digger: distance to all others
+                if len(digging) == 1 and not not_digging.empty:
+
+                    digger_coords = digging[['x_body', 'y_body']].values
+                    others_coords = not_digging[['x_body', 'y_body']].values
+                    distances = cdist(digger_coords, others_coords)[0]
+
+                    for target_id, dist in zip(not_digging['track_id'], distances):
+                        single_larvae.append({
+                            'frame': frame,
+                            'file': track_file,
+                            'digger_id': digging['track_id'].values[0],
+                            'target_id': target_id,
+                            'distance': dist
+                        })
+                # Exactly 2 diggers: mutual distance
+                elif len(digging) == 2:
+                    coords = digging[['x_body', 'y_body']].values
+                    dist = np.linalg.norm(coords[0] - coords[1])
+                    ids = digging['track_id'].values
+                    two_larvae.append({
+                        'frame': frame,
+                        'file': track_file,
+                        'digger_id_1': ids[0],
+                        'digger_id_2': ids[1],
+                        'distance': dist
+                    })
+
+        df_single = pd.DataFrame(single_larvae)    
+        df_two = pd.DataFrame(two_larvae)
+
+        df_single.to_csv(os.path.join(self.directory, 'digging_distances_single.csv'), index=False)
+        df_two.to_csv(os.path.join(self.directory, 'digging_distances_pair.csv'), index=False)
 
 
+
+
+
+
+
+
+
+    ### METHOD
     def detect_larvae_leaving(self, df, perimeter, total_larvae):
         
         df['outside_perimeter'] = df.apply(lambda row: not perimeter.contains(Point(row['x_body'], row['y_body'])),axis=1)
