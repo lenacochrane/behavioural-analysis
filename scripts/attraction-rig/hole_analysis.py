@@ -1784,6 +1784,9 @@ class HoleAnalysis:
 
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
 
+
+
+
     ### METHOD CONTACTS: IDENTIFY INTERACTION FREQUENCY AND DURATION
 
     def contacts(self, proximity_threshold=1):
@@ -1791,62 +1794,198 @@ class HoleAnalysis:
         data = []
         no_contacts = []
 
-        proximity_threshold = proximity_threshold  # 1mm
+        # def process_track_pair(track_a, track_b, df, track_file):
+        #     results = []
 
-        def process_track_pair(track_a, track_b, df, track_file):
+        #     track_a_data = df[df['track_id'] == track_a]
+        #     track_b_data = df[df['track_id'] == track_b]
+
+        #     common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+        #     interaction_id_local = 0 # local id for interaction
+        #     i = 0 # frame index 
+
+        #     while i < len(common_frames):
+        #         frame = common_frames[i] # current frame
+
+
+        #         track_a_row = track_a_data[track_a_data['frame'] == frame]
+        #         track_b_row = track_b_data[track_b_data['frame'] == frame]
+
+        #         parts = ['head', 'body', 'tail']
+        #         positions = {}
+
+        #         for part in parts:
+        #             positions[f'a_{part}'] = track_a_row[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+        #             positions[f'b_{part}'] = track_b_row[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+
+        #         distance_types = {
+        #             'head_head': np.linalg.norm(positions['a_head'] - positions['b_head']),
+        #             'body_body': np.linalg.norm(positions['a_body'] - positions['b_body']),
+        #             'tail_tail': np.linalg.norm(positions['a_tail'] - positions['b_tail']),
+        #             'head_tail': np.linalg.norm(positions['a_head'] - positions['b_tail']),
+        #             'body_head': np.linalg.norm(positions['a_body'] - positions['b_head']),
+        #             'body_tail': np.linalg.norm(positions['a_body'] - positions['b_tail']),
+        #         }
+
+        #         interaction_type, min_distance = min(distance_types.items(), key=lambda x: x[1])
+                
+
+        #         # point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+        #         # point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+
+        #         # dist = np.linalg.norm(point_a - point_b)
+
+        #         current_bout = None
+
+        #         if min_distance < proximity_threshold:
+        #             current_bout = []
+
+        #             while i < len(common_frames):
+        #                 frame = common_frames[i]
+
+        #                 track_a_row = track_a_data[track_a_data['frame'] == frame]
+        #                 track_b_row = track_b_data[track_b_data['frame'] == frame]
+
+        #                 for part in parts:
+        #                     positions[f'a_{part}'] = track_a_row[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+        #                     positions[f'b_{part}'] = track_b_row[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+
+        #                 distance_types = {
+        #                     'head_head': np.linalg.norm(positions['a_head'] - positions['b_head']),
+        #                     'body_body': np.linalg.norm(positions['a_body'] - positions['b_body']),
+        #                     'tail_tail': np.linalg.norm(positions['a_tail'] - positions['b_tail']),
+        #                     'head_tail': np.linalg.norm(positions['a_head'] - positions['b_tail']),
+        #                     'body_head': np.linalg.norm(positions['a_body'] - positions['b_head']),
+        #                     'body_tail': np.linalg.norm(positions['a_body'] - positions['b_tail']),
+        #                 }
+
+        #                 interaction_type, min_distance = min(distance_types.items(), key=lambda x: x[1])
+
+        #                 if min_distance < proximity_threshold:
+        #                     current_bout.append((frame, min_distance, interaction_type))
+        #                     i += 1
+        #                 else:
+        #                     break
+                        
+        #         if current_bout:
+        #             frames = [f for f, _, _ in current_bout]
+        #             if frames[-1] - frames[0] + 1 == len(frames):  # ensure frames are consecutive!
+        #                 interaction_id_local += 1
+        #                 for frame, min_distance, interaction_type in current_bout:
+        #                     results.append({
+        #                         'file': track_file,
+        #                         'interaction': interaction_id_local,
+        #                         'frame': frame,
+        #                         'Interaction Pair': (track_a, track_b),
+        #                         'Distance': min_distance,
+        #                         'Interaction Type': interaction_type
+        #                     })
+        #         else:
+        #             i += 1  # move to next frame if not in contact
+
+        #     return results
+
+        def process_track_pair(track_a, track_b, df, track_file, proximity_threshold=1):
             results = []
 
             track_a_data = df[df['track_id'] == track_a]
             track_b_data = df[df['track_id'] == track_b]
 
             common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+
+            if not common_frames:
+                return results
+
+            # Precompute node-node distances for all common frames
+            parts = ['head', 'body', 'tail']
+            distance_rows = []
+
+            for frame in common_frames:
+                row_a = track_a_data[track_a_data['frame'] == frame]
+                row_b = track_b_data[track_b_data['frame'] == frame]
+
+                if row_a.empty or row_b.empty:
+                    continue
+
+                positions = {}
+                for part in parts:
+                    positions[f'a_{part}'] = row_a[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+                    positions[f'b_{part}'] = row_b[[f'x_{part}', f'y_{part}']].to_numpy().flatten()
+
+                distances = {
+                    'head_head': np.linalg.norm(positions['a_head'] - positions['b_head']),
+                    'body_body': np.linalg.norm(positions['a_body'] - positions['b_body']),
+                    'tail_tail': np.linalg.norm(positions['a_tail'] - positions['b_tail']),
+                    'head_tail': np.linalg.norm(positions['a_head'] - positions['b_tail']),
+                    'tail_head': np.linalg.norm(positions['a_tail'] - positions['b_head']),
+                    'body_head': np.linalg.norm(positions['a_body'] - positions['b_head']),
+                    'head_body': np.linalg.norm(positions['a_head'] - positions['b_body']),
+                    'body_tail': np.linalg.norm(positions['a_body'] - positions['b_tail']),
+                    'tail_body': np.linalg.norm(positions['a_tail'] - positions['b_body']),
+                }
+
+                for interaction_type, dist in distances.items():
+                    distance_rows.append({
+                        'frame': frame,
+                        'interaction_type': interaction_type,
+                        'Distance': dist
+                    })
+
+            if not distance_rows:
+                return results
+
+            # Convert to DataFrame
+            dist_df = pd.DataFrame(distance_rows)
+
+            # Get min distance & type per frame
+            min_df = dist_df.groupby('frame').apply(
+                lambda g: g.loc[g['Distance'].idxmin()]
+            ).reset_index(drop=True)
+
+            # Now iterate through min_df and build bouts
             interaction_id_local = 0
             i = 0
+            frames = min_df['frame'].values
 
-            while i < len(common_frames):
-                frame = common_frames[i]
-
-                point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-
-                dist = np.linalg.norm(point_a - point_b)
+            while i < len(min_df):
+                frame = frames[i]
+                dist = min_df.loc[i, 'Distance']
+                interaction_type = min_df.loc[i, 'interaction_type']
 
                 if dist < proximity_threshold:
-                    current_interaction = []  # start new bout
+                    current_bout = []
 
-                    # collect consecutive frames below threshold
-                    while dist < proximity_threshold and i < len(common_frames):
-                        frame = common_frames[i]
-
-                        point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                        point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-
-                        dist = np.linalg.norm(point_a - point_b)
+                    while i < len(min_df):
+                        frame = frames[i]
+                        dist = min_df.loc[i, 'Distance']
+                        interaction_type = min_df.loc[i, 'interaction_type']
 
                         if dist < proximity_threshold:
-                            current_interaction.append((frame, dist))
+                            current_bout.append((frame, dist, interaction_type))
                             i += 1
                         else:
                             break
+                else:
+                    i += 1
+                    continue
 
-                    # save the bout
-                    frames = [f for f, _ in current_interaction]
-                    if frames[-1] - frames[0] + 1 == len(frames):  # no jumps
-                        interaction_id_local += 1
-                        for frame, dist in current_interaction:
-                            results.append({
-                                'file': track_file,
-                                'interaction': interaction_id_local,
-                                'frame': frame,
-                                'Interaction Pair': (track_a, track_b),
-                                'Distance': dist,
-                            })
+                # Check for frame continuity
+                bout_frames = [f for f, _, _ in current_bout]
+                if bout_frames[-1] - bout_frames[0] + 1 == len(bout_frames):
+                    interaction_id_local += 1
+                    for frame, dist, interaction_type in current_bout:
+                        results.append({
+                            'file': track_file,
+                            'interaction': interaction_id_local,
+                            'frame': frame,
+                            'Interaction Pair': (track_a, track_b),
+                            'Distance': dist,
+                            'Interaction Type': interaction_type
+                        })
 
-                    else:
-                        i += 1  # not in contact, move to next frame
+            return results 
 
-            return results
-    
+
         for match in self.matching_pairs:
             track_file = match['track_file']
             df = self.track_data[track_file]
@@ -1857,25 +1996,30 @@ class HoleAnalysis:
             track_combinations = list(combinations(track_ids, 2))
 
             all_results = Parallel(n_jobs=-1)(
-                delayed(process_track_pair)(track_a, track_b, df, track_file)
+                delayed(process_track_pair)(track_a, track_b, df, track_file, proximity_threshold)
                 for track_a, track_b in track_combinations
             )
 
-            # Flatten results
             flattened_results = [item for sublist in all_results for item in sublist]
-            # if not flattened_results: # IF NO CONTACTS IN THIS FILE
-            #     print(f"No contact results for {track_file}")
-            #     continue
             if not flattened_results:
                 print(f"No contact results for {track_file}")
                 no_contacts.append(track_file)
                 continue
 
-
             results_df = pd.DataFrame(flattened_results)
             results_df.set_index('frame', inplace=True, drop=False)
             data.append(results_df)
 
+        ### for files with no interactions- create placeholders 
+        for file in no_contacts:
+            placeholder = pd.DataFrame([{
+                'file': file,
+                'interaction': None,
+                'frame': None,
+                'Interaction Pair': None,
+                'Distance': np.nan
+            }])
+            data.append(placeholder)
 
         interaction_data = pd.concat(data, ignore_index=True)
 
@@ -1888,29 +2032,29 @@ class HoleAnalysis:
         interaction_data.drop(columns=['interaction'], inplace=True)  # Drop the local ID if you don't need it
 
 
-        ### this shd be added into the main contacts 
-        durations = (
-            interaction_data.groupby("Interaction Number")
-            .agg(
-                duration_seconds=("frame", "count"),  # 1 frame = 1 second
-                file=("file", "first")                # what file this interaction came from
-            )
-        )
+        # ### this shd be added into the main contacts 
+        # durations = (
+        #     interaction_data.groupby("Interaction Number")
+        #     .agg(
+        #         duration_seconds=("frame", "count"),  # 1 frame = 1 second
+        #         file=("file", "first")                # what file this interaction came from
+        #     )
+        # )
 
-        contact_counts = durations.groupby("file").size().reset_index(name="contact_bouts")
+        # contact_counts = durations.groupby("file").size().reset_index(name="contact_bouts")
 
-        avg_durations = durations.groupby("file")["duration_seconds"].mean().reset_index()
-        avg_durations.rename(columns={"duration_seconds": "avg_duration_seconds"}, inplace=True)
+        # avg_durations = durations.groupby("file")["duration_seconds"].mean().reset_index()
+        # avg_durations.rename(columns={"duration_seconds": "avg_duration_seconds"}, inplace=True)
 
-        summary = pd.merge(contact_counts, avg_durations, on="file")
+        # summary = pd.merge(contact_counts, avg_durations, on="file")
 
-        no_contact_df = pd.DataFrame({
-            'file': no_contacts,
-            'contact_bouts': 0,
-            'avg_duration_seconds': np.nan
-        })
+        # no_contact_df = pd.DataFrame({
+        #     'file': no_contacts,
+        #     'contact_bouts': 0,
+        #     'avg_duration_seconds': np.nan
+        # })
 
-        summary = pd.concat([summary, no_contact_df], ignore_index=True).sort_values("file")
+        # summary = pd.concat([summary, no_contact_df], ignore_index=True).sort_values("file")
 
         if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
@@ -1919,7 +2063,7 @@ class HoleAnalysis:
 
         filename = f"contacts{suffix}.csv"
 
-        summary.to_csv(os.path.join(self.directory, filename), index=False)
+        interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
 
