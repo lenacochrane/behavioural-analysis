@@ -1784,13 +1784,14 @@ class HoleAnalysis:
 
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
 
+    ### METHOD CONTACTS: IDENTIFY INTERACTION FREQUENCY AND DURATION
 
     def contacts(self, proximity_threshold=1):
 
         data = []
         no_contacts = []
 
-        proximity_threshold = 1  # 1mm
+        proximity_threshold = proximity_threshold  # 1mm
 
         def process_track_pair(track_a, track_b, df, track_file):
             results = []
@@ -1829,7 +1830,6 @@ class HoleAnalysis:
                             break
 
                     # save the bout
-
                     frames = [f for f, _ in current_interaction]
                     if frames[-1] - frames[0] + 1 == len(frames):  # no jumps
                         interaction_id_local += 1
@@ -2432,6 +2432,8 @@ class HoleAnalysis:
 
         desired_order = ['file', "Frame", "Interaction Number", "Normalized Frame"]
         interaction_data = interaction_data[desired_order + [col for col in interaction_data.columns if col not in desired_order]]
+        interaction_data = interaction_data.sort_values(by=["Interaction Number", "Normalized Frame"])
+
 
         print("Number of interaction rows:", interaction_data.shape[0])
         print("Interaction DataFrame head:\n", interaction_data.head())
