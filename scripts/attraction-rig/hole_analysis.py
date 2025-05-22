@@ -99,7 +99,7 @@ class HoleAnalysis:
         for track_file in self.track_files:
             df = self.track_data[track_file]
             df = self.compute_digging(df)
-            df.to_csv(os.path.join(self.directory, 'digging.csv'), index=False) # get rid 
+            # df.to_csv(os.path.join(self.directory, 'digging.csv'), index=False) # get rid 
             self.track_data[track_file] = df[df['digging_status'] == False].copy()
 
 
@@ -1481,10 +1481,6 @@ class HoleAnalysis:
 
 
 
-
-
-
-
     ### METHOD
     def detect_larvae_leaving(self, df, perimeter, total_larvae):
         
@@ -1695,27 +1691,6 @@ class HoleAnalysis:
             else:
                 continue 
         
-        ## CHECK DATA POINTS NORMALISED
-        # plt.figure(figsize=(10, 6))
-        # for i, df in enumerate(data):
-        #     random_color = (random.random(), random.random(), random.random())
-        #     plt.scatter(df['x_body'], df['y_body'], color=random_color, alpha=0.6) 
-        # plt.title(f'Body Coordinates')  
-        # plt.xlabel('X Coordinate')  
-        # plt.ylabel('Y Coordinate')  
-        # plt.grid(True) 
-        # plt.show()  
-        
-        ### RANDOMLY SELECT FILES AND CONCAT THEM
-        # for iteration in range(number_of_iterations):
-        #     selected_files = random.sample(data, number_of_animals)
-        #     concatenated_df = pd.concat(selected_files, ignore_index=True)
-        #     concatenated_df = concatenated_df.sort_values(by='frame', ascending=True)
-
-
-        #     filepath = os.path.join(self.directory, f'pseudo_population_{iteration+1}.csv')
-        #     concatenated_df.to_csv(filepath, index=False)
-
         for iteration in range(number_of_iterations):
             selected_files = random.sample(data, number_of_animals)
 
@@ -1732,62 +1707,6 @@ class HoleAnalysis:
             concatenated_df.to_csv(filepath, index=False)
 
 
-
-
-    
-
-    # def proximity_speed_encounters(self, threshold=5, window=5): # threshold: proximity distance threshold; window: frames before and after
-        
-        # data = []
-        
-        # for track_file in self.track_files:
-        #     df = self.track_data[track_file]
-        #     df.sort_values(by='frame', inplace=True)
-        #     df['frame'] = df['frame'].astype(int)
-        #     df['speed'] = df.groupby('track_id').apply(lambda x: np.sqrt(x['x_body'].diff()**2 + x['y_body'].diff()**2) / x['frame'].diff()).reset_index(level=0, drop=True)
-        #     # df['speed'].fillna(0, inplace=True)  # Fill NaN values for the first frame
-            
-        #     # Initialize columns for proximity and distance
-        #     df['proximity_threshold'] = False
-        #     df['min_distance'] = np.inf
-
-        #     # Get unique frames and track IDs
-        #     frames = df['frame'].unique()
-        #     track_ids = df['track_id'].unique()
-            
-        #     # Iterate over each frame
-        #     for frame in frames:
-        #         frame_data = df[df['frame'] == frame]
-        #         positions = frame_data[['x_body', 'y_body']].values
-
-        #         if len(positions) > 1:
-        #             distances = cdist(positions, positions)
-        #             np.fill_diagonal(distances, np.inf)  # Ignore self-distance
-
-        #             # Check if any distances are below the threshold
-        #             below_threshold = distances < threshold
-        #             if np.any(below_threshold):
-        #                 track_pairs = np.argwhere(below_threshold)
-        #                 for i, j in track_pairs:
-        #                     if i != j:
-        #                         # Update DataFrame with proximity and distance info
-        #                         track_id_i = frame_data.iloc[i]['track_id']
-        #                         track_id_j = frame_data.iloc[j]['track_id']
-
-        #                         # Select only the relevant tracks
-        #                         indices_i = df[(df['frame'] == frame) & (df['track_id'] == track_id_i)].index
-        #                         indices_j = df[(df['frame'] == frame) & (df['track_id'] == track_id_j)].index
-
-        #                         # Update proximity and distance information
-        #                         min_dist = distances[i, j]
-        #                         df.loc[indices_i, 'proximity_threshold'] = True
-        #                         df.loc[indices_j, 'proximity_threshold'] = True
-        #                         df.loc[indices_i, 'min_distance'] = np.minimum(df.loc[indices_i, 'min_distance'], min_dist)
-        #                         df.loc[indices_j, 'min_distance'] = np.minimum(df.loc[indices_j, 'min_distance'], min_dist)
-                        
-        #                 df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
-
-
     ### METHOD INTERACTION_TYPES: COUNT DIFFERENT TYPES OF PROXIMAL INTERACTIONS BETWEEN LARVAE (1MM THRESHOLD)
 
     def interaction_types(self, threshold=1):
@@ -1798,7 +1717,7 @@ class HoleAnalysis:
 
         for track_file in self.track_files:
             df = self.track_data[track_file]
-            track_ids = df['track_id'].unique()
+            # track_ids = df['track_id'].unique()
 
             # Set up interaction counters using unified types
             interaction_counts = {
@@ -1857,6 +1776,7 @@ class HoleAnalysis:
 
         filename = f"interaction_types{suffix}.csv"
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
+
 
 
     ### METHOD CONTACTS: IDENTIFY INTERACTION FREQUENCY AND DURATION

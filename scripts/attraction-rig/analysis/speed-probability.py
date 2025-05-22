@@ -57,7 +57,7 @@ plt.figure(figsize=(8,8))
 # df = pd.concat([df5, df6], ignore_index=True)
 
 ## PEUDO N10 GH
-# df = pd.concat([df5, df8], ignore_index=True)
+df = pd.concat([df5, df8], ignore_index=True)
 
 ## PEUDO N10 SI
 # df = pd.concat([df6,  df7], ignore_index=True)
@@ -69,20 +69,39 @@ plt.figure(figsize=(8,8))
 # df = pd.concat([df4, df9], ignore_index=True)
 
 ## GH
-df = pd.concat([ df3, df5], ignore_index=True)
+# df = pd.concat([df1, df3, df5], ignore_index=True)
+
+## SI
+# df = pd.concat([df2, df4, df6], ignore_index=True)
 
 
-###### DF TIME FRAME
-# df = df[df['time'] < 601]
+bins = np.linspace(0, 2.5, 26)  # 0 to 2.5 in 0.1 increments
+df['speed_bin'] = pd.cut(df['speed'], bins, include_lowest=True)
+df['bin_center'] = df['speed_bin'].apply(lambda x: x.mid)
 
-sns.histplot(data=df, x='speed', hue='condition', stat='density', common_norm=False, alpha=0.5)
+
+# Count per file-condition-bin
+counts = (
+    df.groupby(['file', 'condition', 'bin_center'])
+    .size()
+    .groupby(level=0)  # normalize per file
+    .apply(lambda x: x / x.sum())
+    .reset_index(name='density')
+)
 
 
-plt.xlabel('', fontsize=12, fontweight='bold')
-plt.ylabel('Speed (mm/s)', fontsize=12, fontweight='bold')
+sns.lineplot(data=counts, x='bin_center', y='density', hue='condition', errorbar='sd')
+
+
+# sns.histplot(data=df, x='speed', hue='condition', stat='density', common_norm=False, alpha=0.5)
+
+
+plt.ylabel('Density', fontsize=12, fontweight='bold')
+plt.xlabel('Speed (mm/s)', fontsize=12, fontweight='bold')
 
 # plt.ylim(0, 1.5)
 plt.xlim(0,2.5)
+plt.ylim(0, None)
 
 plt.title('Speed', fontsize=16, fontweight='bold')
 
@@ -95,7 +114,7 @@ plt.xticks(rotation=45)
 plt.xticks(fontweight='bold')
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/gh.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/gh-n10-pseudo.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()
