@@ -19,6 +19,8 @@ import random
 from itertools import combinations
 from joblib import Parallel, delayed
 import re
+from itertools import product
+
 
 
 class HoleAnalysis:
@@ -1954,16 +1956,13 @@ class HoleAnalysis:
 
 
 
-
-
-
         # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
         # EXTRACTED FROM THE ABOVE !
 
 
 
     ### METHOD CORRELATIONS: QUANTIFY RELATIONSHIPS BETWEEN NEAREST NEIGHOUR DISTANCE AND SPEED ETC 
-    def correlations(self):
+    def nearest_neighour(self):
 
         dfs = []
         
@@ -2007,18 +2006,44 @@ class HoleAnalysis:
             # Apply function correctly
             df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
 
-            df['body-body'] = np.nan 
+
+            node_list = ['head', 'body', 'tail']
 
             for frame in df['frame'].unique():
-                unique_frame =  df[df['frame'] == frame]
-                if len(unique_frame) < 2:
+                frame_data = df[df['frame'] == frame]
+                if len(frame_data) < 2:
                     continue
-                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-                distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-                np.fill_diagonal(distance, np.nan)
 
-                # unique_frame['body-body'] = np.nanmin(distance, axis=1)
-                df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
+                n = len(frame_data)
+                track_ids = frame_data['track_id'].to_numpy()
+                index = frame_data.index.to_numpy()
+                
+                ### these are blank 
+                min_dists = np.full(n, np.inf)
+                best_pairs = np.empty(n, dtype=object)
+                contact_ids = np.full(n, np.nan)
+
+                for part1, part2 in product(node_list, repeat=2):
+                    coords1 = frame_data[[f'x_{part1}', f'y_{part1}']].to_numpy()
+                    coords2 = frame_data[[f'x_{part2}', f'y_{part2}']].to_numpy()
+
+                    dist_matrix = cdist(coords1, coords2)
+                    np.fill_diagonal(dist_matrix, np.inf)
+
+                    min_idx = np.argmin(dist_matrix, axis=1)
+                    min_val = np.min(dist_matrix, axis=1)
+
+                    # Update only where this pairing is the best so far
+                    update_mask = min_val < min_dists
+                    min_dists[update_mask] = min_val[update_mask]
+                    best_pairs[update_mask] = [f"{part1}-{part2}"] * n
+                    contact_ids[update_mask] = track_ids[min_idx[update_mask]]
+
+                # Save to main df
+                df.loc[index, 'node_distance'] = min_dists
+                df.loc[index, 'node-node'] = best_pairs
+                df.loc[index, 'contact_track'] = contact_ids
+
 
             dfs.append(df)
                 # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
@@ -2031,10 +2056,9 @@ class HoleAnalysis:
             suffix = ""
 
         filename = f"correlations{suffix}.csv"
-
         data.to_csv(os.path.join(self.directory, filename), index=False)
 
-        return data
+
      
 
 
