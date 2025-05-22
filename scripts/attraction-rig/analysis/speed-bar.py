@@ -43,11 +43,12 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
+# df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
+df = pd.concat([df1, df2, df3, df4, df5, df6], ignore_index=True)
 
 # df = df[df['time'] < 601]
 
-sns.barplot(data=df, x='condition', y='speed', edgecolor='black', linewidth=2, ci='sd', color='#2E8B57', alpha=0.8)
+sns.barplot(data=df, x='condition', y='speed', edgecolor='black', linewidth=2, ci='sd', color='#2E8B57', alpha=0.6)
 
 plt.xlabel('', fontsize=12, fontweight='bold')
 plt.ylabel('Speed (mm/s)', fontsize=12, fontweight='bold')

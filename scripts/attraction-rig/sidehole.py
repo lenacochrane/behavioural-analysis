@@ -23,7 +23,7 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    # analysis.digging_mask()
+    analysis.digging_mask()
 
 
     # analysis.post_processing()
@@ -50,7 +50,7 @@ def perform_analysis(directory):
     ### PSEUDO POPULATION MODEL
 
     # analysis.pseudo_population_model()
-    # analysis.pseudo_population_model(number_of_iterations=40, number_of_animals=2)
+    # analysis.pseudo_population_model(number_of_iterations=1, number_of_animals=2)
 
 
     # DIGGING IN ABSENCE OF HOLES
@@ -74,7 +74,10 @@ def perform_analysis(directory):
 
 
     # analysis.interactions()
-    # analysis.contacts(proximity_threshold=1)
+    # analysis.contacts(proximity_threshold=5)
+
+    # analysis.total_digging(cleaned=True)
+    # analysis.digging_behaviour()
 
 
     print("Analysis Completed")
@@ -90,12 +93,12 @@ if __name__ == "__main__":
 
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-contacts/2-files')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/pseudo-generation')
 
 
 

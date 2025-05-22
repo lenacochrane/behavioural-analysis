@@ -38,23 +38,59 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df5, df8], ignore_index=True)
+### N2
+# df = pd.concat([df3, df4], ignore_index=True)
 
-bins = list(range(0, 90, 10))  # [0, 10, 20, ..., 100]
-df['distance_bin'] = pd.cut(df['body-body'], bins=bins)
+### N10
+# df = pd.concat([df5, df6], ignore_index=True)
+
+### N2 PSEUDO 
+# df = pd.concat([df3, df4, df9, df10], ignore_index=True)
+
+### N2 PSEUDO GH
+df = pd.concat([df3, df10], ignore_index=True)
+
+### N10 PSEUDO GH
+# df = pd.concat([df5, df8], ignore_index=True)
 
 
-# binned_summary = df.groupby(['distance_bin', 'condition'])['angle'].mean().reset_index()
+# bins = list(range(0, 90, 1))  # [0, 10, 20, ..., 100]
+# df['distance_bin'] = pd.cut(df['body-body'], bins=bins)
+
+# # binned_summary = df.groupby(['distance_bin', 'condition'])['angle'].mean().reset_index()
 
 
-sns.barplot(
-    data=df,
-    x='distance_bin',
+# sns.lineplot(
+#     data=df,
+#     x='distance_bin',
+#     y='angle',
+#     hue='condition',
+#     ci='sd',
+#     edgecolor='black'
+# )
+
+
+bins = np.linspace(0, 90, 90)  # 0 to 2.5 in 0.1 increments
+df['bin'] = pd.cut(df['body-body'], bins, include_lowest=True)
+df['bin_center'] = df['bin'].apply(lambda x: x.mid)
+
+
+summary = (
+    df.groupby(['filename', 'condition', 'bin_center'])['speed']
+    .mean()
+    .reset_index()
+)
+
+# Plot mean ± sd of per-file averages
+sns.lineplot(
+    data=summary,
+    x='bin_center',
     y='speed',
     hue='condition',
-    ci='sd',
-    edgecolor='black'
+    errorbar='sd'
 )
+
+
 
 
 plt.xlabel('Body-Body Distance', fontsize=12, fontweight='bold')
@@ -64,11 +100,13 @@ plt.title('Correlation: Distance and Speed', fontsize=16, fontweight='bold')
 
 plt.tight_layout(rect=[1, 1, 1, 1])
 
+plt.xlim(0,20)
+
 
 plt.xticks(rotation=45)
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n10-grouphoused-pseudo-speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n2-pseudo-speed.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

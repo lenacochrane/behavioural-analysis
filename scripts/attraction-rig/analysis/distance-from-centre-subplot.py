@@ -46,7 +46,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 # df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
 
 ## N1
-# df = pd.concat([df1, df2], ignore_index=True)
+df = pd.concat([df1, df2], ignore_index=True)
 
 ## N2
 # df = pd.concat([df3, df4], ignore_index=True)
@@ -60,27 +60,47 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 ## PEUDO N2
 # df = pd.concat([df4, df9], ignore_index=True) #si
-df = pd.concat([df3, df10], ignore_index=True) # gh
+# df = pd.concat([df3, df10], ignore_index=True) # gh
 
+
+## GH
+df = pd.concat([df1, df3, df5], ignore_index=True)
+
+## SI
+df = pd.concat([df2, df4, df6], ignore_index=True)
 
 
 # Create subplots
 fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
 axes = axes.flatten()
+bins = np.linspace(0, 50, 25)  # 0 to 2.5 in 0.1 increments
 
 for i in range(6):
     start = i * 600
     end = start + 600
     df_interval = df[(df['frame'] >= start) & (df['frame'] < end)]
     
-    sns.histplot(
-        data=df_interval,
-        x='distance_from_centre',
+    # Bin speeds
+    df_interval['distance_bin'] = pd.cut(df_interval['distance_from_centre'], bins, include_lowest=True)
+    df_interval['bin_center'] = df_interval['distance_bin'].apply(lambda x: x.mid)
+
+    # Per-file density
+    counts = (
+    df_interval.groupby(['file', 'condition', 'bin_center'])
+    .size()
+    .groupby(['file', 'condition'], group_keys=False)
+    .apply(lambda x: x / x.sum())
+    .reset_index(name='density')
+)
+
+    # Plot lineplot with SD as errorbar
+    sns.lineplot(
+        data=counts,
+        x='bin_center',
+        y='density',
         hue='condition',
-        stat='density',
-        common_norm=False,
-        alpha=0.5,
-        ax=axes[i], bins=50
+        errorbar='sd',
+        ax=axes[i]
     )
     
     axes[i].set_title(f'{start}-{end} frames', fontsize=14, fontweight='bold')
@@ -89,12 +109,14 @@ for i in range(6):
     axes[i].tick_params(axis='x', rotation=45)
     axes[i].tick_params(axis='both', labelsize=10)
 
-
+plt.ylim(0,None)
 # Adjust layout
 plt.suptitle('Distance from Centre Distribution Over Time', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/subplot-n2-pseudo-gh.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/distance-from-centre/subplot-si.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()
+
+

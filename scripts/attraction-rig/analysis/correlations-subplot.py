@@ -34,7 +34,7 @@ df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analy
 df10['condition'] = 'PSEUDO-GH_N2'
 
 
-df = pd.concat([df3, df4], ignore_index=True)
+df = pd.concat([df5, df6], ignore_index=True)
 
 
 # Create subplots
@@ -70,18 +70,7 @@ plt.suptitle('Correlation: Distance and Speed Over Time', fontsize=18, fontweigh
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
-
-# binned_summary = df.groupby(['distance_bin', 'condition'])['angle'].mean().reset_index()
-
-
-
-
-
-
-
-
-
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/subplot-n2-speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/subplot-n10-speed.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

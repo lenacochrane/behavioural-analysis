@@ -31,16 +31,16 @@ plt.figure(figsize=(8,6))
 # sns.lineplot(data=df4, x='time', y='average_distance',  color='#F39B6D', ci='sd', label='si_n2')
 
 ### N10
-sns.lineplot(data=df5, x='time', y='average_distance',  color='#85C7DE', ci='sd', label='gh_n10')
-sns.lineplot(data=df6, x='time', y='average_distance',  color='#7EBC66', ci='sd', label='si_n10')
+# sns.lineplot(data=df5, x='time', y='average_distance',  color='#85C7DE', ci='sd', label='gh_n10')
+# sns.lineplot(data=df6, x='time', y='average_distance',  color='#7EBC66', ci='sd', label='si_n10')
 
 ### PSEUDO N2
 # sns.lineplot(data=df7, x='frame', y='average_distance', color='#F2CD60', ci='sd', label='pseudo-gh-n2')
 # sns.lineplot(data=df8, x='frame', y='average_distance', color='#7CB0B5', ci='sd', label='pseudo-si-n2')
 
 ### PSEUDO N10
-sns.lineplot(data=df9, x='frame', y='average_distance',  color='#F08080', ci='sd', label='pseudo-gh-n10')
-sns.lineplot(data=df10, x='frame', y='average_distance',  color='#6F5E76', ci='sd', label='pseudo-si-n10')
+# sns.lineplot(data=df9, x='frame', y='average_distance',  color='#F08080', ci='sd', label='pseudo-gh-n10')
+# sns.lineplot(data=df10, x='frame', y='average_distance',  color='#6F5E76', ci='sd', label='pseudo-si-n10')
 
 
 # plt.xlim(0,600)
@@ -55,7 +55,7 @@ plt.title('Euclidean Distances', fontsize=16, fontweight='bold')
 
 plt.legend(title='Number of Larvae')
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/euclidean-distance/euclidean-distance-N10-pseudo.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/euclidean-distance/n2.png', dpi=300, bbox_inches='tight')
 
 
 # Show the plot

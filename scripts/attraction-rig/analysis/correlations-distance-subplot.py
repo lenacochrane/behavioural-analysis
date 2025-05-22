@@ -42,12 +42,36 @@ df = pd.concat([df5, df8], ignore_index=True)
 fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
 axes = axes.flatten()
 
+bins = np.linspace(0, 90, 90)  # 0 to 2.5 in 0.1 increments
+
 for i in range(6):
     start = i * 600
     end = start + 600
     df_interval = df[(df['frame'] >= start) & (df['frame'] < end)]
     
-    sns.histplot(data=df_interval, x='body-body', hue='condition', stat='density', common_norm=False, alpha=0.5, binwidth=5, multiple='dodge', ax=axes[i])
+    # Bin speeds
+    df_interval['bin'] = pd.cut(df_interval['body-body'], bins, include_lowest=True)
+    df_interval['bin_center'] = df_interval['bin'].apply(lambda x: x.mid)
+
+    # Per-file density
+    density_df = (
+        df_interval
+        .groupby(['filename', 'condition', 'bin_center'])
+        .size()
+        .groupby(['filename', 'condition'], group_keys=False)
+        .apply(lambda x: x / x.sum())
+        .reset_index(name='density')
+    )
+
+    # Plot lineplot with SD as errorbar
+    sns.lineplot(
+        data=density_df,
+        x='bin_center',
+        y='density',
+        hue='condition',
+        errorbar='sd',
+        ax=axes[i]
+    )
     
     axes[i].set_title(f'{start}-{end} frames', fontsize=14, fontweight='bold')
     axes[i].set_xlabel('Nearest Neighour (mm)', fontsize=10, fontweight='bold')
@@ -57,14 +81,14 @@ for i in range(6):
 
 
 # Adjust layout
-plt.suptitle('Distance from Nearest Neighour Distribution Over Time', fontsize=18, fontweight='bold')
+plt.suptitle('Nearest Neighour Distribution Over Time', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.ylim(0, 0.1)
 
 
 
 
-
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/subplot-n10-pseudo-group.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/nearest-neighour-subplot-n10-gh-pseudo.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

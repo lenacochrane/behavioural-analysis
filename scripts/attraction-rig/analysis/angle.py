@@ -44,7 +44,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 # df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
 
 ## N1
-df = pd.concat([df1, df2], ignore_index=True)
+# df = pd.concat([df1, df2], ignore_index=True)
 
 ## N2
 # df = pd.concat([df3, df4], ignore_index=True)
@@ -53,7 +53,7 @@ df = pd.concat([df1, df2], ignore_index=True)
 # df = pd.concat([df5, df6], ignore_index=True)
 
 ## PEUDO N10 - GROUP
-df = pd.concat([df5, df8,], ignore_index=True)
+# df = pd.concat([df5, df8,], ignore_index=True)
 
 ## PEUDO N10 - ISO
 # df = pd.concat([df6, df7], ignore_index=True)
@@ -65,10 +65,34 @@ df = pd.concat([df5, df8,], ignore_index=True)
 # df = pd.concat([ df4, df9,], ignore_index=True)
 
 
+## GH
+# df = pd.concat([df1, df3, df5], ignore_index=True)
+
+## SI
+df = pd.concat([df2, df4, df6], ignore_index=True)
+
 
 plt.figure(figsize=(8,6))
 
-sns.histplot(data=df, x='angle', hue='condition', stat='density', common_norm=False, alpha=0.5)
+
+bins = np.linspace(0, 180, 18)  # 0 to 2.5 in 0.1 increments
+df['bin'] = pd.cut(df['angle'], bins, include_lowest=True)
+df['bin_center'] = df['bin'].apply(lambda x: x.mid)
+
+
+# Count per file-condition-bin
+counts = (
+    df.groupby(['file', 'condition', 'bin_center'])
+    .size()
+    .groupby(['file', 'condition'], group_keys=False)
+    .apply(lambda x: x / x.sum())
+    .reset_index(name='density')
+)
+
+
+sns.lineplot(data=counts, x='bin_center', y='density', hue='condition', errorbar='sd')
+
+# sns.histplot(data=df, x='angle', hue='condition', stat='density', common_norm=False, alpha=0.5)
 
 
 plt.xlabel('Angle', fontsize=12)
@@ -77,7 +101,7 @@ plt.ylabel('Probability', fontsize=12)
 # plt.ylim(0, 0.06)
 
 
-plt.yscale('log')
+# plt.yscale('log')
 
 
 # Add an overall title to the entire figure
@@ -86,7 +110,7 @@ plt.title('Trajectory Angle Probability Distribution', fontsize=16, fontweight='
 # Adjust layout to prevent overlap, considering the overall title
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/angle/n10-gh-pseudo-log.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/angle/si.png', dpi=300, bbox_inches='tight')
 
 
 # Show the pl

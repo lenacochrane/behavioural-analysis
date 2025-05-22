@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import sys
+import matplotlib.patches as mpatches
 
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed/acceleration_accross_time.csv')
@@ -41,25 +42,65 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 
 
-plt.figure(figsize=(8,6))
 
 
-df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
+## ALL DF
+# df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
 
+## N1
+# df = pd.concat([df1, df2], ignore_index=True)
 
-sns.barplot(data=df, x='condition', y='acceleration',  alpha=0.8, edgecolor='black', linewidth=2)
+## N2
+df = pd.concat([df3, df4], ignore_index=True)
 
-plt.xlabel('Condition', fontsize=12)
-plt.ylabel('Acceleration (mm^2/s)', fontsize=12)
+## N10
+# df = pd.concat([df5, df6], ignore_index=True)
 
+## PEUDO N10
+# df = pd.concat([df6, df7], ignore_index=True) #si
+# df = pd.concat([df5, df8], ignore_index=True) #gh
 
-# Add an overall title to the entire figure
-plt.title('Acceleration Distribution', fontsize=16, fontweight='bold')
+## PEUDO N2
+# df = pd.concat([df3, df10], ignore_index=True) # gh
+# df = pd.concat([df4, df9], ignore_index=True) # si
 
-# Adjust layout to prevent overlap, considering the overall title
+## Choose the relevant combination (example: PEUDO N2)
+# df = pd.concat([df1, df2], ignore_index=True)
+
+# Create subplots
+fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
+axes = axes.flatten()
+
+for i in range(6):
+    start = i * 600
+    end = start + 600
+    df_interval = df[(df['time'] >= start) & (df['time'] < end)]
+    
+    sns.histplot(
+        data=df_interval,
+        x='acceleration',
+        hue='condition',
+        stat='density',
+        common_norm=False,
+        alpha=0.5,
+        ax=axes[i]
+    )
+    
+    axes[i].set_title(f'{start}-{end}s', fontsize=14, fontweight='bold')
+    # axes[i].set_xlim(0, 2)
+    # axes[i].set_ylim(0, 2)
+    axes[i].set_xlabel('Acceleration (mm/s)', fontsize=10, fontweight='bold')
+    axes[i].set_ylabel('Density', fontsize=10, fontweight='bold')
+    axes[i].tick_params(axis='x', rotation=45)
+    axes[i].tick_params(axis='both', labelsize=10)
+
+# Adjust layout
+plt.suptitle('Acceleration Distributions Over Time', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/acceleration/acceleration-barplot.png', dpi=300, bbox_inches='tight')
+
+
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/acceleration/subplot-n2.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

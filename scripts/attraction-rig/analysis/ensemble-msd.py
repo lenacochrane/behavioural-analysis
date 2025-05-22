@@ -31,20 +31,20 @@ plt.figure(figsize=(8,6))
 # sns.lineplot(data=df2, x='time', y='squared_distance', color='#ECB0C3', ci=None, label='si_n1')
 
 ### N2
-# sns.lineplot(data=df3, x='time', y='squared_distance',  color='#629677', ci=None, label='gh_n2')
-# sns.lineplot(data=df4, x='time', y='squared_distance',  color='#F39B6D', ci=None, label='si_n2')
+sns.lineplot(data=df3, x='time', y='squared_distance',  color='#629677', errorbar='sd', label='gh_n2')
+sns.lineplot(data=df4, x='time', y='squared_distance',  color='#F39B6D', errorbar='sd', label='si_n2')
 
 ### N10
-sns.lineplot(data=df5, x='time', y='squared_distance',  color='#85C7DE', ci=None, label='gh_n10')
-sns.lineplot(data=df6, x='time', y='squared_distance',  color='#7EBC66', ci=None, label='si_n10')
+# sns.lineplot(data=df5, x='time', y='squared_distance',  color='#85C7DE', errorbar='sd', label='gh_n10')
+# sns.lineplot(data=df6, x='time', y='squared_distance',  color='#7EBC66', errorbar='sd', label='si_n10')
 
 ### PSEUDO N2
 # sns.lineplot(data=df7, x='time', y='squared_distance', color='#F2CD60', ci=None, label='pseudo-gh-n2')
 # sns.lineplot(data=df8, x='time', y='squared_distance', color='#7CB0B5', ci=None, label='pseudo-si-n2')
 
 ### PSEUDO N10
-sns.lineplot(data=df9, x='time', y='squared_distance',  color='#F08080', ci=None, label='pseudo-gh-n10')
-sns.lineplot(data=df10, x='time', y='squared_distance',  color='#6F5E76', ci=None, label='pseudo-si-n10')
+# sns.lineplot(data=df9, x='time', y='squared_distance',  color='#F08080', ci=None, label='pseudo-gh-n10')
+# sns.lineplot(data=df10, x='time', y='squared_distance',  color='#6F5E76', ci=None, label='pseudo-si-n10')
 
 
 plt.xlabel('Time (S)', fontsize=12)
@@ -61,7 +61,7 @@ plt.title('Ensemble Mean Squared Distance', fontsize=16, fontweight='bold')
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/ensemble-msd/pseudo-n10-600FRAMES.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/ensemble-msd/n2.png', dpi=300, bbox_inches='tight')
 
 
 plt.show()

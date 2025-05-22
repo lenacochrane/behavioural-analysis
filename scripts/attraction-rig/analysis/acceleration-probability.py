@@ -28,17 +28,17 @@ df6['condition'] = 'SI_N10'
 df5 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/acceleration_accross_time.csv')
 df5['condition'] = 'GH_N10'
 
-# df7 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/acceleration_accross_time.csv')
-# df7['condition'] = 'PSEUDO-SI_N10'
+df7 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/acceleration_accross_time.csv')
+df7['condition'] = 'PSEUDO-SI_N10'
 
-# df8 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/acceleration_accross_time.csv')
-# df8['condition'] = 'PSEUDO-GH_N10'
+df8 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/acceleration_accross_time.csv')
+df8['condition'] = 'PSEUDO-GH_N10'
 
-# df9 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated/acceleration_accross_time.csv')
-# df9['condition'] = 'PSEUDO-SI_N2'
+df9 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated/acceleration_accross_time.csv')
+df9['condition'] = 'PSEUDO-SI_N2'
 
-# df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed/acceleration_accross_time.csv')
-# df10['condition'] = 'PSEUDO-GH_N2'
+df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed/acceleration_accross_time.csv')
+df10['condition'] = 'PSEUDO-GH_N2'
 
 
 plt.figure(figsize=(8,8))
@@ -51,13 +51,17 @@ plt.figure(figsize=(8,8))
 # df = pd.concat([df1, df2], ignore_index=True)
 
 ## N2
-df = pd.concat([df3, df4], ignore_index=True)
+# df = pd.concat([df3, df4], ignore_index=True)
 
 ## N10
 # df = pd.concat([df5, df6], ignore_index=True)
 
-## PEUDO N10
-# df = pd.concat([df5, df6, df8, df7], ignore_index=True)
+## PEUDO N10 GH
+df = pd.concat([df5,df8], ignore_index=True)
+
+## PEUDO N10 SI
+# df = pd.concat([ df6, df7], ignore_index=True)
+
 
 ## PEUDO N2
 # df = pd.concat([df3, df4, df9, df10], ignore_index=True)
@@ -66,7 +70,7 @@ df = pd.concat([df3, df4], ignore_index=True)
 
 
 ###### DF TIME FRAME
-df = df[df['time'] < 601]
+# df = df[df['time'] < 601]
 
 
 
@@ -89,7 +93,7 @@ plt.xticks(rotation=45)
 plt.xticks(fontweight='bold')
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/acceleration/acceleration-probability-n2-600frames.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/acceleration/n10-gh-pseudo.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

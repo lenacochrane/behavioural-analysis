@@ -37,8 +37,8 @@ sns.lineplot(data=df2, x='tau', y='msd', ci=None, label='gh_n10')
 
 
 ### PSEUDO N10
-sns.lineplot(data=df7, x='tau', y='msd', ci=None, label='pseudo-si_n10')
-sns.lineplot(data=df8, x='tau', y='msd', ci=None, label='pseudo-gh_n10')
+# sns.lineplot(data=df7, x='tau', y='msd', ci=None, label='pseudo-si_n10')
+# sns.lineplot(data=df8, x='tau', y='msd', ci=None, label='pseudo-gh_n10')
 
 ### PSEUDO N2
 # sns.lineplot(data=df9, x='tau', y='msd', ci=None, label='pseudo-si_n2')
@@ -61,7 +61,7 @@ plt.legend(title='Number of Larvae')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/time-average-msd/time_average_msd-n1O-pseudo.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/time-average-msd/n10.png', dpi=300, bbox_inches='tight')
 
 
 # Show the plot

@@ -54,7 +54,7 @@ plt.xlabel('Time (S)', fontsize=12)
 plt.ylabel('Speed (mm/s)', fontsize=12)
 
 plt.xlim(0,600)
-plt.ylim(0,1.5)
+# plt.ylim(0,1.5)
 
 
 plt.title('Speed Over Time', fontsize=16, fontweight='bold')
