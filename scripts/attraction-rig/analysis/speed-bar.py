@@ -45,9 +45,9 @@ plt.figure(figsize=(8,8))
 
 df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], ignore_index=True)
 
-df = df[df['time'] < 601]
+# df = df[df['time'] < 601]
 
-sns.barplot(data=df, x='condition', y='speed', edgecolor='black', linewidth=2, ci='sd')
+sns.barplot(data=df, x='condition', y='speed', edgecolor='black', linewidth=2, ci='sd', color='#2E8B57', alpha=0.8)
 
 plt.xlabel('', fontsize=12, fontweight='bold')
 plt.ylabel('Speed (mm/s)', fontsize=12, fontweight='bold')
@@ -64,7 +64,7 @@ plt.xticks(rotation=45)
 plt.xticks(fontweight='bold')
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/average-speed-600frames.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/speed-bar.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()
