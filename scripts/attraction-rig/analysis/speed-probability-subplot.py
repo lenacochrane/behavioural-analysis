@@ -41,7 +41,7 @@ df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analy
 df10['condition'] = 'PSEUDO-GH_N2'
 
 
-plt.figure(figsize=(8,8))
+
 
 
 ## ALL DF
@@ -58,10 +58,10 @@ plt.figure(figsize=(8,8))
 
 ## PEUDO N10
 # df = pd.concat([df6, df7], ignore_index=True) #si
-# df = pd.concat([df5, df8], ignore_index=True) #gh
+df = pd.concat([df5, df8], ignore_index=True) #gh
 
 ## PEUDO N2
-df = pd.concat([df3, df10], ignore_index=True) # gh
+# df = pd.concat([df3, df10], ignore_index=True) # gh
 # df = pd.concat([df4, df9], ignore_index=True) # si
 
 ## Choose the relevant combination (example: PEUDO N2)
@@ -100,7 +100,7 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/speed-probability-subplot-n2-pseudo-gh.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/subplot-n10-gh-pseudo.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()
