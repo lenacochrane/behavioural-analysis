@@ -29,7 +29,7 @@ def perform_analysis(directory):
     # analysis.post_processing()
     # analysis.quality_control()
 
-    # analysis.correlations()
+    analysis.nearest_neighbour()
 
     # analysis.hole_boundary(scale_factor=1.5)
 
@@ -70,7 +70,7 @@ def perform_analysis(directory):
 
     # analysis.hole_euclidean_distance()
 
-    analysis.interaction_types()
+    # analysis.interaction_types()
 
 
     # analysis.interactions()
