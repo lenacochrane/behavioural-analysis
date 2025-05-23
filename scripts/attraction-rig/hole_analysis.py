@@ -1000,7 +1000,7 @@ class HoleAnalysis:
 
             # cumalative displacement rate - rolling window 20 frames
             # first 19 frames - fillna0 
-            df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(20) / 20).fillna(0)
+            df['cumulative_displacement_rate'] = df.groupby('track_id',  group_keys=False)['cumulative_displacement'].apply(lambda x: x.diff(20) / 20).fillna(0)
 
 
             # # cumulative distance over rolling window
@@ -1962,7 +1962,7 @@ class HoleAnalysis:
 
 
     ### METHOD CORRELATIONS: QUANTIFY RELATIONSHIPS BETWEEN NEAREST NEIGHOUR DISTANCE AND SPEED ETC 
-    def nearest_neighour(self):
+    def nearest_neighbour(self):
 
         dfs = []
         
@@ -2034,9 +2034,10 @@ class HoleAnalysis:
                     min_val = np.min(dist_matrix, axis=1)
 
                     # Update only where this pairing is the best so far
-                    update_mask = min_val < min_dists
+                    update_mask = min_val < min_dists # this is boolean masking 
                     min_dists[update_mask] = min_val[update_mask]
-                    best_pairs[update_mask] = [f"{part1}-{part2}"] * n
+                    num_updates = np.sum(update_mask)
+                    best_pairs[update_mask] = [f"{part1}-{part2}"] * num_updates
                     contact_ids[update_mask] = track_ids[min_idx[update_mask]]
 
                 # Save to main df
@@ -2055,7 +2056,7 @@ class HoleAnalysis:
         else:
             suffix = ""
 
-        filename = f"correlations{suffix}.csv"
+        filename = f"nearest_neighbour{suffix}.csv"
         data.to_csv(os.path.join(self.directory, filename), index=False)
 
 

@@ -57,7 +57,7 @@ plt.figure(figsize=(8,8))
 # df = pd.concat([df5, df6], ignore_index=True)
 
 ## PEUDO N10 GH
-df = pd.concat([df5, df8], ignore_index=True)
+# df = pd.concat([df5, df8], ignore_index=True)
 
 ## PEUDO N10 SI
 # df = pd.concat([df6,  df7], ignore_index=True)
@@ -72,7 +72,7 @@ df = pd.concat([df5, df8], ignore_index=True)
 # df = pd.concat([df1, df3, df5], ignore_index=True)
 
 ## SI
-# df = pd.concat([df2, df4, df6], ignore_index=True)
+df = pd.concat([df2, df4, df6], ignore_index=True)
 
 
 bins = np.linspace(0, 2.5, 26)  # 0 to 2.5 in 0.1 increments
@@ -84,7 +84,7 @@ df['bin_center'] = df['speed_bin'].apply(lambda x: x.mid)
 counts = (
     df.groupby(['file', 'condition', 'bin_center'])
     .size()
-    .groupby(level=0)  # normalize per file
+    .groupby(['file', 'condition'], group_keys=False)
     .apply(lambda x: x / x.sum())
     .reset_index(name='density')
 )
@@ -114,7 +114,7 @@ plt.xticks(rotation=45)
 plt.xticks(fontweight='bold')
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/gh-n10-pseudo.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/si.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

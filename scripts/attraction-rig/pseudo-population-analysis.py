@@ -18,6 +18,7 @@ from shapely.affinity import scale
 from shapely.wkt import loads as load_wkt
 from itertools import combinations
 from joblib import Parallel, delayed
+from itertools import product
 
 
 class PseudoAnalysis:
@@ -556,7 +557,7 @@ class PseudoAnalysis:
         interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
-    def correlations(self):
+    def nearest_neighbour(self):
 
             dfs = []
 
@@ -597,18 +598,43 @@ class PseudoAnalysis:
                 # Apply function correctly
                 df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
 
-                df['body-body'] = np.nan 
+                node_list = ['head', 'body', 'tail']
 
                 for frame in df['frame'].unique():
-                    unique_frame =  df[df['frame'] == frame]
-                    if len(unique_frame) < 2:
+                    frame_data = df[df['frame'] == frame]
+                    if len(frame_data) < 2:
                         continue
-                    body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-                    distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-                    np.fill_diagonal(distance, np.nan)
 
-                    # unique_frame['body-body'] = np.nanmin(distance, axis=1)
-                    df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
+                    n = len(frame_data)
+                    track_ids = frame_data['track_id'].to_numpy()
+                    index = frame_data.index.to_numpy()
+                    
+                    ### these are blank 
+                    min_dists = np.full(n, np.inf)
+                    best_pairs = np.empty(n, dtype=object)
+                    contact_ids = np.full(n, np.nan)
+
+                    for part1, part2 in product(node_list, repeat=2):
+                        coords1 = frame_data[[f'x_{part1}', f'y_{part1}']].to_numpy()
+                        coords2 = frame_data[[f'x_{part2}', f'y_{part2}']].to_numpy()
+
+                        dist_matrix = cdist(coords1, coords2)
+                        np.fill_diagonal(dist_matrix, np.inf)
+
+                        min_idx = np.argmin(dist_matrix, axis=1)
+                        min_val = np.min(dist_matrix, axis=1)
+
+                        # Update only where this pairing is the best so far
+                        update_mask = min_val < min_dists # this is boolean masking 
+                        min_dists[update_mask] = min_val[update_mask]
+                        num_updates = np.sum(update_mask)
+                        best_pairs[update_mask] = [f"{part1}-{part2}"] * num_updates
+                        contact_ids[update_mask] = track_ids[min_idx[update_mask]]
+
+                    # Save to main df
+                    df.loc[index, 'node_distance'] = min_dists
+                    df.loc[index, 'node-node'] = best_pairs
+                    df.loc[index, 'contact_track'] = contact_ids
 
                 dfs.append(df)
                     # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
@@ -620,8 +646,10 @@ class PseudoAnalysis:
             else:
                 suffix = ""
 
-            filename = f"correlations{suffix}.csv"
+            filename = f"nearest_neighbour{suffix}.csv"
             data.to_csv(os.path.join(self.directory, filename), index=False)
+
+
 
 
     def interaction_types(self, threshold=1):
@@ -807,10 +835,10 @@ def perform_analysis(directory):
     # analysis.speed()
     # analysis.acceleration()
     # analysis.ensemble_msd()
-    # analysis.time_average_msd(taus=[1, 2, 5, 10, 20, 50, 100])
+    # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
-    analysis.contacts(proximity_threshold=5)
-    # analysis.correlations()
+    # analysis.contacts(proximity_threshold=5)
+    analysis.nearest_neighbour()
     # analysis.interaction_types()
 
     # analysis.total_digging(cleaned=True)

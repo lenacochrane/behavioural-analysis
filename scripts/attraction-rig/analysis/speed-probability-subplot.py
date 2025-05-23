@@ -54,11 +54,11 @@ df10['condition'] = 'PSEUDO-GH_N2'
 # df = pd.concat([df3, df4], ignore_index=True)
 
 ## N10
-# df = pd.concat([df5, df6], ignore_index=True)
+df = pd.concat([df5, df6], ignore_index=True)
 
 ## PEUDO N10
 # df = pd.concat([df6, df7], ignore_index=True) #si
-df = pd.concat([df5, df8], ignore_index=True) #gh
+# df = pd.concat([df5, df8], ignore_index=True) #gh
 
 ## PEUDO N2
 # df = pd.concat([df3, df10], ignore_index=True) # gh
@@ -67,22 +67,40 @@ df = pd.concat([df5, df8], ignore_index=True) #gh
 ## Choose the relevant combination (example: PEUDO N2)
 # df = pd.concat([df1, df2], ignore_index=True)
 
-# Create subplots
+
+
+
 fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
 axes = axes.flatten()
+
+bins = np.linspace(0, 2.5, 26)  # 0 to 2.5 in 0.1 increments
 
 for i in range(6):
     start = i * 600
     end = start + 600
     df_interval = df[(df['time'] >= start) & (df['time'] < end)]
     
-    sns.histplot(
-        data=df_interval,
-        x='speed',
+    # Bin speeds
+    df_interval['speed_bin'] = pd.cut(df_interval['speed'], bins, include_lowest=True)
+    df_interval['bin_center'] = df_interval['speed_bin'].apply(lambda x: x.mid)
+
+    # Per-file density
+    density_df = (
+        df_interval
+        .groupby(['file', 'condition', 'bin_center'])
+        .size()
+        .groupby(['file', 'condition'], group_keys=False)
+        .apply(lambda x: x / x.sum())
+        .reset_index(name='density')
+    )
+
+    # Plot lineplot with SD as errorbar
+    sns.lineplot(
+        data=density_df,
+        x='bin_center',
+        y='density',
         hue='condition',
-        stat='density',
-        common_norm=False,
-        alpha=0.5,
+        errorbar='sd',
         ax=axes[i]
     )
     
@@ -94,13 +112,13 @@ for i in range(6):
     axes[i].tick_params(axis='x', rotation=45)
     axes[i].tick_params(axis='both', labelsize=10)
 
-# Adjust layout
+plt.ylim(0, None)
 plt.suptitle('Speed Distributions Over Time', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/subplot-n10-gh-pseudo.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/speed/subplot-n10.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

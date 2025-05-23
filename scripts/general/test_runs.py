@@ -15,37 +15,29 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# # Load your data
-# # Load data
-# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/N10/digging.csv')
 
-# # Convert to int for plotting
-# df['digging_status'] = df['digging_status'].astype(int)
 
-# # Unique tracks
-# track_ids = df['track_id'].unique()
+# video_folder = '/Users/cochral/Desktop/MOSEQ/si'
 
-# # Plot setup
-# fig, axes = plt.subplots(len(track_ids), 1, figsize=(12, 3 * len(track_ids)), sharex=True)
+# # Prefix to add
+# prefix = 'N1-SI_'
 
-# # Ensure axes is iterable
-# if len(track_ids) == 1:
-#     axes = [axes]
+# # Loop through files in the folder
+# for filename in os.listdir(video_folder):
+#     if filename.endswith('.mp4') and not filename.startswith(prefix):
+#         old_path = os.path.join(video_folder, filename)
+#         new_filename = prefix + filename
+#         new_path = os.path.join(video_folder, new_filename)
+#         os.rename(old_path, new_path)
+#         print(f"Renamed: {filename} ➝ {new_filename}")
 
-# # Plot for each track
-# for i, track in enumerate(track_ids):
-#     ax = axes[i]
-#     track_df = df[df['track_id'] == track]
-#     ax.plot(track_df['frame'], track_df['digging_status'], drawstyle='steps-post')
-#     ax.set_title(f'Track {track} Digging Status')
-#     ax.set_ylabel('Digging (0=No, 1=Yes)')
-#     ax.set_ylim(-0.1, 1.1)
 
-# # Final formatting
-# axes[-1].set_xlabel('Frame')
-# plt.tight_layout()
+df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT/2025_05_21-13_29_37/moseq_df.csv')
+
+# sns.barplot(data=df, x='syllable', y='frequency', hue='group')
+
 # plt.show()
 
+print(df.columns)
 
-df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-paramaters-gridsearch/1-grid/n2/2025-03-03_14-03-34_td4.tracks.feather')
-print(df)
+print(df.head(20))
