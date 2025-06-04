@@ -1721,55 +1721,64 @@ class HoleAnalysis:
             df = self.track_data[track_file]
             # track_ids = df['track_id'].unique()
 
-            # Set up interaction counters using unified types
-            interaction_counts = {
-                'head_head': 0,
-                'tail_tail': 0,
-                'body_body': 0,
-                'body_head': 0,  # includes head_body
-                'body_tail': 0,  # includes tail_body
-                'head_tail': 0,  # includes tail_head
-                'file': track_file,
-            }
+            df['frame_bin'] = (df['frame'] // 600) * 600  # Bins: 0, 600, 1200...
 
-            for frame in df['frame'].unique():
-                frame_data = df[df['frame'] == frame]
+            for bin in sorted(df['frame_bin'].unique()):
+                df_bin = df[df['frame_bin'] == bin]
 
-                if len(frame_data) < 2:
-                    continue
+                # Set up interaction counters using unified types
+                interaction_counts = {
+                    'head_head': 0,
+                    'tail_tail': 0,
+                    'body_body': 0,
+                    'body_head': 0,  # includes head_body
+                    'body_tail': 0,  # includes tail_body
+                    'head_tail': 0,  # includes tail_head
+                    'file': track_file,
+                    'frame_bin': bin
+                }
 
-                # Loop over all unordered combinations of body parts
-                for part1, part2 in [
-                    ('head', 'head'),
-                    ('tail', 'tail'),
-                    ('body', 'body'),
-                    ('head', 'body'),
-                    ('tail', 'body'),
-                    ('head', 'tail'),
-                ]:
-                    interaction_type = unify_interaction_type(part1, part2)
+                # for frame in df['frame'].unique():
+                #     frame_data = df[df['frame'] == frame]
 
-                    positions1 = frame_data[[f'track_id', f'x_{part1}', f'y_{part1}']].to_numpy()
-                    positions2 = frame_data[[f'track_id', f'x_{part2}', f'y_{part2}']].to_numpy()
+                for frame in df_bin['frame'].unique():
+                    frame_data = df_bin[df_bin['frame'] == frame]
 
-                    ids1 = positions1[:, 0]
-                    ids2 = positions2[:, 0]
-                    coords1 = positions1[:, 1:].astype(float)
-                    coords2 = positions2[:, 1:].astype(float)
+                    if len(frame_data) < 2:
+                        continue
 
-                    distances = cdist(coords1, coords2)
-                    mask = ids1[:, None] != ids2[None, :]
+                    # Loop over all unordered combinations of body parts
+                    for part1, part2 in [
+                        ('head', 'head'),
+                        ('tail', 'tail'),
+                        ('body', 'body'),
+                        ('head', 'body'),
+                        ('tail', 'body'),
+                        ('head', 'tail'),
+                    ]:
+                        interaction_type = unify_interaction_type(part1, part2)
 
-                    if positions1 is positions2:
-                        upper_triangle = np.triu((distances < threshold) & mask, k=1)
-                        interaction_counts[interaction_type] += np.sum(upper_triangle)
-                    else:
-                        interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                        positions1 = frame_data[[f'track_id', f'x_{part1}', f'y_{part1}']].to_numpy()
+                        positions2 = frame_data[[f'track_id', f'x_{part2}', f'y_{part2}']].to_numpy()
 
-            data.append(interaction_counts)
+                        ids1 = positions1[:, 0]
+                        ids2 = positions2[:, 0]
+                        coords1 = positions1[:, 1:].astype(float)
+                        coords2 = positions2[:, 1:].astype(float)
+
+                        distances = cdist(coords1, coords2)
+                        mask = ids1[:, None] != ids2[None, :]
+
+                        if positions1 is positions2:
+                            upper_triangle = np.triu((distances < threshold) & mask, k=1)
+                            interaction_counts[interaction_type] += np.sum(upper_triangle)
+                        else:
+                            interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+
+                data.append(interaction_counts)
 
         interaction_df = pd.DataFrame(data)
-        melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
+        melted_df = interaction_df.melt(id_vars=['file', 'frame_bin'], var_name='interaction_type', value_name='count').sort_values(by='file')
 
         if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
