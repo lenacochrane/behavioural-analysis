@@ -98,6 +98,7 @@ class HoleGui:
             self.current_video_index += 1
             self.process_videos()
 
+
     def save_coordinates(self):
         if self.hole_coordinates:
             video_file = self.video_files[self.current_video_index]
@@ -112,5 +113,12 @@ class HoleGui:
             except Exception as e:
                 print(f"Error saving coordinates to {hole_file}: {e}")
 
+
+##########################################################################################################
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = HoleGui(root)
+    root.mainloop()
 
 
