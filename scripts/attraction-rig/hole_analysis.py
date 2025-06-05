@@ -2267,11 +2267,8 @@ class HoleAnalysis:
 
 ############################################  ---- HOLES ----  ############################################        
 
-            
-   # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN THE HOLE + IF LARVAE OUTSIDE HOLE IS IT MOVING (IDENTIFYING THOSE CLOSE AND BURROWING BENEATH SURFACE)
-    # ALSO CHANGED IT SUCH THAT IT KEEPS THE ORIGINAL DATAFRAME SO I CAN DO A VIDEO CHECK 
-
     # METHOD COMPUTE_HOLE: DETECTS WHETHER LARVAE IS WITHIN HOLE 
+
     def compute_hole(self):
 
         for match in self.matching_pairs:
@@ -2334,9 +2331,8 @@ class HoleAnalysis:
             # df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
 
     # METHOD HOLE_COUNTER: COUNTS NUMBER OF LARVAE IN HOLE 
-    def hole_counter(self):
 
-        self.compute_digging() 
+    def hole_counter(self):
 
         data = []
 
@@ -2359,6 +2355,131 @@ class HoleAnalysis:
 
         return hole_count
     
+    # METHOD TIME_TO_ENTER: CALCULATES TIME TO ENTER HOLE 
+
+    def time_to_enter(self):
+
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+            
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
+            df = self.track_data[track_file]
+      
+            for track in df['track_id'].unique():
+                unique_track = df[df['track_id'] == track]
+                unique_track = unique_track.sort_values(by=['frame'], ascending=True)
+
+                entered = False
+
+                for row in unique_track.itertuples():
+    
+                    if row.within_hole:
+                        data.append({'file': track_file, 'track': track, 'time': row.frame})
+                        entered = True
+                        break
+                if not entered:
+                    data.append({'file': track_file, 'track': track, 'time': 3600})
+
+        hole_entry_time = pd.DataFrame(data)
+        hole_entry_time = hole_entry_time.sort_values(by=['file'], ascending=True)
+        hole_entry_time.to_csv(os.path.join(self.directory, 'hole_entry_time.csv'), index=False)
+
+        return hole_entry_time
+
+
+    # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICH RETURN TO THE HOLE AND THE TIME TAKEN 
+
+    def returns(self):
+
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+
+            for track in df['track_id'].unique():
+                track_df = df[df['track_id'] == track].sort_values(by='frame').reset_index(drop=True)
+                states = track_df['within_hole'].astype(bool).values
+                frames = track_df['frame'].values
+
+                i = 1
+                while i < len(states):
+                    # Detect True → False transition (exit)
+                    if states[i - 1] and not states[i]:
+                        exit_frame = frames[i]
+
+                        # Now search for the next False → True (re-entry)
+                        j = i + 1
+                        while j < len(states):
+                            if not states[j - 1] and states[j]:
+                                return_frame = frames[j]
+                                return_time = return_frame - exit_frame
+                                data.append({
+                                    'file': track_file,
+                                    'track': track,
+                                    'exit frame': exit_frame,
+                                    'return frame': return_frame,
+                                    'return time': return_time
+                                })
+                                i = j  # move outer loop forward after return
+                                break
+                            j += 1
+                    i += 1
+
+        df_returns = pd.DataFrame(data)
+        df_returns = df_returns.sort_values(by=['file', 'track', 'exit frame'])
+        df_returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
+        return df_returns
+    
+
+    # METHOD HOLE_DEPARTURES: CALCULATES THE NUMBER OF LARVAE LEAVING THE HOLE
+
+    def hole_departures(self):
+
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+
+            for track in df['track_id'].unique():
+                track_df = df[df['track_id'] == track].sort_values(by='frame').reset_index(drop=True)
+                states = track_df['within_hole'].astype(bool).values
+                frames = track_df['frame'].values
+
+                count = 0
+
+                i = 1
+                while i < len(states):
+                    # Detect True → False transition (exit)
+                    if states[i - 1] and not states[i]:
+                        count =+ 1
+                    i += 1
+
+                data.append({'file': track_file, 'track': track, 'departures': count})
+
+        hole_departures = pd.DataFrame(data)
+        hole_departures = hole_departures.sort_values(by=['track'], ascending=True)
+        hole_departures.to_csv(os.path.join(self.directory, 'hole_departures.csv'), index=False)
+
+        return hole_departures
+                        
+
+
+    
+    
+
+
+
+
+
+
 
 
     # METHOD DISTANCE_FROM_HOLE: CALCULATES DISTANCES FROM HOLE CENTROID 
@@ -2407,148 +2528,8 @@ class HoleAnalysis:
     # METHOD TIME_TO_ENTER: TIME TAKEN FOR EACH TRACK TO ENTER THE HOLE
       # ACCOUNT ONLY FOR THE TRACKS GENERATED IN THE FIRST 30 FRAMES (TRACKS GO MISSING ONCE IN HOLE AND REGENERATE NEW ONES WHICH WE DONT CARE ABOUT)
 
-    def time_to_enter(self):
-
-        times = []
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            hole_boundary = match['hole_boundary']
-            
-            if hole_boundary is None:
-                print(f"No hole boundary for track file: {track_file}")
-                continue
-
-            df = self.track_data[track_file]
-      
-            for track in df['track_id'].unique():
-                unique_track = df[df['track_id'] == track]
-                unique_track = unique_track.sort_values(by=['frame'], ascending=True)
-
-                # Check if the track appears for the first time after frame 30
-                first_frame = unique_track['frame'].iloc[0]
-                if first_frame > 30:
-                    continue  # Skip tracks that appear after frame 30
-
-                entered = False
-
-                # frame at which it enters the hole 
-                for row in unique_track.itertuples():
-      
-                    point = Point(row.x_body, row.y_body) # Create a Point object for each (x_body, y_body) pair
-     
-                    if hole_boundary.contains(point) or hole_boundary.touches(point):
-                        print(row.frame)
-                        times.append({'track': track, 'time': row.frame, 'file': track_file})
-                        entered = True
-                        break
-
-                if not entered:
-                    times.append({'track': track, 'time': np.nan, 'file': track_file})
-        
-        hole_entry_time = pd.DataFrame(times)
-        hole_entry_time = hole_entry_time.sort_values(by=['file'], ascending=True)
-        hole_entry_time.to_csv(os.path.join(self.directory, 'hole_entry_time.csv'), index=False)
-
-        return hole_entry_time
 
 
-    # DEF RETURNS: CALCULATES THE NUMBER OF LARVAE WHICH RETURN TO THE HOLE AND THE TIME TAKEN 
-
-    def returns(self):
-
-        data = []
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            hole_boundary = match['hole_boundary']
-
-            if hole_boundary is None:
-                print(f"No hole boundary for track file: {track_file}")
-                continue
-
-            df = self.track_data[track_file]
-
-            df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
-
-            for track in df['track_id'].unique():
-                unique_track = df[df['track_id'] == track].sort_values(by=['frame'], ascending=True)
-
-                # identify inside or touching 2d points - Boolean True if so 
-                unique_track['potential point'] = unique_track['point'].apply(lambda row: hole_boundary.contains(row) or hole_boundary.touches(row))
-
-                # shifts the rows up by one, such that if the following row were to contain True/False we would know 
-                unique_track['following point'] = unique_track['potential point'].shift(-1)
-
-                exit_frame = None
-
-                # Identify rows which were within/touching the hole (potential point: True) and have now left the hole (following point: False)
-                for i, row in unique_track.iterrows():
-                    
-                    if row['potential point'] and not row['following point']: # identify tracks which have left the hole boundary
-                        exit_frame = row['frame']
-                        continue 
-                         
-                    if exit_frame is not None:
-                        if row['potential point']: # the track has reentered
-                            return_frame = row['frame']
-                            print(exit_frame, return_frame)
-                            time_taken = return_frame - exit_frame
-      
-                            data.append({'track': track, 'return time': time_taken, 'exit frame': exit_frame, 'return frame': return_frame, 'file': track_file})
-        
-                            exit_frame = None
-        
-        returns = pd.DataFrame(data)
-        print(returns.head())
-        returns = returns.sort_values(by=['track'], ascending=True)
-        returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
-
-        return returns
-    
-
-    # METHOD HOLE_DEPARTURES: METHOD WHICH CALCULATES THE NUMBER OF LARVAE LEAVING THE HOLE
-
-    def hole_departures(self):
-
-        data = []
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            hole_boundary = match['hole_boundary']
-
-            if hole_boundary is None:
-                print(f"No hole boundary for track file: {track_file}")
-                continue
-
-            df = self.track_data[track_file]
-
-            df['point'] = df.apply(lambda row: Point(row.x_body, row.y_body), axis=1)
-
-            for track in df['track_id'].unique():
-                unique_track = df[df['track_id'] == track].sort_values(by=['frame'], ascending=True)
-                
-                # IDENTIFY TRACKS WHICH ARE WITHIN/TOUCHING THE BOUNDARY
-                unique_track['potential point'] = unique_track['point'].apply(lambda row: hole_boundary.contains(row) or hole_boundary.touches(row))
-
-                # IS THE NEXT ROW INSIDE ALSO 
-                unique_track['following point'] = unique_track['potential point'].shift(-1)
-
-                # Identify rows which were within/touching the hole (potential point: True) and have now left the hole (following point: False)
-                for i, row in unique_track.iterrows():
-
-                    # IDENTIFY TRACKS WHICH HAVE NOW LEFT THE HOLE BOUNDARY!
-                    
-                    if row['potential point'] and not row['following point']: 
-                        data.append({'track': track, 'exit frame': row['frame'], 'file': track_file})
-                        continue 
-        
-        hole_departures = pd.DataFrame(data)
-        hole_departures = hole_departures.sort_values(by=['track'], ascending=True)
-        hole_departures.to_csv(os.path.join(self.directory, 'hole_departures.csv'), index=False)
-
-        return hole_departures
-                        
 
 
     # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
