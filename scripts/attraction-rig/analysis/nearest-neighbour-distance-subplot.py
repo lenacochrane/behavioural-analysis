@@ -9,33 +9,33 @@ import matplotlib.patches as mpatches
 
 
 
-df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed/correlations.csv')
+df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed/nearest_neighbour.csv')
 df3['condition'] = 'GH_N2'
 
-df4 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated/correlations.csv')
+df4 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated/nearest_neighbour.csv')
 df4['condition'] = 'SI_N2'
 
-df5 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/correlations.csv')
+df5 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/nearest_neighbour.csv')
 df5['condition'] = 'GH_N10'
 
-df6 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/correlations.csv')
+df6 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated/nearest_neighbour.csv')
 df6['condition'] = 'SI_N10'
 
-df7 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/correlations.csv')
+df7 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated/nearest_neighbour.csv')
 df7['condition'] = 'PSEUDO-SI_N10'
 
-df8 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/correlations.csv')
+df8 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/nearest_neighbour.csv')
 df8['condition'] = 'PSEUDO-GH_N10'
 
-df9 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated/correlations.csv')
+df9 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated/nearest_neighbour.csv')
 df9['condition'] = 'PSEUDO-SI_N2'
 
-df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed/correlations.csv')
+df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed/nearest_neighbour.csv')
 df10['condition'] = 'PSEUDO-GH_N2'
 
 
 
-df = pd.concat([df5, df8], ignore_index=True)
+df = pd.concat([df5, df6], ignore_index=True)
 
 
 # Create subplots
@@ -88,7 +88,7 @@ plt.ylim(0, 0.1)
 
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/nearest-neighour-subplot-n10-gh-pseudo.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/nearest-neighour-subplot-n10.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

@@ -7,7 +7,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-# call function to run the gui 
 def run_gui():
     root = tk.Tk()  # Create the main root window
     app = HoleGui(root)  # Create an instance of the SideHoleGui class with the root window
@@ -29,7 +28,7 @@ def perform_analysis(directory):
     # analysis.post_processing()
     # analysis.quality_control()
 
-    analysis.nearest_neighbour()
+    # analysis.nearest_neighbour()
 
     # analysis.hole_boundary(scale_factor=1.5)
 
@@ -56,28 +55,36 @@ def perform_analysis(directory):
     # DIGGING IN ABSENCE OF HOLES
     # analysis.total_digging(cleaned=True) #HAVE TO MODIFY
 
-    # HOLE ANALYSIS METHODS 
 
-    # requires polygon
-    # analysis.returns()
-    # analysis.time_to_enter() # SCALE FACTOR LESS THAN 1.5?
-    # analysis.hole_counter()
-    # analysis.hole_departures()
+
     
-    # requires hole centroid 
-    # analysis.hole_orientation()
-    # analysis.distance_from_hole()
+
 
     # analysis.hole_euclidean_distance()
 
     # analysis.interaction_types()
 
 
-    # analysis.interactions()
+    analysis.interactions()
+    
     # analysis.contacts(proximity_threshold=5)
 
     # analysis.total_digging(cleaned=True)
     # analysis.digging_behaviour()
+
+
+    ##### --- HOLES --- ####
+    # analysis.compute_hole()
+    # analysis.hole_counter()
+    # analysis.returns()
+    # analysis.hole_departures()
+    # analysis.time_to_enter()
+    # analysis.hole_entry_probability()
+
+    # analysis.hole_mask()
+    # analysis.hole_orientation()
+    # analysis.distance_from_hole()
+    
 
 
     print("Analysis Completed")
@@ -98,7 +105,12 @@ if __name__ == "__main__":
     perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
     perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/pseudo-generation')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION')
+
+
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video')
+
 
 
 

@@ -44,7 +44,7 @@ class HoleAnalysis:
         self.use_shorten = True 
         self.shorten_duration = None
 
-        self.digging = None
+        # self.digging = None
 
 
     # METHOD COORDINATES: IDENTIFIES AND STORES THE HOLE COORDINATE FILES
@@ -102,6 +102,17 @@ class HoleAnalysis:
             df = self.compute_digging(df)
             # df.to_csv(os.path.join(self.directory, 'digging.csv'), index=False) # get rid 
             self.track_data[track_file] = df[df['digging_status'] == False].copy()
+    
+
+    ### METHOD HOLE_MASK: FILTERS FOR NON-HOLE LARVAE
+
+    def hole_mask(self):
+
+        self.compute_hole()  
+
+        for track_file in self.track_files:
+            df = self.track_data[track_file]
+            self.track_data[track_file] = df[df['within_hole'] == False].copy()
 
 
     # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 
@@ -1019,8 +1030,6 @@ class HoleAnalysis:
 
     # METHOD COMPUTE_DIGGING: THIS METHOD DETECTS IF LARVAE ARE DIGGING (IN ABSENCE OF MAN-MADE HOLE)
 
-    # is_moving>0.1, disp_win=10, rate>0.1, std_win=10, std>0.1, dig_win=50
-
     def compute_digging(self, df):
         df = df.sort_values(['track_id', 'frame']).reset_index(drop=True)
 
@@ -1059,6 +1068,41 @@ class HoleAnalysis:
             .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size / 2)).fillna(0).astype(bool))
         )
 
+        ### backfilling TRUE for larvae that actually end up digging 
+
+        df['prev'] = (
+                df.groupby('track_id')['digging_status']
+                .shift(1)
+                .fillna(False)
+            )
+        df['false_true'] = df['digging_status'] & ~df['prev'] # digging status = True ; prev frame digging status = False
+
+
+        df['future_digging'] = (
+        df.groupby('track_id')['digging_status']
+        .rolling(window=50, min_periods=50)
+        .sum()
+        .shift(-49)
+        .reset_index(level=0, drop=True)
+    )
+        df['long_digging'] = df['false_true'] & (df['future_digging'] >= 50)
+
+        # 1) Initialize backfill column
+        df['backfill'] = False
+
+        # 2) Loop per track
+        for track_id, group in df.groupby('track_id'):
+            idx   = group.index
+            starts = idx[group.loc[idx, 'long_digging']]
+            for s in starts:
+                pre = max(idx.min(), s - 30)
+                df.loc[pre:s-1, 'backfill'] = True  # back-fill up to the frame *before* 
+
+        df['digging_status'] = df['digging_status'] | df['backfill']
+
+        df.drop(columns=['backfill', 'long_digging', 'false_true', 'future_digging'], inplace=True)
+
+    
         return df
 
 
@@ -2341,6 +2385,7 @@ class HoleAnalysis:
             
             df = self.track_data[track_file]
 
+
             for frame in df['frame'].unique():
                 frame_df = df[df['frame'] == frame]
 
@@ -2459,7 +2504,7 @@ class HoleAnalysis:
                 while i < len(states):
                     # Detect True → False transition (exit)
                     if states[i - 1] and not states[i]:
-                        count =+ 1
+                        count += 1
                     i += 1
 
                 data.append({'file': track_file, 'track': track, 'departures': count})
@@ -2472,26 +2517,13 @@ class HoleAnalysis:
                         
 
 
-    
-    
-
-
-
-
-
-
-
-
-    # METHOD DISTANCE_FROM_HOLE: CALCULATES DISTANCES FROM HOLE CENTROID 
+    # METHOD DISTANCE_FROM_HOLE: CALCULATES DISTANCES FROM HOLE CENTROID  
 
     def distance_from_hole(self): 
 
-        # self.hole_centroid() # call the hole_centroid method 
-
-        distances_from_hole = []
         data = []
 
-        for match in self.matching_pairs:  # Access dictionaries instead of unpacking tuples
+        for match in self.matching_pairs:  
             track_file = match['track_file']
             hole_boundary = match['hole_boundary']
             
@@ -2506,37 +2538,20 @@ class HoleAnalysis:
             for index, row in df.iterrows():
                 x, y = row['x_body'], row['y_body']
                 distance = np.sqrt((centroid.x - x)**2 + (centroid.y - y)**2)
-                distances_from_hole.append(distance)
                 data.append({'time': row.frame, 'distance_from_hole': distance, 'file': track_file})
-        
-        print("Distances from hole centroid:", distances_from_hole)
-
-        if not distances_from_hole:
+    
+        if not data:
             print("No distances calculated, check data")
         else:
 
-            df_distances = pd.DataFrame(distances_from_hole, columns=['Distance from hole'])
-            df_distances.to_csv(os.path.join(self.directory, 'distance_from_hole_centroid.csv'), index=False)
-            print(f"Distance from hole saved: {df_distances}")
-
             distance_hole_over_time = pd.DataFrame(data)
             distance_hole_over_time = distance_hole_over_time.sort_values(by=['time'], ascending=True)
-            distance_hole_over_time.to_csv(os.path.join(self.directory, 'distance_hole_over_time.csv'), index=False)
-
-            return df_distances
-
-    # METHOD TIME_TO_ENTER: TIME TAKEN FOR EACH TRACK TO ENTER THE HOLE
-      # ACCOUNT ONLY FOR THE TRACKS GENERATED IN THE FIRST 30 FRAMES (TRACKS GO MISSING ONCE IN HOLE AND REGENERATE NEW ONES WHICH WE DONT CARE ABOUT)
-
-
-
+            distance_hole_over_time.to_csv(os.path.join(self.directory, 'hole_distance.csv'), index=False)
 
 
     # METHOD HOLE_ORIENTATION: CALCULATES LARVAE ORIENTATION FROM THE HOLE
 
     def hole_orientation(self):
-
-        self.hole_centroid() # call the hole_centroid method 
 
         def angle_calculator(vector_A, vector_B):
             # convert to an array for mathmatical ease 
@@ -2555,37 +2570,104 @@ class HoleAnalysis:
             theta_degrees = np.degrees(theta_radians)
             return theta_degrees
         
-        hole_orientations = []
         data = []
 
-        for track_file, centroid in self.matching_pairs:
+        for match in self.matching_pairs:  
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+            
+            if hole_boundary is None:
+                print(f"No hole boundary for track file: {track_file}")
+                continue
+
             df = self.track_data[track_file]
+
+            centroid = hole_boundary.centroid
+
+            hole = np.array([centroid.x, centroid.y])
             
             for row in df.itertuples(): # tuple of each row 
 
                 body = np.array([row.x_body, row.y_body])
                 head = np.array([row.x_head, row.y_head])
 
-                hole_body = np.array(centroid) - body 
+                # hole_body = np.array(centroid) - body 
+                hole_body = hole - body
                 body_head = head - body
 
                 angle = angle_calculator(hole_body, body_head)
 
                 frame = row.frame
 
-                hole_orientations.append(angle)
-
                 data.append({'time': frame, 'hole orientation': angle, 'file': track_file})
-        
-
-        hole_orientations = pd.DataFrame(hole_orientations)
-        hole_orientations.to_csv(os.path.join(self.directory, 'hole_orientations.csv'), index=False)
 
         hole_orientation_over_time = pd.DataFrame(data)
         hole_orientation_over_time = hole_orientation_over_time.sort_values(by=['time'], ascending=True)
-        hole_orientation_over_time.to_csv(os.path.join(self.directory, 'hole_orientation_over_time.csv'), index=False)
+        hole_orientation_over_time.to_csv(os.path.join(self.directory, 'hole_orientation.csv'), index=False)
 
-        return hole_orientations, hole_orientation_over_time
+
+
+    # METHOD POTENTIAL_ENTRIES: NUMBER OF TIMES LARVAE ARE WITHIN VISCINITY OF HOLE BUT CHOSE NOT TO ENTER 
+
+ 
+    def hole_entry_probability(self):
+        data = []
+        min_near_frames = 15
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].sort_values(['track_id', 'frame'])
+
+            for track_id, track_df in df.groupby('track_id'):
+                near = track_df['within_10mm'].values.astype(bool)
+                hole = track_df['within_hole'].values.astype(bool)
+                frames = track_df['frame'].values
+
+                i = 0
+                while i <= len(near) - min_near_frames -1:
+                    if all(near[i:i + min_near_frames]):
+
+                        decision_frame = frames[i + min_near_frames]
+
+                        # Look ahead to see if they enter the hole
+                        entered = any(hole[i + min_near_frames : i + min_near_frames + 30])
+
+                        others_inside = df[
+                            (df['frame'] == decision_frame) &     # Only consider rows for the current decision frame
+                            (df['track_id'] != track_id) &        # Exclude the current larva (we want others only)
+                            (df['within_hole'])                   # Only count those larvae currently inside the hole
+                        ].shape[0]                                # Get the number of such rows = number of others in hole
+
+                        data.append({
+                            'file': track_file,
+                            'track': track_id,
+                            'decision_frame': decision_frame,
+                            'entry': entered,
+                            'number_inside_hole': others_inside
+                        })
+                        
+                        if entered:
+                            # Skip until they leave both the hole AND the 10mm vicinity
+                            j = i + min_near_frames + 30
+                            while j < len(hole) and (hole[j] or near[j]):
+                                j += 1
+                            i = j
+                        else:
+                            # They didn't enter — skip ahead until they leave the 10mm vicinity
+                            j = i + min_near_frames
+                            while j < len(near) and near[j]:
+                                j += 1
+                            i = j
+                    
+                    else:
+                        i += 1
+
+        pd.DataFrame(data).to_csv(os.path.join(self.directory, 'hole_probability.csv'), index=False)
+
+
+
+
+
     
 
             

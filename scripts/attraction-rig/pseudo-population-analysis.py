@@ -88,6 +88,41 @@ class PseudoAnalysis:
         df['digging_status'] = (
             df.groupby('track_id')['final_movement']
             .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size / 2)).fillna(0).astype(bool)))
+        
+
+        ### backfilling TRUE for larvae that actually end up digging 
+
+        df['prev'] = (
+                df.groupby('track_id')['digging_status']
+                .shift(1)
+                .fillna(False)
+            )
+        df['false_true'] = df['digging_status'] & ~df['prev'] # digging status = True ; prev frame digging status = False
+
+
+        df['future_digging'] = (
+        df.groupby('track_id')['digging_status']
+        .rolling(window=50, min_periods=50)
+        .sum()
+        .shift(-49)
+        .reset_index(level=0, drop=True)
+    )
+        df['long_digging'] = df['false_true'] & (df['future_digging'] >= 50)
+
+        # 1) Initialize backfill column
+        df['backfill'] = False
+
+        # 2) Loop per track
+        for track_id, group in df.groupby('track_id'):
+            idx   = group.index
+            starts = idx[group.loc[idx, 'long_digging']]
+            for s in starts:
+                pre = max(idx.min(), s - 30)
+                df.loc[pre:s-1, 'backfill'] = True  # back-fill up to the frame *before* 
+
+        df['digging_status'] = df['digging_status'] | df['backfill']
+
+        df.drop(columns=['backfill', 'long_digging', 'false_true', 'future_digging'], inplace=True)
 
         return df
     
@@ -598,43 +633,17 @@ class PseudoAnalysis:
                 # Apply function correctly
                 df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
 
-                node_list = ['head', 'body', 'tail']
-
                 for frame in df['frame'].unique():
-                    frame_data = df[df['frame'] == frame]
-                    if len(frame_data) < 2:
+                    unique_frame =  df[df['frame'] == frame]
+                    if len(unique_frame) < 2:
                         continue
 
-                    n = len(frame_data)
-                    track_ids = frame_data['track_id'].to_numpy()
-                    index = frame_data.index.to_numpy()
-                    
-                    ### these are blank 
-                    min_dists = np.full(n, np.inf)
-                    best_pairs = np.empty(n, dtype=object)
-                    contact_ids = np.full(n, np.nan)
+                    body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
+                    distance = cdist(body_coordinates, body_coordinates, 'euclidean')
+                    np.fill_diagonal(distance, np.nan)
 
-                    for part1, part2 in product(node_list, repeat=2):
-                        coords1 = frame_data[[f'x_{part1}', f'y_{part1}']].to_numpy()
-                        coords2 = frame_data[[f'x_{part2}', f'y_{part2}']].to_numpy()
-
-                        dist_matrix = cdist(coords1, coords2)
-                        np.fill_diagonal(dist_matrix, np.inf)
-
-                        min_idx = np.argmin(dist_matrix, axis=1)
-                        min_val = np.min(dist_matrix, axis=1)
-
-                        # Update only where this pairing is the best so far
-                        update_mask = min_val < min_dists # this is boolean masking 
-                        min_dists[update_mask] = min_val[update_mask]
-                        num_updates = np.sum(update_mask)
-                        best_pairs[update_mask] = [f"{part1}-{part2}"] * num_updates
-                        contact_ids[update_mask] = track_ids[min_idx[update_mask]]
-
-                    # Save to main df
-                    df.loc[index, 'node_distance'] = min_dists
-                    df.loc[index, 'node-node'] = best_pairs
-                    df.loc[index, 'contact_track'] = contact_ids
+                    # unique_frame['body-body'] = np.nanmin(distance, axis=1)
+                    df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
 
                 dfs.append(df)
                     # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
@@ -648,6 +657,7 @@ class PseudoAnalysis:
 
             filename = f"nearest_neighbour{suffix}.csv"
             data.to_csv(os.path.join(self.directory, filename), index=False)
+
 
 
 

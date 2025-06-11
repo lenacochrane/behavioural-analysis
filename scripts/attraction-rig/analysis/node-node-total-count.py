@@ -35,7 +35,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df6, df7], ignore_index=True) #n2
+df = pd.concat([df3, df4], ignore_index=True) #n2
 # df = pd.concat([ df5, df6, df7, df8], ignore_index=True) #n10
 
 palette = {
@@ -51,26 +51,27 @@ palette = {
 }
 
 
-
 grouped = (
-    df.groupby(['file', 'condition', 'interaction_type'])['count']
+    df.groupby(['file', 'condition'])['count']
     .sum()
     .reset_index()
 )
 
-sns.barplot(data=grouped, x='interaction_type', y='count', edgecolor='black', linewidth=2, ci='sd', hue='condition', alpha=0.8, palette=palette)
+
+
+sns.barplot(data=grouped, x='condition', y='count', edgecolor='black', linewidth=2, ci='sd', alpha=0.8, palette=palette)
 
 plt.xlabel('', fontsize=12, fontweight='bold')
-plt.ylabel('Frequency', fontsize=12, fontweight='bold')
+plt.ylabel('Total Count', fontsize=12, fontweight='bold')
 
-plt.ylim(0,1200)
+# plt.ylim(0,1200)
 
-plt.title('Node Contact Frequency', fontsize=16, fontweight='bold')
+plt.title('Total Contacts <1mm', fontsize=16, fontweight='bold')
 
 plt.tight_layout(rect=[1, 1, 1, 1])
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n10-si.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n2.png', dpi=300, bbox_inches='tight')
 
 plt.show()
 

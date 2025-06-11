@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/2025-03-10_15-37-02_td9.tracks.000_2025-03-10_15-37-02_td9.analysis.csv')
+df = pd.read_csv('/Users/cochral/Desktop/SLAEP/TRain/4/2025-03-04_15-52-06_td3.tracks.000_2025-03-04_15-52-06_td3.analysis.csv')
 
 print(df['track'].unique())
 
@@ -65,7 +65,7 @@ print(jumped_tracks)
 
 # %% PRINT FRAMES OF CERTAIN TRACK
 
-print(df[df['track'] == 'track_50']['frame_idx'])
+print(df[df['track'] == 'track_60']['frame_idx'])
 
 
 ######################
@@ -80,6 +80,8 @@ frames_with_mixed_scores = df.groupby('frame_idx')['instance.score'].apply(
 mixed_frames = frames_with_mixed_scores[frames_with_mixed_scores].index
 
 print(f"Frames:{mixed_frames}")
+
+
 
 
 ######################
@@ -100,7 +102,7 @@ print(df.head())
 
 # %% CSV -> FEATHER AND SLP
 
-df.to_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/socially-isolated/N10/FOOD/feather.feather')
+df.to_feather('/Users/cochral/Desktop/SLAEP/TRain/feather.feather')
 
 
 
@@ -110,51 +112,5 @@ df.to_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/Videos/soc
 
 
 #############################################################
+
 # %%
-###############################################################
-##################### CONVERT CSV TO SLP ######################
-
-from sleap import Labels, LabeledFrame, Instance, Point, Skeleton
-import pandas as pd
-import numpy as np
-
-# Load your CSV
-csv_path = "/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-csv-slp/2025-02-28_12-32-46_td12.csv"
-df = pd.read_csv(csv_path)
-
-# Define skeleton nodes and edges
-node_names = ["head", "body", "tail"]
-edges = [("head", "body"), ("body", "tail")]
-skeleton = Skeleton(node_names=node_names, edges=edges)
-
-labeled_frames = []
-
-# Group by frame index
-for frame_idx, group in df.groupby("frame_idx"):
-    instances = []
-    
-    for _, row in group.iterrows():
-        points = []
-        for node in node_names:
-            x = row.get(f"{node}.x", np.nan)
-            y = row.get(f"{node}.y", np.nan)
-            score = row.get(f"{node}.score", np.nan)
-            points.append(Point(x=x, y=y, score=score))
-        
-        instance = Instance(points=points)
-        instance.track = row["track"]  # e.g., "track_0"
-        instances.append(instance)
-    
-    lf = LabeledFrame(video=None, frame_idx=int(frame_idx), instances=instances)
-    labeled_frames.append(lf)
-
-# Create Labels object
-labels = Labels(labeled_frames=labeled_frames, skeleton=skeleton)
-
-# Save as .slp
-output_path = csv_path.replace(".csv", "_converted.slp")
-labels.save_file(output_path)
-print(f"✅ Saved SLP to: {output_path}")
-
-
-

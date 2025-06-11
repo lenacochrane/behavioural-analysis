@@ -31,36 +31,70 @@ df9['condition'] = 'PSEUDO-SI_N2'
 df10 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed/interaction_types.csv')
 df10['condition'] = 'PSEUDO-GH_N2'
 
+palette = {
+    'SI_N2': '#FF7369',  # yellow-orange
+    'SI_N10': '#FF7369',
+    'GH_N2': '#0d75b9',
+    'GH_N10': '#0d75b9',     # blue-green
+    "PSEUDO-GH_N2": '#91CEFF',
+    "PSEUDO-GH_N10": '#91CEFF',
+    'PSEUDO-SI_N2': '#D8C2E0',
+     'PSEUDO-SI_N10': '#D8C2E0'
+    
+}
 
-# df = pd.concat([df3, df4, df9, df10], ignore_index=True) #n2
-df = pd.concat([ df5, df6, df7, df8], ignore_index=True) #n10
+
+df = pd.concat([df3, df4], ignore_index=True) #n2
+
+# df = pd.concat([ df5, df6, df7, df8], ignore_index=True) #n10
+
+bins = sorted(df['frame_bin'].unique())[:6]  # only take the first 6 bins
 
 
-# Create subplots
-fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
+fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharey=False)
 axes = axes.flatten()
 
-for i in range(6):
-    start = i * 600
-    end = start + 600
-    df_interval = df[(df['time'] >= start) & (df['time'] < end)]
 
-    sns.barplot(data=df, x='interaction_type', y='count', edgecolor='black', linewidth=2, ci='sd', hue='condition', alpha=0.8,  ax=axes[i])
+
+for i, bin_val in enumerate(bins):
+    ax = axes[i]
+    df_bin = df[df['frame_bin'] == bin_val]
+
+    grouped = (
+        df_bin.groupby(['condition', 'file', 'interaction_type'])['count']
+        .sum()
+        .reset_index()
+    )
+
+    sns.barplot(
+        data=grouped,
+        x='interaction_type',
+        y='count',
+        hue='condition',
+        ax=ax,
+        edgecolor='black',
+        linewidth=2, alpha=0.8, palette=palette
+    )
+
+    bin_label = f"{bin_val}-{bin_val + 599}"
+    ax.set_title(f'Frames {bin_label}', fontsize=10, fontweight='bold')
+    ax.set_xlabel('')
+    ax.set_ylabel('Count')
+    ax.set_ylim(0, 10)
+    ax.tick_params(axis='x', rotation=45)
     
-    axes[i].set_title(f'{start}-{end}s', fontsize=14, fontweight='bold')
-    axes[i].set_xlim(0, 2)
-    # axes[i].set_ylim(0, 2)
-    axes[i].set_xlabel('', fontsize=10, fontweight='bold')
-    axes[i].set_ylabel('Frequency', fontsize=10, fontweight='bold')
-    axes[i].tick_params(axis='x', rotation=45)
-    axes[i].tick_params(axis='both', labelsize=10)
 
-# Adjust layout
-plt.suptitle('Node Contact Frequency <1mm', fontsize=18, fontweight='bold')
-plt.tight_layout(rect=[0, 0, 1, 0.95])
+# Remove any unused subplots if bins < 6
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+
+
+fig.suptitle('Interaction Types per Frame Bin', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
  
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n10_subplot.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n2_subplot.png', dpi=300, bbox_inches='tight')
 
 plt.show()
 
