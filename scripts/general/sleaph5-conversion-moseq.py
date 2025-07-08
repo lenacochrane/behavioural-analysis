@@ -18,6 +18,8 @@ for filename in os.listdir(folder_path):
                 continue
 
             point_scores = np.array(f['point_scores'])         # (tracks, nodes, frames)
+            updated_point_scores = point_scores.copy()
+
             instance_scores = np.array(f['instance_scores'])   # (tracks, frames)
 
             num_tracks, num_nodes, num_frames = point_scores.shape
@@ -28,11 +30,17 @@ for filename in os.listdir(folder_path):
                     point_vec = point_scores[track, :, frame]  # shape: (3,)
                     if np.all(np.isnan(point_vec) | (point_vec == 0)):
                         updated_instance_scores[track, frame] = 1.0
+                        updated_point_scores[track, :, frame] = 1.0
+
 
             # Overwrite instance_scores in place
             del f['instance_scores']
             f.create_dataset('instance_scores', data=updated_instance_scores)
             print(f"  ✅ instance_scores updated in {filename}")
+            # Overwrite point_scores in place
+            del f['point_scores']
+            f.create_dataset('point_scores', data=updated_point_scores)
+
 
 ################################################################## check h5 file conversion worked 
 
