@@ -130,11 +130,11 @@ import matplotlib.pyplot as plt
 
 
 
-df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_05_29-11_45_53/stats_df.csv')
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_05_29-11_45_53/stats_df.csv')
 
-sns.barplot(data=df, x='syllable', y='duration', errorbar='sd')
-plt.xticks(rotation=45)
-plt.show()
+# sns.barplot(data=df, x='syllable', y='duration', errorbar='sd')
+# plt.xticks(rotation=45)
+# plt.show()
 
 
 # sns.barplot(data=df, x='syllable', hue='condition', y='frequency')
@@ -146,3 +146,82 @@ plt.show()
 # plt.xlim(None,20)
 # plt.show()
 
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/cleaned-tracks/socially-isolated/n10/SOCIALLY-ISOLATED/2025-02-24_11-49-59_td12.csv')
+
+# print(df.head())
+
+
+# directory = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/n1_csv'
+
+# for filename in os.listdir(directory):
+#     if "analysis" in filename and filename.endswith(".csv"):
+#         # Example: 2025-03-25_16-33-40_td3.tracks.000_2025-03-25_16-33-40_td3.analysis.csv
+#         # Want: GH-N1_2025-03-25_16-33-40_td3.csv
+#         original_path = os.path.join(directory, filename)
+
+#         base_name = filename.split('.tracks')[0]  # take the part before `.tracks`
+#         new_filename = f"SI-N1_{base_name}.csv"
+#         new_path = os.path.join(directory, new_filename)
+
+#         os.rename(original_path, new_path)
+#         print(f"✅ Renamed: {filename} ➜ {new_filename}")
+
+
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/predictions-csv/GH-N10_2025-02-28_13-00-52_td9.csv')
+
+# print(df)
+
+# directory = '/Users/cochral/Desktop/MOSEQ/predictions-csv'
+
+
+# # Columns to check for NaNs as a group
+# check_columns = ['body.score', 'tail.score', 'head.score']
+# # Column to also set if condition is met
+# fill_columns = check_columns + ['instance.score']
+
+# for filename in os.listdir(directory):
+#     if filename.endswith('.csv'):
+#         filepath = os.path.join(directory, filename)
+#         try:
+#             df = pd.read_csv(filepath)
+
+#             # Check that all required columns are present
+#             if all(col in df.columns for col in fill_columns):
+#                 # Identify rows where body, tail, and head scores are all NaN
+#                 condition = df[check_columns].isna().all(axis=1)
+
+#                 # Apply fill only on those rows
+#                 if condition.any():
+#                     df.loc[condition, fill_columns] = 1.0
+#                     df.to_csv(filepath, index=False)
+#                     print(f"{filename}: Updated {condition.sum()} row(s) where all three scores were NaN.")
+#                 else:
+#                     print(f"{filename}: No rows with all NaNs in body, tail, and head scores.")
+
+#             else:
+#                 print(f"{filename}: Missing one or more required columns.")
+
+#         except Exception as e:
+#             print(f"Failed to process {filename}: {e}")
+
+
+
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/predictions-csv/GH-N10_2025-02-28_13-00-52_td9.csv')
+
+# print(df)
+
+
+
+file = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/2025-02-24_11-59-11_td14_perimeter.wkt'
+
+# Load the WKT polygon
+with open('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed/2025-02-24_11-59-11_td14_perimeter.wkt', 'r') as f:
+    polygon = wkt.loads(f.read().strip())
+
+# Use bounding box to get diameter
+minx, miny, maxx, maxy = polygon.bounds
+diameter_x = maxx - minx
+diameter_y = maxy - miny
+diameter = max(diameter_x, diameter_y)  # assuming circular shape
+
+print(f"🟢 Diameter (bounding box): {diameter:.2f} units")

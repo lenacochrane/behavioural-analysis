@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import pyarrow.feather as feather
 import matplotlib.patches as mpatches
 
-df_moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_05_29-11_45_53/moseq_df.csv')
+df_moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_06_23-10_59_29/moseq_df.csv')
 # df_stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA3600/2025_06_06-11_20_54/stats_df.csv')
 
 print(df_moseq.columns)

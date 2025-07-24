@@ -2274,17 +2274,32 @@ class HoleAnalysis:
             part2_x = f"Track_2 x_{part2}"
             part2_y = f"Track_2 y_{part2}"
 
+            # mid_x = (row[part1_x] + row[part2_x]) / 2
+            # mid_y = (row[part1_y] + row[part2_y]) / 2
+
+            # # Subtract midpoint from all coordinate columns for this interaction
+            # for col in coordinate_columns:
+            #     if "x_" in col:
+            #         interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_x
+            #     elif "y_" in col:
+            #         interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_y
+
             mid_x = (row[part1_x] + row[part2_x]) / 2
             mid_y = (row[part1_y] + row[part2_y]) / 2
 
-            # Subtract midpoint from all coordinate columns for this interaction
+            # Create masks for update
+            mask = interaction_data["Interaction Number"] == interaction
+
+            # Save midpoints for future un-normalization
+            interaction_data.loc[mask, "Normalization mid_x"] = mid_x
+            interaction_data.loc[mask, "Normalization mid_y"] = mid_y
+
+            # Subtract midpoint from all coordinate columns
             for col in coordinate_columns:
                 if "x_" in col:
-                    interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_x
+                    interaction_data.loc[mask, col] -= mid_x
                 elif "y_" in col:
-                    interaction_data.loc[interaction_data["Interaction Number"] == interaction, col] -= mid_y
-
-
+                    interaction_data.loc[mask, col] -= mid_y
 
         desired_order = ['file', "Frame", "Interaction Number", "Normalized Frame"]
         interaction_data = interaction_data[desired_order + [col for col in interaction_data.columns if col not in desired_order]]
@@ -2341,6 +2356,10 @@ class HoleAnalysis:
             df['cumulative_displacement'] = df.groupby('track_id')['displacement'].cumsum()
 
             df['cumulative_displacement_rate'] = df.groupby('track_id',  group_keys=False)['cumulative_displacement'].apply(lambda x: x.diff(10) / 10).fillna(0)
+
+            df['frame_diff'] = df.groupby('track_id')['frame'].diff() #SPEED FOR LATER CALCULATIONS (same as displacement but just to be sure)
+            df['speed'] = df['displacement'] / df['frame_diff']
+            df['speed'] = df['speed'].fillna(0)
 
             df['x_std'] = df.groupby('track_id')['x_body'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
             df['y_std'] = df.groupby('track_id')['y_body'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
@@ -2420,16 +2439,46 @@ class HoleAnalysis:
                 unique_track = df[df['track_id'] == track]
                 unique_track = unique_track.sort_values(by=['frame'], ascending=True)
 
+                # entered = False
+
+                # for row in unique_track.itertuples():
+    
+                #     if row.within_hole:
+                #         data.append({'file': track_file, 'track': track, 'time': row.frame})
+                #         entered = True
+                #         break
+                # if not entered:
+                #     data.append({'file': track_file, 'track': track, 'time': 3600})
+
                 entered = False
+                passes = 0
+                in_vicinity = False  # track whether we're currently inside the 10mm zone
 
                 for row in unique_track.itertuples():
-    
                     if row.within_hole:
-                        data.append({'file': track_file, 'track': track, 'time': row.frame})
+                        data.append({
+                            'file': track_file,
+                            'track': track,
+                            'time': row.frame,
+                            'passes_before_entry': passes
+                        })
                         entered = True
                         break
+
+                    elif row.within_10mm and not row.within_hole:
+                        if not in_vicinity:
+                            passes += 1
+                            in_vicinity = True  # mark entry into the vicinity
+                    else:
+                        in_vicinity = False  # exited the vicinity
+                    
                 if not entered:
-                    data.append({'file': track_file, 'track': track, 'time': 3600})
+                        data.append({
+                            'file': track_file,
+                            'track': track,
+                            'time': 3600,
+                            'passes_before_entry': passes
+                        })
 
         hole_entry_time = pd.DataFrame(data)
         hole_entry_time = hole_entry_time.sort_values(by=['file'], ascending=True)
@@ -2465,13 +2514,21 @@ class HoleAnalysis:
                             if not states[j - 1] and states[j]:
                                 return_frame = frames[j]
                                 return_time = return_frame - exit_frame
+    
+                                return_distance = track_df.loc[
+                                        (track_df['frame'] > exit_frame) & (track_df['frame'] <= return_frame),
+                                        'displacement'].sum() #displacement was calculated in the compute_hole 
+
                                 data.append({
                                     'file': track_file,
                                     'track': track,
                                     'exit frame': exit_frame,
                                     'return frame': return_frame,
-                                    'return time': return_time
+                                    'return_time': return_time,
+                                    'distance_covered': return_distance
+
                                 })
+
                                 i = j  # move outer loop forward after return
                                 break
                             j += 1
@@ -2514,7 +2571,50 @@ class HoleAnalysis:
         hole_departures.to_csv(os.path.join(self.directory, 'hole_departures.csv'), index=False)
 
         return hole_departures
-                        
+    
+
+    # METHOD SPEED_HOLE():
+
+    def speed_hole(self):
+
+        summary = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+
+            for track_id, group in df.groupby('track_id'):
+                group = group.sort_values('frame')
+                # Get first entry frame
+                hole_frames = group[group['within_hole'] == True]['frame']
+                if hole_frames.empty:
+                    continue  # skip if never entered
+
+                first_entry = hole_frames.iloc[0]
+
+                # Speeds before entering the hole
+                before_mask = (group['frame'] < first_entry)
+                speeds_before = group.loc[before_mask, 'speed']
+
+                # Speeds after entering (but not in hole)
+                after_mask = (group['frame'] > first_entry) & (~group['within_hole'])
+                speeds_after = group.loc[after_mask, 'speed']
+
+                # Compare individual larva behavior before/after
+
+                summary.append({
+                    'file': track_file,
+                    'track_id': track_id,
+                    'first_entry_frame': first_entry,
+                    'mean_speed_before': speeds_before.mean(),
+                    'mean_speed_after': speeds_after.mean(),
+                    'n_frames_before': len(speeds_before),
+                    'n_frames_after': len(speeds_after)
+                })
+        
+        speed_comparison = pd.DataFrame(summary)
+        speed_comparison.to_csv(os.path.join(self.directory, 'hole_speed.csv'), index=False)
+
 
 
     # METHOD DISTANCE_FROM_HOLE: CALCULATES DISTANCES FROM HOLE CENTROID  
@@ -2538,7 +2638,7 @@ class HoleAnalysis:
             for index, row in df.iterrows():
                 x, y = row['x_body'], row['y_body']
                 distance = np.sqrt((centroid.x - x)**2 + (centroid.y - y)**2)
-                data.append({'time': row.frame, 'distance_from_hole': distance, 'file': track_file})
+                data.append({'time': row.frame, 'distance_from_hole': distance, 'speed': row.speed, 'file': track_file})
     
         if not data:
             print("No distances calculated, check data")
@@ -2608,7 +2708,6 @@ class HoleAnalysis:
 
 
     # METHOD POTENTIAL_ENTRIES: NUMBER OF TIMES LARVAE ARE WITHIN VISCINITY OF HOLE BUT CHOSE NOT TO ENTER 
-
  
     def hole_entry_probability(self):
         data = []

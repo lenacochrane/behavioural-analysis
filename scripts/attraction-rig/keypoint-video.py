@@ -16,14 +16,14 @@ import shapely.wkt
 # %% DETERMINE COLOUR OF TRACK DEPENDING ON BOOLEAN VARIABLE 
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video/df.csv')
-original_video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video/2025-03-03_14-03-34_td4.mp4'
-output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video/digging2.mp4'
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/2025-04-04_12-06-08_td4.analysis.csv')
+original_video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/2025-04-04_12-06-08_td4.mp4'
+output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/_DIGGING.mp4'
 
 
 
-mm_to_pixel = ['x_body', 'y_body']
-df[mm_to_pixel] = df[mm_to_pixel] * (1022.73/90)
+mm_to_pixel = ['body.x', 'body.y']
+df[mm_to_pixel] = df[mm_to_pixel] * (1027/90)
 
 
 # Set the im= age size
@@ -37,7 +37,7 @@ original_video = cv2.VideoCapture(original_video_path)
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec used to compress the frames
 video_output = cv2.VideoWriter(output, fourcc, 25.0, (image_size, image_size))
 
-df = df.sort_values('frame')
+df = df.sort_values('frame_idx')
 
 # Iterate over frames in the original video
 frame_number = 0
@@ -47,12 +47,12 @@ while original_video.isOpened():
         break  # Exit if no more frames
 
     # Get the data for the current frame from the CSV
-    frame_df = df[df['frame'] == frame_number]
+    frame_df = df[df['frame_idx'] == frame_number]
 
     # Overlay the circles from the CSV data onto the frame
     for i, row in frame_df.iterrows():
-        body_x = row['x_body']
-        body_y = row['y_body']
+        body_x = row['body.x']
+        body_y = row['body.y']
 
         # Skip if coordinates are NaN
         if not np.isnan([body_x, body_y]).any():

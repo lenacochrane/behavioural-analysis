@@ -44,20 +44,30 @@ for filename in os.listdir(folder_path):
 
 ################################################################## check h5 file conversion worked 
 
+
 # === Set your input file path ===
 # file_path = '/Users/cochral/Desktop/MOSEQ/predictions-edited/N10-GH_2025-03-31_17-02-11_td6.h5'
 
-# # === Read and export instance_scores ===
+# # === Read and export instance_scores + point_scores ===
 # with h5py.File(file_path, 'r') as f:
 #     instance_scores = np.array(f['instance_scores'])  # shape: (tracks, frames)
-#     num_tracks, num_frames = instance_scores.shape
+#     point_scores = np.array(f['point_scores'])        # shape: (tracks, nodes, frames)
 
-#     records = [
-#         {'frame': frame, 'track': track, 'instance_score': instance_scores[track, frame]}
-#         for track in range(num_tracks)
-#         for frame in range(num_frames)
-#     ]
+#     num_tracks, num_nodes, num_frames = point_scores.shape
+
+#     records = []
+#     for track in range(num_tracks):
+#         for frame in range(num_frames):
+#             scores = point_scores[track, :, frame]  # shape: (3,)
+#             records.append({
+#                 'frame': frame,
+#                 'track': track,
+#                 'instance_score': instance_scores[track, frame],
+#                 'head_score': scores[0],
+#                 'body_score': scores[1],
+#                 'tail_score': scores[2],
+#             })
 
 # df = pd.DataFrame(records)
-# df.to_csv('/Users/cochral/Desktop/MOSEQ/predictions-edited/frame_track_instance_scores.csv', index=False)
-# print("✅ Saved to 'frame_track_instance_scores.csv'")
+# df.to_csv('/Users/cochral/Desktop/MOSEQ/predictions-edited/frame_track_instance_point_scores.csv', index=False)
+# print("✅ Saved to 'frame_track_instance_point_scores.csv'")

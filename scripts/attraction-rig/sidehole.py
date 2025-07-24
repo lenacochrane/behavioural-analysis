@@ -22,7 +22,7 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    analysis.digging_mask()
+    # analysis.digging_mask()
 
 
     # analysis.post_processing()
@@ -57,15 +57,13 @@ def perform_analysis(directory):
 
 
 
-    
-
 
     # analysis.hole_euclidean_distance()
 
     # analysis.interaction_types()
 
 
-    analysis.interactions()
+    # analysis.interactions()
     
     # analysis.contacts(proximity_threshold=5)
 
@@ -74,12 +72,13 @@ def perform_analysis(directory):
 
 
     ##### --- HOLES --- ####
-    # analysis.compute_hole()
+    analysis.compute_hole()
     # analysis.hole_counter()
-    # analysis.returns()
+    analysis.returns()
     # analysis.hole_departures()
     # analysis.time_to_enter()
     # analysis.hole_entry_probability()
+    # analysis.speed_hole()
 
     # analysis.hole_mask()
     # analysis.hole_orientation()
@@ -100,13 +99,13 @@ if __name__ == "__main__":
 
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION')
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video')
