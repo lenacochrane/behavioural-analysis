@@ -3212,8 +3212,25 @@ class HoleAnalysis:
 
     def hole_status_interactions(self, threshold=1): # modified interaction_type_bout method
 
+        max_gap = 4
+
         def unify_interaction_type(part1, part2):
             return '_'.join(sorted([part1, part2]))
+        
+        def get_closest_part_pair(coords, id1, id2):
+            min_dist = float('inf')
+            closest = None
+            for p1 in coords:
+                for p2 in coords:
+                    coord1 = coords[p1].get(id1)
+                    coord2 = coords[p2].get(id2)
+                    if coord1 is None or coord2 is None:
+                        continue
+                    dist = np.linalg.norm(coord1 - coord2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest = unify_interaction_type(p1, p2)
+            return closest
 
         body_parts = ['head', 'body', 'tail']
         interaction_pairs = list(itertools.product(body_parts, body_parts))
@@ -3224,7 +3241,6 @@ class HoleAnalysis:
         for track_file in self.track_files:
             df = self.track_data[track_file].copy()
             df.sort_values(by='frame', inplace=True)
-
 
             active_bouts = {}
             bout_counter = 0
@@ -3261,55 +3277,73 @@ class HoleAnalysis:
                         pair_key = tuple(sorted((id1, id2)))
                         interacting_pairs[pair_key] = interactions
 
+                current_pairs = set(interacting_pairs)
 
-                ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys())
+                # Process ended or gap-extending bouts
+                for pair in list(active_bouts):
+                    if pair not in current_pairs:
+                        active_bouts[pair]['gap_count'] += 1
+                        if active_bouts[pair]['gap_count'] <= max_gap:
+                            id1, id2 = pair
+                            closest_type = None
+                            min_dist = float('inf')
+                            for part1, part2 in interaction_pairs:
+                                coord1 = coords[part1].get(id1)
+                                coord2 = coords[part2].get(id2)
+                                if coord1 is None or coord2 is None:
+                                    continue
+                                dist = np.linalg.norm(coord1 - coord2)
+                                if dist < min_dist:
+                                    min_dist = dist
+                                    closest_type = unify_interaction_type(part1, part2)
+                            if closest_type:
+                                active_bouts[pair]['interactions'].append(closest_type)
+                                active_bouts[pair]['end_frame'] = frame
+                        else:
+                            # End bout
+                            bout = active_bouts.pop(pair)
+                            start, end = bout['start_frame'], bout['end_frame']
+                            duration = end - start + 1
+                            interactions = bout['interactions']
+                            interaction_counts = Counter(interactions)
+                            initial_type = interactions[0]
+                            predominant_type = interaction_counts.most_common(1)[0][0]
+                            status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
+                            status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
+                            hole_status_pair = '-'.join(sorted([status1, status2]))
+                            bout_data = {
+                                'file': track_file,
+                                'bout_id': bout['bout_id'],
+                                'track_1': pair[0],
+                                'track_2': pair[1],
+                                'start_frame': start,
+                                'end_frame': end,
+                                'interaction_duration': duration,
+                                'initial_type': initial_type,
+                                'predominant_type': predominant_type,
+                                'hole_status_pair': hole_status_pair,
+                            }
+                            for t in unified_types:
+                                bout_data[t] = interaction_counts.get(t, 0)
+                            bouts.append(bout_data)
 
-                for pair in ended_pairs:
-                    bout = active_bouts.pop(pair)
-                    start, end = bout['start_frame'], bout['end_frame']
-                    duration = end - start + 1
-                    interactions = bout['interactions']
-
-                    interaction_counts = Counter(interactions)
-                    initial_type = interactions[0]
-                    predominant_type = interaction_counts.most_common(1)[0][0]
-
-                    # Status at start of bout
-                    status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
-                    status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
-                    hole_status_pair = '-'.join(sorted([status1, status2]))
-
-                    bout_data = {
-                        'file': track_file,
-                        'bout_id': bout['bout_id'],
-                        'track_1': pair[0],
-                        'track_2': pair[1],
-                        'start_frame': start,
-                        'end_frame': end,
-                        'duration': duration,
-                        'initial_type': initial_type,
-                        'predominant_type': predominant_type,
-                        'hole_status_pair': hole_status_pair,
-                    }
-
-                    for t in unified_types:
-                        bout_data[t] = interaction_counts.get(t, 0)
-
-                    bouts.append(bout_data)
-
+                # Update or start new bouts
                 for pair, interactions in interacting_pairs.items():
                     if pair in active_bouts:
                         active_bouts[pair]['end_frame'] = frame
                         active_bouts[pair]['interactions'].extend(interactions)
+                        active_bouts[pair]['gap_count'] = 0
                     else:
                         active_bouts[pair] = {
                             'bout_id': bout_counter,
                             'start_frame': frame,
                             'end_frame': frame,
                             'interactions': interactions.copy(),
+                            'gap_count': 0
                         }
                         bout_counter += 1
 
+            # Finalize remaining bouts
             for pair, bout in active_bouts.items():
                 start, end = bout['start_frame'], bout['end_frame']
                 duration = end - start + 1
@@ -3317,11 +3351,9 @@ class HoleAnalysis:
                 interaction_counts = Counter(interactions)
                 initial_type = interactions[0]
                 predominant_type = interaction_counts.most_common(1)[0][0]
-
                 status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
                 status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
                 hole_status_pair = '-'.join(sorted([status1, status2]))
-
                 bout_data = {
                     'file': track_file,
                     'bout_id': bout['bout_id'],
@@ -3329,26 +3361,126 @@ class HoleAnalysis:
                     'track_2': pair[1],
                     'start_frame': start,
                     'end_frame': end,
-                    'duration': duration,
+                    'interaction_duration': duration,
                     'initial_type': initial_type,
                     'predominant_type': predominant_type,
                     'hole_status_pair': hole_status_pair,
                 }
-
                 for t in unified_types:
                     bout_data[t] = interaction_counts.get(t, 0)
-
                 bouts.append(bout_data)
 
         bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
-        bout_df.to_csv(os.path.join(self.directory, 'interaction_type.csv'), index=False)
+        bout_df.to_csv(os.path.join(self.directory, 'interaction_status_type.csv'), index=False)
         return bout_df
+    
+
+
+  #### old logic 
+        #         ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys())
+
+        #         for pair in ended_pairs:
+        #             bout = active_bouts.pop(pair)
+        #             start, end = bout['start_frame'], bout['end_frame']
+        #             duration = end - start + 1
+        #             interactions = bout['interactions']
+
+        #             interaction_counts = Counter(interactions)
+        #             initial_type = interactions[0]
+        #             predominant_type = interaction_counts.most_common(1)[0][0]
+
+        #             # Status at start of bout
+        #             status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
+        #             status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
+        #             hole_status_pair = '-'.join(sorted([status1, status2]))
+
+        #             bout_data = {
+        #                 'file': track_file,
+        #                 'bout_id': bout['bout_id'],
+        #                 'track_1': pair[0],
+        #                 'track_2': pair[1],
+        #                 'start_frame': start,
+        #                 'end_frame': end,
+        #                 'duration': duration,
+        #                 'initial_type': initial_type,
+        #                 'predominant_type': predominant_type,
+        #                 'hole_status_pair': hole_status_pair,
+        #             }
+
+        #             for t in unified_types:
+        #                 bout_data[t] = interaction_counts.get(t, 0)
+
+        #             bouts.append(bout_data)
+
+        #         for pair, interactions in interacting_pairs.items():
+        #             if pair in active_bouts:
+        #                 active_bouts[pair]['end_frame'] = frame
+        #                 active_bouts[pair]['interactions'].extend(interactions)
+        #             else:
+        #                 active_bouts[pair] = {
+        #                     'bout_id': bout_counter,
+        #                     'start_frame': frame,
+        #                     'end_frame': frame,
+        #                     'interactions': interactions.copy(),
+        #                 }
+        #                 bout_counter += 1
+
+        #     for pair, bout in active_bouts.items():
+        #         start, end = bout['start_frame'], bout['end_frame']
+        #         duration = end - start + 1
+        #         interactions = bout['interactions']
+        #         interaction_counts = Counter(interactions)
+        #         initial_type = interactions[0]
+        #         predominant_type = interaction_counts.most_common(1)[0][0]
+
+        #         status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
+        #         status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
+        #         hole_status_pair = '-'.join(sorted([status1, status2]))
+
+        #         bout_data = {
+        #             'file': track_file,
+        #             'bout_id': bout['bout_id'],
+        #             'track_1': pair[0],
+        #             'track_2': pair[1],
+        #             'start_frame': start,
+        #             'end_frame': end,
+        #             'duration': duration,
+        #             'initial_type': initial_type,
+        #             'predominant_type': predominant_type,
+        #             'hole_status_pair': hole_status_pair,
+        #         }
+
+        #         for t in unified_types:
+        #             bout_data[t] = interaction_counts.get(t, 0)
+
+        #         bouts.append(bout_data)
+
+        # bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
+        # bout_df.to_csv(os.path.join(self.directory, 'interaction_type.csv'), index=False)
+        # return bout_df
     
 
     def interactions_return(self, threshold=1):
 
+        max_gap = 4
+
         def unify_interaction_type(p1, p2):
             return '_'.join(sorted([p1, p2]))
+        
+        def get_closest_part_pair(coords, id1, id2):
+            min_dist = float('inf')
+            closest = None
+            for p1 in coords:
+                for p2 in coords:
+                    coord1 = coords[p1].get(id1)
+                    coord2 = coords[p2].get(id2)
+                    if coord1 is None or coord2 is None:
+                        continue
+                    dist = np.linalg.norm(coord1 - coord2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest = unify_interaction_type(p1, p2)
+            return closest
 
         body_parts = ['head', 'body', 'tail']
         interaction_pairs = list(itertools.product(body_parts, body_parts))
@@ -3386,7 +3518,8 @@ class HoleAnalysis:
                     else:
                         reentry_frame = sub['frame'].max()
                         returned = False
-
+                        return_duration = False
+                        
                     # Get all frames between exit and reentry
                     window = df[
                         (df['frame'] >= exit_frame) & 
@@ -3396,6 +3529,7 @@ class HoleAnalysis:
                     # Get interaction bouts in this window involving the exiting larva
                     active_bouts = {}
                     bout_counter = 0
+                    bouts_this_exit = []
 
                     for frame in window['frame'].unique():
                         frame_data = window[window['frame'] == frame]
@@ -3414,6 +3548,12 @@ class HoleAnalysis:
                             if larva_id not in (id1, id2):
                                 continue  # Only care about interactions involving this larva
 
+                            partner_id = id2 if id1 == larva_id else id1  # Get the other larva
+                            partner_row = frame_data[frame_data['track_id'] == partner_id]
+
+                            if partner_row.empty or partner_row['within_hole'].values[0]:
+                                continue  # Skip if partner is in hole
+
                             interactions = []
                             for part1, part2 in interaction_pairs:
                                 coord1 = coords[part1].get(id1)
@@ -3429,116 +3569,236 @@ class HoleAnalysis:
                                 interacting_pairs[pair_key] = interactions
 
 
-                        ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys())
+                        current_pairs = set(interacting_pairs)
+                        
 
-                        for pair in ended_pairs:
-                            bout = active_bouts.pop(pair)
-                            start, end = bout['start_frame'], bout['end_frame']
-                            duration = end - start + 1
-                            interactions = bout['interactions']
-                            interaction_counts = Counter(interactions)
-                            initial_type = interactions[0]
-                            predominant_type = interaction_counts.most_common(1)[0][0]
+                        # Process ended or extended gaps
+                        for pair in list(active_bouts):
+                            if pair not in current_pairs:
+                                active_bouts[pair]['gap_count'] += 1
+                                if active_bouts[pair]['gap_count'] <= max_gap:
+                                    id1, id2 = pair
+                                    fallback = get_closest_part_pair(coords, id1, id2)
+                                    if fallback:
+                                        active_bouts[pair]['interactions'].append(fallback)
+                                    active_bouts[pair]['end_frame'] = frame
+                                else:
+                                    # End bout
+                                    bout = active_bouts.pop(pair)
+                                    start, end = bout['start_frame'], bout['end_frame']
+                                    interactions = bout['interactions']
+                                    interaction_counts = Counter(interactions)
+                                    initial_type = interactions[0]
+                                    predominant_type = interaction_counts.most_common(1)[0][0]
+                                    partner = [x for x in pair if x != larva_id][0]
+                                    partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0]
 
-                            other_id = [i for i in pair if i != larva_id][0]
-                            # status1 = df[(df['track_id'] == larva_id) & (df['frame'] == start)]['hole_status'].values[0]
-                            partner_status = df[(df['track_id'] == other_id) & (df['frame'] == start)]['hole_status'].values[0]
-                            # hole_status_pair = '-'.join(sorted([status1, status2]))
-
-                            bout_data = {
-                                'file': track_file,
-                                'exiting_larva': larva_id,
-                                'exit_index': i,
-                                'returned_to_hole': returned,
-                                'return_time': return_duration,
-                                # 'track_1': pair[0],
-                                'interacted': True,
-                                'partner': other_id,
-                                'start_frame': start,
-                                'end_frame': end,
-                                'duration': duration,
-                                'initial_type': initial_type,
-                                'predominant_type': predominant_type,
-                                'partner_status': partner_status,
-                            }
-                            for t in unified_types:
-                                bout_data[t] = interaction_counts.get(t, 0)
-
-                            bouts.append(bout_data)
+                                    bout_data = {
+                                        'file': track_file,
+                                        'exiting_larva': larva_id,
+                                        'exit_index': i,
+                                        'returned_to_hole': returned,
+                                        'start_frame': start,
+                                        'end_frame': end,
+                                        'return_time': return_duration,
+                                        'interacted': True,
+                                        'partner': partner,
+                                        'partner_status': partner_status,
+                                        'duration': end - start + 1,
+                                        'initial_type': initial_type,
+                                        'predominant_type': predominant_type,
+                                    }
+                                    for t in unified_types:
+                                        bout_data[t] = interaction_counts.get(t, 0)
+                                    bouts_this_exit.append(bout_data)
 
                         # Extend or start bouts
                         for pair, interactions in interacting_pairs.items():
                             if pair in active_bouts:
                                 active_bouts[pair]['end_frame'] = frame
                                 active_bouts[pair]['interactions'].extend(interactions)
+                                active_bouts[pair]['gap_count'] = 0
                             else:
                                 active_bouts[pair] = {
+                                    'bout_id': bout_counter,
                                     'start_frame': frame,
                                     'end_frame': frame,
                                     'interactions': interactions.copy(),
+                                    'gap_count': 0
                                 }
-                        
-                        # ✅ After processing all frames in this window, add a fallback row if no interactions occurred
-                        has_bouts = any(
-                            (row['exiting_larva'] == larva_id) and (row['exit_index'] == i)
-                            for row in bouts)
+                                bout_counter += 1
 
-                        if not has_bouts:
-                            bouts.append({
-                                'file': track_file,
-                                'exiting_larva': larva_id,
-                                'exit_index': i,
-                                'returned_to_hole': returned,
-                                'return_time': False,
-                                'interacted': False,
-                                'partner': None,
-                                'start_frame': exit_frame,
-                                'end_frame': reentry_frame,
-                                'duration': reentry_frame - exit_frame + 1,
-                                'initial_type': None,
-                                'predominant_type': None,
-                                'partner_status': None,
-                                **{t: None for t in unified_types}
-                            })
-
-                    # Close any active bouts left at the end
+                    # Close remaining bouts
                     for pair, bout in active_bouts.items():
                         start, end = bout['start_frame'], bout['end_frame']
-                        duration = end - start + 1
                         interactions = bout['interactions']
                         interaction_counts = Counter(interactions)
                         initial_type = interactions[0]
                         predominant_type = interaction_counts.most_common(1)[0][0]
-
-                        other_id = [i for i in pair if i != larva_id][0]
-                        # status1 = df[(df['track_id'] == larva_id) & (df['frame'] == start)]['hole_status'].values[0]
-                        partner_status = df[(df['track_id'] == other_id) & (df['frame'] == start)]['hole_status'].values[0]
-                        # hole_status_pair = '-'.join(sorted([status1, status2]))
+                        partner = [x for x in pair if x != larva_id][0]
+                        partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0]
 
                         bout_data = {
                             'file': track_file,
                             'exiting_larva': larva_id,
                             'exit_index': i,
                             'returned_to_hole': returned,
-                            # 'track_1': pair[0],
-                            'interacted': True,
-                            'partner': other_id,
                             'start_frame': start,
                             'end_frame': end,
-                            'duration': duration,
+                            'return_time': return_duration,
+                            'interacted': True,
+                            'partner': partner,
+                            'partner_status': partner_status,
+    
+                            'duration': end - start + 1,
                             'initial_type': initial_type,
                             'predominant_type': predominant_type,
-                            'partner_status': partner_status,
                         }
                         for t in unified_types:
                             bout_data[t] = interaction_counts.get(t, 0)
+                        bouts_this_exit.append(bout_data)
 
-                        bouts.append(bout_data)
+                    if not bouts_this_exit:
+                        fallback = {
+                            'file': track_file,
+                            'exiting_larva': larva_id,
+                            'exit_index': i,
+                            'returned_to_hole': returned,
+                            'start_frame': exit_frame,
+                            'end_frame': reentry_frame,
+                            'return_time': return_duration,
+                            'interacted': False,
+                            'partner': None,
+                            'partner_status': None,
+                            'duration': None,
+                            'initial_type': None,
+                            'predominant_type': None,
+                        }
+                        for t in unified_types:
+                            fallback[t] = None
+                        bouts_this_exit.append(fallback)
 
-        # Final output
+                    bouts.extend(bouts_this_exit)
+
         bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'exiting_larva', 'exit_index', 'start_frame'])
         bout_df.to_csv(os.path.join(self.directory, 'interactions_return.csv'), index=False)
         return bout_df
+
+
+
+                        
+                            
+
+        #                 ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys())
+
+        #                 for pair in ended_pairs:
+        #                     bout = active_bouts.pop(pair)
+        #                     start, end = bout['start_frame'], bout['end_frame']
+        #                     duration = end - start + 1
+        #                     interactions = bout['interactions']
+        #                     interaction_counts = Counter(interactions)
+        #                     initial_type = interactions[0]
+        #                     predominant_type = interaction_counts.most_common(1)[0][0]
+
+        #                     other_id = [i for i in pair if i != larva_id][0]
+        #                     # status1 = df[(df['track_id'] == larva_id) & (df['frame'] == start)]['hole_status'].values[0]
+        #                     partner_status = df[(df['track_id'] == other_id) & (df['frame'] == start)]['hole_status'].values[0]
+        #                     # hole_status_pair = '-'.join(sorted([status1, status2]))
+
+        #                     bout_data = {
+        #                         'file': track_file,
+        #                         'exiting_larva': larva_id,
+        #                         'exit_index': i,
+        #                         'returned_to_hole': returned,
+        #                         'return_time': return_duration,
+        #                         # 'track_1': pair[0],
+        #                         'interacted': True,
+        #                         'partner': other_id,
+        #                         'start_frame': start,
+        #                         'end_frame': end,
+        #                         'duration': duration,
+        #                         'initial_type': initial_type,
+        #                         'predominant_type': predominant_type,
+        #                         'partner_status': partner_status,
+        #                     }
+        #                     for t in unified_types:
+        #                         bout_data[t] = interaction_counts.get(t, 0)
+
+        #                     bouts.append(bout_data)
+
+        #                 # Extend or start bouts
+        #                 for pair, interactions in interacting_pairs.items():
+        #                     if pair in active_bouts:
+        #                         active_bouts[pair]['end_frame'] = frame
+        #                         active_bouts[pair]['interactions'].extend(interactions)
+        #                     else:
+        #                         active_bouts[pair] = {
+        #                             'start_frame': frame,
+        #                             'end_frame': frame,
+        #                             'interactions': interactions.copy(),
+        #                         }
+                        
+        #                 # ✅ After processing all frames in this window, add a fallback row if no interactions occurred
+        #                 has_bouts = any(
+        #                     (row['exiting_larva'] == larva_id) and (row['exit_index'] == i)
+        #                     for row in bouts)
+
+        #                 if not has_bouts:
+        #                     bouts.append({
+        #                         'file': track_file,
+        #                         'exiting_larva': larva_id,
+        #                         'exit_index': i,
+        #                         'returned_to_hole': returned,
+        #                         'return_time': False,
+        #                         'interacted': False,
+        #                         'partner': None,
+        #                         'start_frame': exit_frame,
+        #                         'end_frame': reentry_frame,
+        #                         'duration': reentry_frame - exit_frame + 1,
+        #                         'initial_type': None,
+        #                         'predominant_type': None,
+        #                         'partner_status': None,
+        #                         **{t: None for t in unified_types}
+        #                     })
+
+        #             # Close any active bouts left at the end
+        #             for pair, bout in active_bouts.items():
+        #                 start, end = bout['start_frame'], bout['end_frame']
+        #                 duration = end - start + 1
+        #                 interactions = bout['interactions']
+        #                 interaction_counts = Counter(interactions)
+        #                 initial_type = interactions[0]
+        #                 predominant_type = interaction_counts.most_common(1)[0][0]
+
+        #                 other_id = [i for i in pair if i != larva_id][0]
+        #                 # status1 = df[(df['track_id'] == larva_id) & (df['frame'] == start)]['hole_status'].values[0]
+        #                 partner_status = df[(df['track_id'] == other_id) & (df['frame'] == start)]['hole_status'].values[0]
+        #                 # hole_status_pair = '-'.join(sorted([status1, status2]))
+
+        #                 bout_data = {
+        #                     'file': track_file,
+        #                     'exiting_larva': larva_id,
+        #                     'exit_index': i,
+        #                     'returned_to_hole': returned,
+        #                     # 'track_1': pair[0],
+        #                     'interacted': True,
+        #                     'partner': other_id,
+        #                     'start_frame': start,
+        #                     'end_frame': end,
+        #                     'duration': duration,
+        #                     'initial_type': initial_type,
+        #                     'predominant_type': predominant_type,
+        #                     'partner_status': partner_status,
+        #                 }
+        #                 for t in unified_types:
+        #                     bout_data[t] = interaction_counts.get(t, 0)
+
+        #                 bouts.append(bout_data)
+
+        # # Final output
+        # bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'exiting_larva', 'exit_index', 'start_frame'])
+        # bout_df.to_csv(os.path.join(self.directory, 'interactions_return.csv'), index=False)
+        # return bout_df
     
 
 
@@ -3546,9 +3806,26 @@ class HoleAnalysis:
     # METHOD PRE_POST_HOLE_INTERACTION:
 
     def pre_post_hole_interactions(self, threshold=1):
+        
+        max_gap = 4
 
         def unify_interaction_type(p1, p2):
             return '_'.join(sorted([p1, p2]))
+        
+        def get_closest_part_pair(coords, id1, id2):
+            min_dist = float('inf')
+            closest = None
+            for p1 in coords:
+                for p2 in coords:
+                    coord1 = coords[p1].get(id1)
+                    coord2 = coords[p2].get(id2)
+                    if coord1 is None or coord2 is None:
+                        continue
+                    dist = np.linalg.norm(coord1 - coord2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest = unify_interaction_type(p1, p2)
+            return closest
 
         body_parts = ['head', 'body', 'tail']
         interaction_pairs = list(itertools.product(body_parts, body_parts))
@@ -3615,6 +3892,13 @@ class HoleAnalysis:
                             if track_id not in (id1, id2):
                                 continue
 
+                            partner_id = id2 if id1 == track_id else id1  # The other larva in the pair
+                            partner_row = frame_data[frame_data['track_id'] == partner_id]
+
+                            if partner_row.empty or partner_row['within_hole'].values[0]:
+                                continue  # Partner is either missing or currently in hole — skip this interaction
+                            
+
                             interactions = []
                             for part1, part2 in interaction_pairs:
                                 coord1 = coords[part1].get(id1)
@@ -3630,55 +3914,86 @@ class HoleAnalysis:
                                 interacting_pairs[pair_key] = interactions
 
 
-                        ended = set(active_bouts) - set(interacting_pairs)
+                            
+                        current_pairs = set(interacting_pairs.keys())
 
-            
-                        for pair in ended:
-                            bout = active_bouts.pop(pair)
-                            start, end = bout['start_frame'], bout['end_frame']
-                            duration_bout = end - start + 1
-                            interactions = bout['interactions']
-                            interaction_counts = Counter(interactions)
-                            initial_type = interactions[0]
-                            predominant_type = interaction_counts.most_common(1)[0][0]
+                        for pair in list(active_bouts.keys()):
+                            if pair not in current_pairs:
+                                active_bouts[pair]['gap_count'] += 1
+                                if active_bouts[pair]['gap_count'] <= max_gap:
+                                    id1, id2 = pair
+                                    fallback = get_closest_part_pair(coords, id1, id2)
+                                    if fallback:
+                                        active_bouts[pair]['interactions'].append(fallback)
+                                else:
+                                    bout = active_bouts.pop(pair)
+                                    start, end = bout['start_frame'], bout['end_frame']
+                                    duration_bout = end - start + 1
+                                    interaction_counts = Counter(bout['interactions'])
+                                    initial_type = bout['interactions'][0]
+                                    predominant_type = interaction_counts.most_common(1)[0][0]
+                                    partner = [i for i in pair if i != track_id][0]
+                                    partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0] if not df[(df['track_id'] == partner) & (df['frame'] == start)].empty else None
 
-                            partner = [i for i in pair if i != track_id][0]
-                            partner_status = df[
-                                (df['track_id'] == partner) & (df['frame'] == start)
-                            ]['hole_status'].values[0] if not df[(df['track_id'] == partner) & (df['frame'] == start)].empty else None
-
-                            bout_data = {
-                                'file': track_file,
-                                'track': track_id,
-                                'status_hole': label,
-                                'duration_analysed': duration,
-                                'interacted': True,
-                                'start_frame': start,
-                                'end_frame': end,
-                                'duration': duration_bout,
-                                'partner': partner,
-                                'partner_status': partner_status,
-                                'initial_type': initial_type,
-                                'predominant_type': predominant_type,
-                            }
-                            for t in unified_types:
-                                bout_data[t] = interaction_counts.get(t, 0)
-                            bouts.append(bout_data)
+                                    bout_data = {
+                                        'file': track_file,
+                                        'track': track_id,
+                                        'status_hole': label,
+                                        'duration_analysed': duration,
+                                        'interacted': True,
+                                        'start_frame': start,
+                                        'end_frame': end,
+                                        'duration': duration_bout,
+                                        'partner': partner,
+                                        'partner_status': partner_status,
+                                        'initial_type': initial_type,
+                                        'predominant_type': predominant_type,
+                                    }
+                                    for t in unified_types:
+                                        bout_data[t] = interaction_counts.get(t, 0)
+                                    bouts.append(bout_data)
 
                         for pair, interactions in interacting_pairs.items():
                             if pair in active_bouts:
                                 active_bouts[pair]['end_frame'] = frame
                                 active_bouts[pair]['interactions'].extend(interactions)
+                                active_bouts[pair]['gap_count'] = 0
                             else:
                                 active_bouts[pair] = {
                                     'start_frame': frame,
                                     'end_frame': frame,
                                     'interactions': interactions.copy(),
+                                    'gap_count': 0,
                                 }
 
+                    for pair, bout in active_bouts.items():
+                        start, end = bout['start_frame'], bout['end_frame']
+                        duration_bout = end - start + 1
+                        interaction_counts = Counter(bout['interactions'])
+                        initial_type = bout['interactions'][0]
+                        predominant_type = interaction_counts.most_common(1)[0][0]
+                        partner = [i for i in pair if i != track_id][0]
+                        partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0] if not df[(df['track_id'] == partner) & (df['frame'] == start)].empty else None
+
+                        bout_data = {
+                            'file': track_file,
+                            'track': track_id,
+                            'status_hole': label,
+                            'duration_analysed': duration,
+                            'interacted': True,
+                            'start_frame': start,
+                            'end_frame': end,
+                            'duration': duration_bout,
+                            'partner': partner,
+                            'partner_status': partner_status,
+                            'initial_type': initial_type,
+                            'predominant_type': predominant_type,
+                        }
+                        for t in unified_types:
+                            bout_data[t] = interaction_counts.get(t, 0)
+                        bouts.append(bout_data)
+
                     if not any((b['track'] == track_id and b['status_hole'] == label) for b in bouts):
-                    
-                
                         bout_data = {
                             'file': track_file,
                             'track': track_id,
@@ -3687,7 +4002,7 @@ class HoleAnalysis:
                             'interacted': False,
                             'start_frame': frames.min(),
                             'end_frame': frames.max(),
-                            'duration': frames.max() - frames.min() + 1,
+                            'duration': None,
                             'partner': None,
                             'partner_status': None,
                             'initial_type': None,
@@ -3700,6 +4015,81 @@ class HoleAnalysis:
         bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'track', 'status_hole', 'start_frame'])
         bout_df.to_csv(os.path.join(self.directory, 'pre_post_interactions.csv'), index=False)
         return bout_df
+
+
+
+
+
+
+        #                 ended = set(active_bouts) - set(interacting_pairs)
+
+        #                 for pair in ended:
+        #                     bout = active_bouts.pop(pair)
+        #                     start, end = bout['start_frame'], bout['end_frame']
+        #                     duration_bout = end - start + 1
+        #                     interactions = bout['interactions']
+        #                     interaction_counts = Counter(interactions)
+        #                     initial_type = interactions[0]
+        #                     predominant_type = interaction_counts.most_common(1)[0][0]
+
+        #                     partner = [i for i in pair if i != track_id][0]
+        #                     partner_status = df[
+        #                         (df['track_id'] == partner) & (df['frame'] == start)
+        #                     ]['hole_status'].values[0] if not df[(df['track_id'] == partner) & (df['frame'] == start)].empty else None
+
+        #                     bout_data = {
+        #                         'file': track_file,
+        #                         'track': track_id,
+        #                         'status_hole': label,
+        #                         'duration_analysed': duration,
+        #                         'interacted': True,
+        #                         'start_frame': start,
+        #                         'end_frame': end,
+        #                         'duration': duration_bout,
+        #                         'partner': partner,
+        #                         'partner_status': partner_status,
+        #                         'initial_type': initial_type,
+        #                         'predominant_type': predominant_type,
+        #                     }
+        #                     for t in unified_types:
+        #                         bout_data[t] = interaction_counts.get(t, 0)
+        #                     bouts.append(bout_data)
+
+        #                 for pair, interactions in interacting_pairs.items():
+        #                     if pair in active_bouts:
+        #                         active_bouts[pair]['end_frame'] = frame
+        #                         active_bouts[pair]['interactions'].extend(interactions)
+        #                     else:
+        #                         active_bouts[pair] = {
+        #                             'start_frame': frame,
+        #                             'end_frame': frame,
+        #                             'interactions': interactions.copy(),
+        #                         }
+
+        #             if not any((b['track'] == track_id and b['status_hole'] == label) for b in bouts):
+                    
+                
+        #                 bout_data = {
+        #                     'file': track_file,
+        #                     'track': track_id,
+        #                     'status_hole': label,
+        #                     'duration_analysed': duration,
+        #                     'interacted': False,
+        #                     'start_frame': frames.min(),
+        #                     'end_frame': frames.max(),
+        #                     'duration': frames.max() - frames.min() + 1,
+        #                     'partner': None,
+        #                     'partner_status': None,
+        #                     'initial_type': None,
+        #                     'predominant_type': None,
+        #                 }
+        #                 for t in unified_types:
+        #                     bout_data[t] = None
+        #                 bouts.append(bout_data)
+
+        # bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'track', 'status_hole', 'start_frame'])
+        # bout_df.to_csv(os.path.join(self.directory, 'pre_post_interactions.csv'), index=False)
+        # return bout_df
 
 
 
