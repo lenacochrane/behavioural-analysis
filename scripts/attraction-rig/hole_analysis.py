@@ -116,7 +116,7 @@ class HoleAnalysis:
             mask = (~df['within_hole']) & (~df['digging_outside_hole'])  # exclude both
             df = df[mask].copy()  # update df with filtered version
             self.track_data[track_file] = df  # save it back
-            df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
+            # df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
 
             
 
@@ -1110,7 +1110,7 @@ class HoleAnalysis:
 
         df.drop(columns=['backfill', 'long_digging', 'false_true', 'future_digging'], inplace=True)
 
-        df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
+        # df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
 
         return df
 
@@ -1517,12 +1517,30 @@ class HoleAnalysis:
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
 
     
+
     ### METHOD INTERACTION_TYPE_BOUT: WITHIN <1MM NODE-NODE BOUTS IDENTIFIES THE INITIAL AND PREDOMINANT NODE-NODE CONTACT
 
     def interaction_type_bout(self, threshold=1):
 
+        max_gap = 4
+
         def unify_interaction_type(part1, part2):
             return '_'.join(sorted([part1, part2]))
+        
+
+        def get_closest_part_pair(coords, id1, id2): 
+            min_dist = float('inf')
+            closest_type = None
+            for part1, part2 in interaction_pairs:
+                coord1 = coords[part1].get(id1)
+                coord2 = coords[part2].get(id2)
+                if coord1 is None or coord2 is None:
+                    continue
+                dist = np.linalg.norm(coord1 - coord2)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_type = unify_interaction_type(part1, part2)
+            return closest_type
 
         body_parts = ['head', 'body', 'tail']
         interaction_pairs = list(itertools.product(body_parts, body_parts))
@@ -1567,78 +1585,152 @@ class HoleAnalysis:
                             interactions.append(interaction_type)
 
                     if interactions:
-                        interacting_pairs[(id1, id2)] = interactions
+                        pair_key = tuple(sorted((id1, id2)))
+                        interacting_pairs[pair_key] = interactions    
 
-                # Update active bouts
-                ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys()) # this frame interacting pairs - old frames interacting pairs- if not present, the bout ended
 
-                # Process ended bouts
-                for pair in ended_pairs:
-                    bout = active_bouts.pop(pair)
-                    start, end = bout['start_frame'], bout['end_frame']
-                    duration = end - start + 1
-                    interactions = bout['interactions']
+                    ### from here new
+                
+                current_pairs = set(interacting_pairs.keys())
 
-                    initial_type = interactions[0]
-                    predominant_type = Counter(interactions).most_common(1)[0][0]
-
-                    bouts.append({
-                        'file': track_file,
-                        'bout_id': bout['bout_id'],
-                        'track_1': pair[0],
-                        'track_2': pair[1],
-                        'start_frame': start,
-                        'end_frame': end,
-                        'duration': duration,
-                        'initial_type': initial_type,
-                        'predominant_type': predominant_type,
-                    })
+                # Handle previously active pairs
+                for pair in list(active_bouts.keys()):
+                    if pair not in current_pairs:
+                        # No direct interaction this frame
+                        active_bouts[pair]['gap_count'] += 1
+                        if active_bouts[pair]['gap_count'] <= max_gap:
+                            id1, id2 = pair
+                            fallback = get_closest_part_pair(coords, id1, id2)
+                            if fallback:
+                                active_bouts[pair]['interactions'].append(fallback)
+                        else:
+                            # Too many missed frames → end bout
+                            bout = active_bouts.pop(pair)
+                            start, end = bout['start_frame'], bout['end_frame']
+                            interactions = bout['interactions']
+                            if interactions:
+                                bouts.append({
+                                    'file': track_file,
+                                    'bout_id': bout['bout_id'],
+                                    'track_1': pair[0],
+                                    'track_2': pair[1],
+                                    'start_frame': start,
+                                    'end_frame': end,
+                                    'duration': end - start + 1,
+                                    'initial_type': interactions[0],
+                                    'predominant_type': Counter(interactions).most_common(1)[0][0],
+                                })
 
                 # Update or start new bouts
                 for pair, interactions in interacting_pairs.items():
                     if pair in active_bouts:
                         active_bouts[pair]['end_frame'] = frame
                         active_bouts[pair]['interactions'].extend(interactions)
+                        active_bouts[pair]['gap_count'] = 0
                     else:
                         active_bouts[pair] = {
                             'bout_id': bout_counter,
                             'start_frame': frame,
                             'end_frame': frame,
                             'interactions': interactions.copy(),
+                            'gap_count': 0
                         }
                         bout_counter += 1
 
-            # Handle bouts that were still active at the end
+            # Finalize remaining bouts
             for pair, bout in active_bouts.items():
-                start, end = bout['start_frame'], bout['end_frame']
-                duration = end - start + 1
                 interactions = bout['interactions']
+                if interactions:
+                    bouts.append({
+                        'file': track_file,
+                        'bout_id': bout['bout_id'],
+                        'track_1': pair[0],
+                        'track_2': pair[1],
+                        'start_frame': bout['start_frame'],
+                        'end_frame': bout['end_frame'],
+                        'duration': bout['end_frame'] - bout['start_frame'] + 1,
+                        'initial_type': interactions[0],
+                        'predominant_type': Counter(interactions).most_common(1)[0][0],
+                    })
 
-                initial_type = interactions[0]
-                predominant_type = Counter(interactions).most_common(1)[0][0]
-
-                bouts.append({
-                    'file': track_file,
-                    'bout_id': bout['bout_id'],
-                    'track_1': pair[0],
-                    'track_2': pair[1],
-                    'start_frame': start,
-                    'end_frame': end,
-                    'duration': duration,
-                    'initial_type': initial_type,
-                    'predominant_type': predominant_type,
-                })
-
-        # Output dataframe
         bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
-
-        # Optional saving
-        filename = "interaction_type_bout.csv"
-        bout_df.to_csv(os.path.join(self.directory, filename), index=False)
-
+        bout_df.to_csv(os.path.join(self.directory, "interaction_type_bout.csv"), index=False)
         return bout_df
+
+
+
+
+        #         # Update active bouts
+        #         ended_pairs = set(active_bouts.keys()) - set(interacting_pairs.keys()) # this frame interacting pairs - old frames interacting pairs- if not present, the bout ended
+
+        #         # Process ended bouts
+        #         for pair in ended_pairs:
+        #             bout = active_bouts.pop(pair)
+        #             start, end = bout['start_frame'], bout['end_frame']
+        #             duration = end - start + 1
+        #             interactions = bout['interactions']
+
+        #             initial_type = interactions[0]
+        #             predominant_type = Counter(interactions).most_common(1)[0][0]
+
+        #             bouts.append({
+        #                 'file': track_file,
+        #                 'bout_id': bout['bout_id'],
+        #                 'track_1': pair[0],
+        #                 'track_2': pair[1],
+        #                 'start_frame': start,
+        #                 'end_frame': end,
+        #                 'duration': duration,
+        #                 'initial_type': initial_type,
+        #                 'predominant_type': predominant_type,
+        #             })
+
+        #         # Update or start new bouts
+        #         for pair, interactions in interacting_pairs.items():
+        #             if pair in active_bouts:
+        #                 active_bouts[pair]['end_frame'] = frame
+        #                 active_bouts[pair]['interactions'].extend(interactions)
+        #             else:
+        #                 active_bouts[pair] = {
+        #                     'bout_id': bout_counter,
+        #                     'start_frame': frame,
+        #                     'end_frame': frame,
+        #                     'interactions': interactions.copy(),
+        #                 }
+        #                 bout_counter += 1
+
+        #     # Handle bouts that were still active at the end
+        #     for pair, bout in active_bouts.items():
+        #         start, end = bout['start_frame'], bout['end_frame']
+        #         duration = end - start + 1
+        #         interactions = bout['interactions']
+
+        #         initial_type = interactions[0]
+        #         predominant_type = Counter(interactions).most_common(1)[0][0]
+
+        #         bouts.append({
+        #             'file': track_file,
+        #             'bout_id': bout['bout_id'],
+        #             'track_1': pair[0],
+        #             'track_2': pair[1],
+        #             'start_frame': start,
+        #             'end_frame': end,
+        #             'duration': duration,
+        #             'initial_type': initial_type,
+        #             'predominant_type': predominant_type,
+        #         })
+
+        # # Output dataframe
+        # bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
+
+        # # Optional saving
+        # filename = "interaction_type_bout.csv"
+        # bout_df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        # return bout_df
     
-    
+
+
     # METHOD INTERACTION_BOUT_DYNAMICS: 
 
     def interaction_bout_dynamics(self): ### method above must be run already 
