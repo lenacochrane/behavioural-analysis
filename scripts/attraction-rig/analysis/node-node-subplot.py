@@ -44,7 +44,7 @@ palette = {
 }
 
 
-df = pd.concat([df3, df4], ignore_index=True) #n2
+df = pd.concat([df5, df6], ignore_index=True) #n2
 
 # df = pd.concat([ df5, df6, df7, df8], ignore_index=True) #n10
 
@@ -80,7 +80,7 @@ for i, bin_val in enumerate(bins):
     ax.set_title(f'Frames {bin_label}', fontsize=10, fontweight='bold')
     ax.set_xlabel('')
     ax.set_ylabel('Count')
-    ax.set_ylim(0, 10)
+    # ax.set_ylim(0, 10)
     ax.tick_params(axis='x', rotation=45)
     
 
@@ -94,7 +94,7 @@ fig.suptitle('Interaction Types per Frame Bin', fontsize=16, fontweight='bold')
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
  
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n2_subplot.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/n10_subplot.png', dpi=300, bbox_inches='tight')
 
 plt.show()
 

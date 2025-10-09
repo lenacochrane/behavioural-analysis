@@ -23,6 +23,7 @@ from itertools import product
 from collections import defaultdict, Counter
 import itertools
 from scipy.ndimage import label, find_objects
+from scipy.spatial.distance import pdist
 
 
 class HoleAnalysis:
@@ -488,57 +489,6 @@ class HoleAnalysis:
         distance_variance_df.to_csv(os.path.join(self.directory, 'average_distance_variance.csv'), index=False)
         return distance_variance
     
-
-    # METHOD HOLE_EUCLIDEAN_DISTANCE: EUCLIDEAN DISTANCE ACCOUNTING FOR LARVAE WITHIN THE HOLE 
-
-    def hole_euclidean_distance(self, total_larvae=10):
-
-        data = []
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            hole_boundary = match['hole_boundary']
-
-
-            # Ensure the perimeter polygon is available
-            if hole_boundary is None:
-                print(f"No perimeter polygon available for track file: {track_file}")
-                continue
-
-            # CALCULATE THE HOLE CENTROID 
-            centre_x, centre_y  = hole_boundary.centroid.x, hole_boundary.centroid.y
-
-            track_data = self.track_data[track_file]
-
-            # iterate over each unique frame in the file and calculate the average distance between the larvae  
-            for frame in track_data['frame'].unique():
-                unique_frame =  track_data[track_data['frame'] == frame]
-                    
-                body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-
-                # Check if the number of larvae in the frame is less than the total larvae
-                if len(body_coordinates) < total_larvae:
-                    
-                    missing_count = total_larvae - len(body_coordinates)
-                    # Create fake larvae at the hole's centroid
-                    fake_larvae = np.array([[centre_x, centre_y]] * missing_count) # e.g. [0,0] * 3 = [0,0][0,0][0,0]
-                    body_coordinates = np.vstack((body_coordinates, fake_larvae))
-
-                distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-
-                np.fill_diagonal(distance, np.nan)
-
-                average_distance = np.nanmean(distance)
-
-                data.append({'time': frame, 'average_distance': average_distance, 'file': track_file})
-        
-        df = pd.DataFrame(data)
-        df = df.sort_values(by=['time', 'file'], ascending=True)
-
-        df.to_csv(os.path.join(self.directory, 'hole_euclidean_distances.csv'), index=False)
-        print(f"Euclidean distance saved: {df}")
-        return df
-
 
 
         ### IDENTIFY MISSING LARVAE AND ASSIGN THEM INSIDE HOLE- OBVS IF THEY DIG THEIR OWN HOLE THIS ISNT GREAT 
@@ -1501,7 +1451,13 @@ class HoleAnalysis:
                             upper_triangle = np.triu((distances < threshold) & mask, k=1)
                             interaction_counts[interaction_type] += np.sum(upper_triangle)
                         else:
-                            interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                            # interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                            ## STOP TRACK 1-2 AND 2-1 BEING COUNTED 
+                            for i, id1 in enumerate(ids1):
+                                for j, id2 in enumerate(ids2):
+                                    if id1 < id2 and distances[i, j] < threshold:
+                                        interaction_counts[interaction_type] += 1
+
 
                 data.append(interaction_counts)
 
@@ -1517,6 +1473,7 @@ class HoleAnalysis:
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
 
     
+
 
     ### METHOD INTERACTION_TYPE_BOUT: WITHIN <1MM NODE-NODE BOUTS IDENTIFIES THE INITIAL AND PREDOMINANT NODE-NODE CONTACT
 
@@ -1544,6 +1501,11 @@ class HoleAnalysis:
 
         body_parts = ['head', 'body', 'tail']
         interaction_pairs = list(itertools.product(body_parts, body_parts))
+
+        unified_types = [
+                'head_head', 'tail_tail', 'body_body',
+                'body_head', 'body_tail', 'head_tail'
+            ]
 
         bouts = []
         
@@ -1609,7 +1571,8 @@ class HoleAnalysis:
                             start, end = bout['start_frame'], bout['end_frame']
                             interactions = bout['interactions']
                             if interactions:
-                                bouts.append({
+                                type_counts = Counter(interactions)
+                                bout_data = {
                                     'file': track_file,
                                     'bout_id': bout['bout_id'],
                                     'track_1': pair[0],
@@ -1618,8 +1581,10 @@ class HoleAnalysis:
                                     'end_frame': end,
                                     'duration': end - start + 1,
                                     'initial_type': interactions[0],
-                                    'predominant_type': Counter(interactions).most_common(1)[0][0],
-                                })
+                                    'predominant_type': Counter(interactions).most_common(1)[0][0]}
+                                for t in unified_types:
+                                    bout_data[f'{t}'] = type_counts.get(t, 0)
+                                bouts.append(bout_data)
 
                 # Update or start new bouts
                 for pair, interactions in interacting_pairs.items():
@@ -1641,7 +1606,8 @@ class HoleAnalysis:
             for pair, bout in active_bouts.items():
                 interactions = bout['interactions']
                 if interactions:
-                    bouts.append({
+                    type_counts = Counter(interactions)
+                    bout_data = {
                         'file': track_file,
                         'bout_id': bout['bout_id'],
                         'track_1': pair[0],
@@ -1650,8 +1616,12 @@ class HoleAnalysis:
                         'end_frame': bout['end_frame'],
                         'duration': bout['end_frame'] - bout['start_frame'] + 1,
                         'initial_type': interactions[0],
-                        'predominant_type': Counter(interactions).most_common(1)[0][0],
-                    })
+                        'predominant_type': Counter(interactions).most_common(1)[0][0]
+                    }
+                    for t in unified_types:
+                        bout_data[f'{t}'] = type_counts.get(t, 0)
+
+                    bouts.append(bout_data)
 
         bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
         bout_df.to_csv(os.path.join(self.directory, "interaction_type_bout.csv"), index=False)
@@ -2618,7 +2588,13 @@ class HoleAnalysis:
             # 2. digging near hole
             df['within_10mm'] = df.apply(lambda row: buffered_boundary.exterior.distance(Point(row['x_body'], row['y_body'])) <= 10, axis=1)
 
-            df['displacement'] = df.groupby('track_id').apply(lambda group: np.sqrt((group['x_body'].diff() ** 2) + (group['y_body'].diff() ** 2))).reset_index(drop=True)
+            # df['displacement'] = df.groupby('track_id').apply(lambda group: np.sqrt((group['x_body'].diff() ** 2) + (group['y_body'].diff() ** 2))).reset_index(drop=True)
+
+            df['displacement'] = (
+                    np.hypot(
+                        df.groupby('track_id')['x_body'].diff(),
+                        df.groupby('track_id')['y_body'].diff()
+                    ).fillna(np.nan))
 
             df['cumulative_displacement'] = df.groupby('track_id')['displacement'].cumsum()
 
@@ -3008,12 +2984,26 @@ class HoleAnalysis:
 
                 first_entry = hole_frames.iloc[0]
 
-                # Speeds before entering the hole
-                before_mask = (group['frame'] < first_entry)
+                # # Speeds before entering the hole
+                # before_mask = (group['frame'] < first_entry)
+                # speeds_before = group.loc[before_mask, 'speed']
+
+                # # Speeds after entering (but not in hole)
+                # after_mask = (group['frame'] > first_entry) & (~group['within_hole'])
+                # speeds_after = group.loc[after_mask, 'speed']
+
+                before_mask = (
+                    (group['frame'] < first_entry) &
+                    (~group['digging_outside_hole'])
+                )
                 speeds_before = group.loc[before_mask, 'speed']
 
-                # Speeds after entering (but not in hole)
-                after_mask = (group['frame'] > first_entry) & (~group['within_hole'])
+                # Speeds after entering (exclude digging outside hole)
+                after_mask = (
+                    (group['frame'] > first_entry) &
+                    (~group['within_hole']) &
+                    (~group['digging_outside_hole'])
+                )
                 speeds_after = group.loc[after_mask, 'speed']
 
                 # Compare individual larva behavior before/after
@@ -3120,6 +3110,41 @@ class HoleAnalysis:
         hole_orientation_over_time = pd.DataFrame(data)
         hole_orientation_over_time = hole_orientation_over_time.sort_values(by=['time'], ascending=True)
         hole_orientation_over_time.to_csv(os.path.join(self.directory, 'hole_orientation.csv'), index=False)
+
+
+
+        # METHOD HOLE_EUCLIDEAN_DISTANCE: EUCLIDEAN DISTANCE ACCOUNTING FOR LARVAE WITHIN THE HOLE 
+
+    def hole_euclidean_distance(self):
+
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            hole_boundary = match['hole_boundary']
+
+            # Ensure the perimeter polygon is available
+            if hole_boundary is None:
+                print(f"No perimeter polygon available for track file: {track_file}")
+                continue
+
+            track_data = self.track_data[track_file]
+
+            for frame, fr in df.groupby('frame'):
+                coords = fr[['x_body', 'y_body']].to_numpy()
+                n = len(coords)
+                if n < 2:
+                    avg = np.nan   # not enough larvae to define a pairwise distance
+                else:
+                    avg = pdist(coords, metric='euclidean').mean()
+                data.append({'time': frame, 'average_distance': avg, 'file': track_file})
+
+
+        df = pd.DataFrame(data)
+        df = df.sort_values(by=['time', 'file'], ascending=True)
+        df.to_csv(os.path.join(self.directory, 'hole_euclidean_distances.csv'), index=False)
+
+
 
 
 

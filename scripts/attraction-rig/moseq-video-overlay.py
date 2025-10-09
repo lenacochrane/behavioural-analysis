@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 
 # Load CSV
-df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_07_08-11_32_57/moseq_df.csv')
+df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_07_30-10_00_13/moseq_df.csv')
 
 print(df.head(10))
 f = df[df['name'] == 'N1-GH_2025-02-24_15-16-50_td7']
@@ -21,7 +21,7 @@ coord_columns = ['centroid_x', 'centroid_y']  # replace with your actual centroi
 image_size = 1400
 original_video = cv2.VideoCapture('/Users/cochral/Desktop/MOSEQ/videos/N1-GH_2025-02-24_15-16-50_td7.mp4')
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-video_output = cv2.VideoWriter('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/behavioural_syllable_videos/N1-GH_2025-02-24_15-16-50_td7_10.mp4', fourcc, 25.0, (image_size, image_size))
+video_output = cv2.VideoWriter('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/behavioural_syllable_videos/N1-GH_2025-02-24_15-16-50_td7_kappa10.mp4', fourcc, 25.0, (image_size, image_size))
 
 # Sort by frame for consistency
 f = f.sort_values('frame_index')

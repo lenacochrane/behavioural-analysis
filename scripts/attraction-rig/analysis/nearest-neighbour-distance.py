@@ -37,7 +37,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df6, df7], ignore_index=True)
+df = pd.concat([df6, df5], ignore_index=True)
 
 
 bins = np.linspace(0, 90, 90)  # 0 to 2.5 in 0.1 increments
@@ -73,7 +73,7 @@ plt.ylim(0, 0.07)
 
 plt.xticks(rotation=45)
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/nearest-neighour-n2.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/nearest-neighour-n10.png', dpi=300, bbox_inches='tight')
 
 # Show the plot
 plt.show()

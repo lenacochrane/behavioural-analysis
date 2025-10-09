@@ -16,14 +16,14 @@ import shapely.wkt
 # %% DETERMINE COLOUR OF TRACK DEPENDING ON BOOLEAN VARIABLE 
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/2025-04-04_12-06-08_td4.analysis.csv')
-original_video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/2025-04-04_12-06-08_td4.mp4'
-output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli/_DIGGING.mp4'
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/test.csv')
+original_video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/2025-03-03_14-03-34_td4.mp4'
+output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/2025-03-03_14-03-34_td4_digging.mp4'
 
 
 
-mm_to_pixel = ['body.x', 'body.y']
-df[mm_to_pixel] = df[mm_to_pixel] * (1027/90)
+mm_to_pixel = ['y_body', 'x_body']
+df[mm_to_pixel] = df[mm_to_pixel] * (1046/90)
 
 
 # Set the im= age size
@@ -37,7 +37,7 @@ original_video = cv2.VideoCapture(original_video_path)
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec used to compress the frames
 video_output = cv2.VideoWriter(output, fourcc, 25.0, (image_size, image_size))
 
-df = df.sort_values('frame_idx')
+df = df.sort_values('frame')
 
 # Iterate over frames in the original video
 frame_number = 0
@@ -47,12 +47,12 @@ while original_video.isOpened():
         break  # Exit if no more frames
 
     # Get the data for the current frame from the CSV
-    frame_df = df[df['frame_idx'] == frame_number]
+    frame_df = df[df['frame'] == frame_number]
 
     # Overlay the circles from the CSV data onto the frame
     for i, row in frame_df.iterrows():
-        body_x = row['body.x']
-        body_y = row['body.y']
+        body_x = row['x_body']
+        body_y = row['y_body']
 
         # Skip if coordinates are NaN
         if not np.isnan([body_x, body_y]).any():
@@ -78,6 +78,74 @@ while original_video.isOpened():
 original_video.release()
 video_output.release()
 
+
+
+######################################################################################################################################################## 
+# %% DETERMINE COLOUR OF TRACK DEPENDING ON BOOLEAN VARIABLE 
+
+
+df = pd.read_csv('/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/test.csv')
+original_video = '/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/2025-02-25_14-25-25_td11_holes.mp4'
+output = '/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/2025-02-25_14-25-25_td11_holes_DIGGING.mp4'
+
+
+
+mm_to_pixel = ['y_body', 'x_body']
+df[mm_to_pixel] = df[mm_to_pixel] * (1046/90)
+
+
+# Set the im= age size
+image_size = 1400
+
+# Open the original MP4 video
+original_video_path = original_video
+original_video = cv2.VideoCapture(original_video_path)
+
+# Define the codec and create VideoWriter object
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec used to compress the frames
+video_output = cv2.VideoWriter(output, fourcc, 25.0, (image_size, image_size))
+
+df = df.sort_values('frame')
+
+# Iterate over frames in the original video
+frame_number = 0
+while original_video.isOpened():
+    ret, frame = original_video.read()  # Read the next frame from the original video
+    if not ret:
+        break  # Exit if no more frames
+
+    # Get the data for the current frame from the CSV
+    frame_df = df[df['frame'] == frame_number]
+
+    # Overlay the circles from the CSV data onto the frame
+    for i, row in frame_df.iterrows():
+        body_x = row['x_body']
+        body_y = row['y_body']
+
+        # Skip if coordinates are NaN
+        if not np.isnan([body_x, body_y]).any():
+            # Convert coordinates to integers
+            body_x, body_y = int(body_x), int(body_y)
+
+            # Determine color based on the boolean column
+            if row['digging_outside_hole']:
+                color = (255, 0, 0)  # RED for moving outside
+            else:
+                continue
+            #     color = (0, 0, 255)  # BLUE for not moving outside
+
+            # Overlay the circle on the original video frame
+            cv2.circle(frame, (body_x, body_y), radius=4, color=color, thickness=-1)
+
+    # Write the updated frame to the output video
+    video_output.write(frame)
+
+    # Move to the next frame
+    frame_number += 1
+
+
+original_video.release()
+video_output.release()
 
 
 
@@ -558,6 +626,75 @@ while original_video.isOpened():
 original_video.release()
 video_output.release()
 
+
+
+# %% ###################### 
+
+############################ OVERLAYING BOUTS <1MM OF CONTACT 
+
+import cv2
+import pandas as pd
+import os
+from collections import defaultdict
+
+
+df_bouts = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/interactions_return.csv')
+df_bouts = df_bouts[df_bouts['file'] == '2025-03-07_11-48-26_td14.tracks.feather']
+
+df_bouts = df_bouts[df_bouts['interacted'] == True] ## returns
+
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/2025-03-07_11-48-26_td14.tracks.feather')
+
+video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/2025-03-07_11-48-26_td14.mp4'
+
+output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-interaction-bouts/2025-03-07_11-48-26_td14_bout.mp4'
+
+# --- Setup video reader/writer ---
+cap = cv2.VideoCapture(video)
+# fps = cap.get(cv2.CAP_PROP_FPS)
+w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+writer = cv2.VideoWriter(output, cv2.VideoWriter_fourcc(*'mp4v'), 1, (w, h))
+
+
+# Precompute a lookup of frame → bouts
+frame_to_bouts = defaultdict(list)
+for _, row in df_bouts.iterrows():
+    for frame in range(row['start_frame'], row['end_frame'] + 1):
+        frame_to_bouts[frame].append((row['exiting_larva'], row['partner']))
+
+frame_idx = 0
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Get interactions happening in this frame
+    active_bouts = frame_to_bouts.get(frame_idx, [])
+
+    # Plot tracking overlay from df (frame_idx match)
+    frame_tracks = df[df['frame'] == frame_idx]
+
+    for _, row in frame_tracks.iterrows():
+        x, y = int(row['x_body']), int(row['y_body'])
+        track_id = int(row['track_id'])
+
+        # Check if this track is in an active bout
+        is_in_bout = any(track_id in bout for bout in active_bouts)
+
+        color = (0, 0, 255) if is_in_bout else (255, 255, 255)  # Red if in bout, white otherwise
+        cv2.circle(frame, (x, y), 5, color, -1)
+
+    writer.write(frame)
+    frame_idx += 1
+
+
+
+cap.release()
+writer.release()
+cv2.destroyAllWindows()
 
 
 # %%

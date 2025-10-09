@@ -16,7 +16,7 @@ plt.figure(figsize=(8,8))
 
 df = pd.concat([df1, df2], ignore_index=True)
 
-sns.barplot(data=df, x='condition', y='return time', edgecolor='black', linewidth=2, ci='sd', color='#2E8B57', alpha=0.6)
+sns.barplot(data=df, x='condition', y='return_time', edgecolor='black', linewidth=2, ci='sd', color='#2E8B57', alpha=0.6)
 
 plt.xlabel('', fontsize=12, fontweight='bold')
 plt.ylabel('Return Time (s)', fontsize=12, fontweight='bold')

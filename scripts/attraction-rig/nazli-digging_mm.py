@@ -222,7 +222,7 @@ def digging(df): #### REMOVE DIGGING LARVAE
 
 
 
-directory = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-nazli'
+directory = '/Users/cochral/Desktop/SLAEP/TRain/test'
 
 
 mm_conversion(directory)

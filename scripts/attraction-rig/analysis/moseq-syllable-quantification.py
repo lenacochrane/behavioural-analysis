@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import pyarrow.feather as feather
 import matplotlib.patches as mpatches
 
-df_moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA10/2025_06_23-10_59_29/moseq_df.csv')
+df_moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA20/2025_08_08-18_56_23/moseq_df.csv')
 # df_stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA3600/2025_06_06-11_20_54/stats_df.csv')
 
 print(df_moseq.columns)
@@ -38,10 +38,10 @@ print(f"  max  = {durations.max():.0f}")
 # ——— Fixed y-axis ranges ———
 hmin, hmax   = -0.6, 0.6    # heading range (radians)
 avmin, avmax = -3, 3          # angular velocity
-vmin, vmax   = 0, 250           # speed (px/s)
+vmin, vmax   = 0, 450          # speed (px/s)
 
 # ——— prep output dir ———
-output_dir = '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/moseq/syllable_quantifications_10'
+output_dir = '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/moseq/syllable_quantifications_20'
 os.makedirs(output_dir, exist_ok=True)
 
 features = ['heading','angular_velocity','velocity_px_s']

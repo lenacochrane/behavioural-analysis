@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -35,5 +34,3 @@ plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/h
 
 # Show the plot
 plt.show()
-
-

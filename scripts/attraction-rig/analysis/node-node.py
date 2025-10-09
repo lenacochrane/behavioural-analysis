@@ -35,7 +35,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 
 plt.figure(figsize=(8,8))
 
-df = pd.concat([df6, df7], ignore_index=True) #n2
+df = pd.concat([df5, df6], ignore_index=True) #n2
 # df = pd.concat([ df5, df6, df7, df8], ignore_index=True) #n10
 
 palette = {
@@ -70,7 +70,7 @@ plt.title('Node Contact Frequency', fontsize=16, fontweight='bold')
 plt.tight_layout(rect=[1, 1, 1, 1])
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/node-node/n10-si.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/n10-.png', dpi=300, bbox_inches='tight')
 
 plt.show()
 

@@ -23,11 +23,14 @@ df6['condition'] = 'SI_N10'
 
 
 
+
+
+
 plt.figure(figsize=(8,8))
 
 # df = pd.concat([df5, df6], ignore_index=True) #n10
 
-df = pd.concat([df5, df6], ignore_index=True) # n2
+df = pd.concat([df3, df4], ignore_index=True) # n2
 
 # df['avg'] = df[['track1_speed', 'track2_speed']].mean(axis=1) #speed
 # df['avg'] = df[['track1_acceleration', 'track2_acceleration']].mean(axis=1) #acceleration
@@ -40,7 +43,7 @@ df['avg'] = df[['track1_angle', 'track2_angle']].mean(axis=1) # heading angle
 valid_interactions = df[
     (df['Normalized Frame'] == 0) & 
     (df['min_distance'] >= 0) & 
-    (df['min_distance'] <= 5)
+    (df['min_distance'] <= 0.1)
 ][['condition', 'file', 'Interaction Number']]
 
 df_filtered = df.merge(valid_interactions, on=['condition', 'file', 'Interaction Number'])
@@ -73,7 +76,7 @@ sns.lineplot(
 plt.xlabel('Normalized Frame', fontsize=12)
 plt.ylabel('heading angle', fontsize=12)
 
-plt.xlim(-15, 15)
+plt.xlim(-30, 30)
 
 
 plt.title('', fontsize=16, fontweight='bold')
@@ -89,7 +92,7 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 
 plt.xticks(rotation=45)
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/n10-headingangle-.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/interactions/0-0.1mm_n2-headingangle.png', dpi=300, bbox_inches='tight')
 
 
 plt.show()

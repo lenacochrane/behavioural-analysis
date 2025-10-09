@@ -715,7 +715,11 @@ class PseudoAnalysis:
                         upper_triangle = np.triu((distances < threshold) & mask, k=1)
                         interaction_counts[interaction_type] += np.sum(upper_triangle)
                     else:
-                        interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                        # interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                        for i, id1 in enumerate(ids1):
+                            for j, id2 in enumerate(ids2):
+                                if id1 < id2 and distances[i, j] < threshold:
+                                    interaction_counts[interaction_type] += 1
 
             data.append(interaction_counts)
 
@@ -848,18 +852,18 @@ def perform_analysis(directory):
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
-    analysis.nearest_neighbour()
-    # analysis.interaction_types()
+    # analysis.nearest_neighbour()
+    analysis.interaction_types()
 
     # analysis.total_digging(cleaned=True)
     # analysis.digging_behaviour()
 
     print(f"Analysis complete for {directory}")
 
-perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
-perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
-perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
-perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
+perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
+# perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
+# perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
 
 
 

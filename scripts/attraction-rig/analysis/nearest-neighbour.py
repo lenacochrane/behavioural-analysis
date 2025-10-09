@@ -42,7 +42,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 # df = pd.concat([df3, df4], ignore_index=True)
 
 ### N10
-# df = pd.concat([df5, df6], ignore_index=True)
+df = pd.concat([df5, df6], ignore_index=True)
 
 ### N2 PSEUDO SI
 # df = pd.concat([df4, df9], ignore_index=True)
@@ -54,7 +54,7 @@ df10['condition'] = 'PSEUDO-GH_N2'
 # df = pd.concat([df5, df8], ignore_index=True)
 
 ### N10 PSEUDO SI
-df = pd.concat([df6, df7], ignore_index=True)
+# df = pd.concat([df6, df7], ignore_index=True)
 
 
 bins = list(range(0, 90, 1))  # [0, 10, 20, ..., 100]
@@ -74,7 +74,7 @@ for i, start in enumerate(range(0, 90, 10)):
     subset = df[(df['body-body'] >= start) & (df['body-body'] < end)]
 
     summary = (
-    subset.groupby(['filename', 'condition', 'bin_center'])['speed']
+    subset.groupby(['filename', 'condition', 'bin_center'])['angle']
     .mean()
     .reset_index())
 
@@ -84,7 +84,7 @@ for i, start in enumerate(range(0, 90, 10)):
     sns.lineplot(
         data=summary,
         x='bin_center',
-        y='speed',
+        y='angle',
         hue='condition',
         errorbar='sd', ax=ax, legend=(i == 3))
     
@@ -92,7 +92,7 @@ for i, start in enumerate(range(0, 90, 10)):
     ax.set_title(f'{start}–{end} mm')
     ax.set_xlim(start, end)
     if i % 3 == 0:
-        ax.set_ylabel('speed')
+        ax.set_ylabel('angle')
     else:
         ax.set_ylabel('')
     if i >= 6:
@@ -104,7 +104,7 @@ for i, start in enumerate(range(0, 90, 10)):
 for j in range(i + 1, 9):
     fig.delaxes(axes[j]) 
 
-plt.ylim(0,1.2)
+plt.ylim(0,180)
 plt.subplots_adjust(wspace=0.3, hspace=0.4)
 plt.suptitle('Speed vs Nearest Neighour Distance', fontsize=16, fontweight='bold')
 plt.subplots_adjust(wspace=0.3, hspace=0.4)
@@ -112,6 +112,6 @@ plt.subplots_adjust(wspace=0.3, hspace=0.4)
 
 # plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n10-speed-si.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/n10-angle.png', dpi=300, bbox_inches='tight')
 
 plt.show()

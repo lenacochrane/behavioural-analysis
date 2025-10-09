@@ -22,20 +22,24 @@ def perform_analysis(directory):
     print("Starting analysis...")
     analysis = HoleAnalysis(directory)
 
-    # analysis.digging_mask()
-
-
     # analysis.post_processing()
     # analysis.quality_control()
-
-    # analysis.nearest_neighbour()
-
-    # analysis.hole_boundary(scale_factor=1.5)
-
-    #METHOD TO SHORTEN
     # analysis.shorten(frame=600)
-    
-    # CALL METHODS FOR LARVAEL BEHAVIOUR 
+
+
+    ####### --- LARVAL BEHAVIOUR --- ######
+
+    ## REMOVE DIGGING FROM ANALYSIS 
+
+    analysis.digging_mask()
+
+    ### PSEUDO POPULATION MODEL
+
+    # analysis.pseudo_population_model()
+    # analysis.pseudo_population_model(number_of_iterations=1, number_of_animals=2)
+
+    ## BEHAVIOURAL DYNAMICS 
+
     # analysis.trajectory()
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.speed()
@@ -45,45 +49,48 @@ def perform_analysis(directory):
     # analysis.euclidean_distance_variance(200, 600) # currently plotting the plataeu but arbitary time start for plateu 
     # analysis.distance_from_centre()
 
+    ## PROXIMITY AND INTERACTION DYNAMICS 
 
-    ### PSEUDO POPULATION MODEL
-
-    # analysis.pseudo_population_model()
-    # analysis.pseudo_population_model(number_of_iterations=1, number_of_animals=2)
-
-
-    # DIGGING IN ABSENCE OF HOLES
-    # analysis.total_digging(cleaned=True) #HAVE TO MODIFY
-
-
-
-
-    # analysis.hole_euclidean_distance()
-
-    # analysis.interaction_types()
-
-
+    # analysis.nearest_neighbour()
     # analysis.interactions()
-    
+    analysis.interaction_types()
+    # analysis.interaction_type_bout()
+    # analysis.interaction_bout_dynamics() 
     # analysis.contacts(proximity_threshold=5)
 
-    # analysis.total_digging(cleaned=True)
+
+    ####### --- DIGGING IN ABSENCE OF HOLES --- ######
+    # analysis.total_digging(cleaned=True) #HAVE TO MODIFY???
     # analysis.digging_behaviour()
 
 
-    ##### --- HOLES --- ####
-    analysis.compute_hole()
+    ####### --- HOLES --- ######
+    ## REQUIRES COMPUTE HOLE
+    # analysis.compute_hole() 
+
     # analysis.hole_counter()
-    analysis.returns()
+    # analysis.hole_frame_counts()
+    # analysis.returns()
     # analysis.hole_departures()
     # analysis.time_to_enter()
     # analysis.hole_entry_probability()
-    # analysis.speed_hole()
+    # analysis.hole_entry_departure_latency()
+    # analysis.speed_hole() # internal logic for hole / digging
 
-    # analysis.hole_mask()
+    ## REQUIRES HOLE STATUS 
+    # analysis.hole_status() 
+    # analysis.interactions_return()
+    # analysis.pre_post_hole_interactions()
+
+    ## REQUIRES HOLE MASK 1) REMOVES LARVAE IN HOLE 2) REMOVES DIGGING OUTSIDE HOLE
+    # analysis.hole_mask() 
     # analysis.hole_orientation()
     # analysis.distance_from_hole()
-    
+    # analysis.hole_euclidean_distance()
+
+    ## REQUIRES HOLE STATUS AND MASK
+    # analysis.hole_status_interactions() 
+
 
 
     print("Analysis Completed")
@@ -104,9 +111,13 @@ if __name__ == "__main__":
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION')
 
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION')
+
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2')
+
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/test-delete')
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video')
 
