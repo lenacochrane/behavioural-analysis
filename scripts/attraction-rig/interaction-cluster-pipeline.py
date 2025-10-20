@@ -14,6 +14,7 @@ from random import sample
 from matplotlib.patches import Ellipse
 from sklearn.decomposition import PCA
 import imageio.v2 as imageio
+import matplotlib as mpl
 
 
 #### FUNCTION CREATE_CROPPED_INTERACTIONS: ORIGINAL GROUP AND ISO INTERACTIONS MERGED AND INTERACTIONS CROPPED 30 FRAMES
@@ -994,7 +995,11 @@ class ClusterPipeline:
     
 
         ### OBSERVED - EXPECTED DEVIATION PLOT
+
+        mpl.rcParams['pdf.fonttype'] = 42
+        mpl.rcParams['ps.fonttype']  = 42
         
+
         cluster_counts = (df.groupby([cluster_name, 'condition']).size().unstack(fill_value=0).reindex(columns=['group', 'iso'], fill_value=0))  # count number per cluster per condition
 
         total_group = cluster_counts['group'].sum()
@@ -1028,6 +1033,8 @@ class ClusterPipeline:
         plt.tight_layout()
         path = os.path.join(self.directory, 'deviations.png')  
         plt.savefig(path, dpi=300, bbox_inches='tight')
+        path = os.path.join(self.directory, 'figure_editable.pdf')  
+        plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300, transparent=True)
         plt.close()
 
 
