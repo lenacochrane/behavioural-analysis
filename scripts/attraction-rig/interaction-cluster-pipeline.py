@@ -3047,197 +3047,336 @@ class ClusterPipeline:
     
 
     #### METHOD PARTNER_MORPHOLOGY:
+    # before was doing like barplots of pre and post phase of each interaction
+#     def partner_morphology(self):
+
+#         df = self.df
+#         cluster_name = self.cluster_name
+
+#         ## PRE/POST WINDOW DEFINED AROUND NORMALISED FRAMES FOR CALCULATIONS
+#         df['window'] = np.where(df['Normalized Frame'] < 0, 'pre', np.where(df['Normalized Frame'] > 0, 'post', np.nan))
+        
+#         ## RELATIVE POSITION OF PARTNER TO ANCHOR BASED ON BODY COORDINATE
+#         df['relative_partner_x'] = df['partner x_body'] - df['anchor x_body']
+#         df['relative_partner_y'] = df['partner y_body'] - df['anchor y_body']
+
+#         ## DISTANCE OF PARTNER TO ANCHOR 
+#         df['distance_from_anchor'] = np.sqrt(df['relative_partner_x']**2 + df['relative_partner_y']**2)
+
+#         df = df.sort_values(['interaction_id','Normalized Frame'])
+
+#         ## SHIFT POSITION AND DISTANCE FOR FUTURE CALCULATIONS
+
+#         df['prev_relative_partner_x'] = df.groupby('interaction_id')['relative_partner_x'].shift(1)
+#         df['prev_relative_partner_y'] = df.groupby('interaction_id')['relative_partner_y'].shift(1)
+#         df['prev_distance_from_anchor'] = df.groupby('interaction_id')['distance_from_anchor'].shift(1)
+
+#         ## STEP VECTOR: HOW THE RELATIVE POSITION CHANGED BETWEEN FRAMES (WHICH WAY THE PARTNER MOVED)
+
+#         df['relative_step_x'] = df['relative_partner_x'] - df['prev_relative_partner_x']
+#         df['relative_step_y'] = df['relative_partner_y'] - df['prev_relative_partner_y']
+
+#         ## STEP LENGTH: DISTANCE OF THE RELATIVE POSIITON CHANGE (MAGNITUDE OF VECTOR)
+
+#         df['relative_step_length'] = np.sqrt(df['relative_step_x']**2 + df['relative_step_y']**2)
+
+#         ## MOVED CLOSER TO THE ANCHOR?
+
+#         df['distance_change'] = df['prev_distance_from_anchor'] - df['distance_from_anchor'] # distance moved of partner relative to anchor
+#         # Goal-aware distance change (positive = good for that phase)
+#         df['distance_change_check'] = np.where(
+#     df['window'] == 'pre',   # pre → want to move toward (distance decrease)
+#     df['distance_change'],
+#     -df['distance_change']  # post → want to move away (distance increase)
+# )
+        
+#         df['distance_change_expected'] = df['distance_change_check'] > 0 ## True: moved toward; False: moved away
+
+
+#         ## WIGGILNESS - HOW MUCH MOVE RIGHT OR LEFT (0 STRAIGHT TOWARD ANCHOR)
+#            ## prev position of the partner - direct line to the anchor - how much has deviated laterally for the current partner position
+
+#         eps = 1e-9  # just a tiny number to avoid dividing by zero # cant i just use np.nan
+
+#         # DIRECTION OF PREV PARTNER POSITION TO PREV ANCHOR POSITION
+#         df['prev_direction_x'] = df['prev_relative_partner_x'] / (df['prev_distance_from_anchor'] + eps) # ref direction of partner -> anchor
+#         df['prev_direction_y'] = df['prev_relative_partner_y'] / (df['prev_distance_from_anchor'] + eps) # ref direction of partner -> anchor
+
+#         # DID THE PARTNER ACTUALLY TAKE A STEP IN THAT DIRECTION TOWARD THE ANCHOR (USED DOT PRODUCT IDK MINUS SIGN= DONT GET MATHS) / AWAY FROM THE ANCHOR
+#         df['forward_progress'] = -(df['relative_step_x'] * df['prev_direction_x'] + df['relative_step_y'] * df['prev_direction_y'])
+
+#         df['goal_forward_progress'] = np.where(df['window'] == 'pre',  df['forward_progress'],   # toward is good
+#                            -df['forward_progress'])    # away is good in the post phase so want to make it positive
+
+
+#         # HOW MUCH PARTNER MOVED SIDWAYS (0 = FORWARD)
+#         df['sideways_wiggle'] = np.sqrt(np.maximum(0.0, df['relative_step_length']**2 - df['forward_progress']**2))
+        
+#         # HOW MUCH WIGGLE OCCURED RELATIVE TO HOW MUCH PROGRESS WAS MADE (MOVING FORWARD)
+#         df['wiggle_ratio'] = df['sideways_wiggle'] / (df['goal_forward_progress'] + eps)
+
+
+#         ## DEFINING PRE AND POST WINDOW BASED ON CONTINIOUS FRAMES AND NOT TOUCHING < 1mm
+#            ## pre phase -15 to 5 and post phase 5 to 15 - however if any frame < 1mm i remove it?
+
+#         df['phase'] = np.select(
+#             [
+#                 (df['window'] == 'pre')  & df['Normalized Frame'].between(-15, -5, inclusive='both'),
+#                 (df['window'] == 'post') & df['Normalized Frame'].between(5, 15, inclusive='both')
+#             ],
+#             ['pre', 'post'],
+#             default=np.nan
+#         )
+
+#         # keep only the frames that belong to those two phases
+#         df = df[df['phase'].notna()].copy()
+
+#         # Mark if this phase is fully contact-free
+#         df['phase_contact_free'] = df.groupby(['interaction_id', 'phase'])['min_distance']\
+#             .transform(lambda s: (s > 1.0).all())
+
+#         # Count how many unique frames exist in the window
+#         df['phase_n_frames'] = df.groupby(['interaction_id', 'phase'])['Normalized Frame']\
+#             .transform('nunique')
+
+#         # Keep only good phases
+#         df = df[(df['phase_contact_free']) & (df['phase_n_frames'] == 11)].copy()
+
+
+#         grp = df.groupby(['interaction_id', 'phase'], sort=False) ##
+
+#         # 1) Directness (sum of positive distance closings / total step length)
+#         directness_scores = (
+#             (grp['distance_change_check'].apply(lambda s: s.clip(lower=0).sum())) /
+#             (grp['relative_step_length'].sum() + eps)
+#         ).rename('directness').reset_index()
+
+#         # 2) Consistency (% of steps that moved closer)
+#         consistency_scores = grp['distance_change_expected'].mean().rename('consistency').reset_index()
+
+#         # 3) Wiggliness (sideways / forward)
+#         wiggle_scores = (
+#             (grp['sideways_wiggle'].sum()) /
+#             (grp['goal_forward_progress'].apply(lambda s: s.clip(lower=0).sum()) + eps)
+#         ).rename('wiggliness').reset_index()
+
+#         # 4) QC: number of steps used
+#         nsteps = grp.size().rename('n_steps').reset_index()
+
+#         # Merge the three metrics + n_steps
+#         scores = (
+#             directness_scores
+#             .merge(consistency_scores, on=['interaction_id','phase'])
+#             .merge(wiggle_scores,      on=['interaction_id','phase'])
+#             .merge(nsteps,             on=['interaction_id','phase'])
+#         )
+
+#         lookup = (
+#             df[['interaction_id', 'phase', cluster_name, 'condition']]
+#             .drop_duplicates()
+#         )
+
+#         scores = scores.merge(lookup, on=['interaction_id','phase'], how='left')
+
+#         output = os.path.join(self.directory, "morphology_score")
+#         os.makedirs(output, exist_ok=True)
+
+#         scores_path = os.path.join(output, "partner_morphology_scores.csv")
+#         scores.to_csv(scores_path, index=False)
+#         print(scores)
+
+#         ######## PLOTTING INDIVIDUAL METRICS
+
+#         df = scores
+
+#         ## DIRECTNESS
+
+#         plt.figure(figsize=(8,6))
+
+#         sns.barplot(data=df, x='Yhat.idt.pca', y='directness', hue='phase', hue_order=['pre','post'], errorbar="sd")
+
+#         plt.ylabel('Directness of Trajectory')
+#         plt.xlabel('Cluster')
+#         # plt.ylim(0, 1)
+#         plt.legend(title='Phase', frameon=False)
+#         plt.tight_layout()
+
+#         save_path = os.path.join(output, 'directness.png')
+#         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+#         plt.close()
+
+
+#         ## CONSISTENCY
+
+#         plt.figure(figsize=(8,6))
+
+#         sns.barplot(data=df, x='Yhat.idt.pca', y='consistency', hue='phase', hue_order=['pre','post'], errorbar="sd")
+
+#         plt.ylabel('Consistency of Trajectory')
+#         plt.xlabel('Cluster')
+#         # plt.ylim(0, 1)
+#         plt.legend(title='Phase', frameon=False)
+#         plt.tight_layout()
+
+#         save_path = os.path.join(output, 'consistency.png')
+#         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+#         plt.close()
+
+
+#         ## WIGGLINESS
+
+#         plt.figure(figsize=(8,6))
+
+#         sns.barplot(data=df, x='Yhat.idt.pca', y='wiggliness', hue='phase', hue_order=['pre','post'], errorbar="sd")
+
+#         plt.ylabel('Wiggliness of Trajectory')
+#         plt.xlabel('Cluster')
+#         plt.ylim(0, None)
+#         plt.legend(title='Phase', frameon=False)
+#         plt.tight_layout()
+
+#         save_path = os.path.join(output, 'wiggliness.png')
+#         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+#         plt.close()
+
+
     def partner_morphology(self):
 
-        df = self.df
+        df = self.df.copy()
         cluster_name = self.cluster_name
+        eps = 1e-9
 
-        ## PRE/POST WINDOW DEFINED AROUND NORMALISED FRAMES FOR CALCULATIONS
-        df['window'] = np.where(df['Normalized Frame'] < 0, 'pre', np.where(df['Normalized Frame'] > 0, 'post', np.nan))
-        
-        ## RELATIVE POSITION OF PARTNER TO ANCHOR BASED ON BODY COORDINATE
+        # Relative geometry
         df['relative_partner_x'] = df['partner x_body'] - df['anchor x_body']
         df['relative_partner_y'] = df['partner y_body'] - df['anchor y_body']
-
-        ## DISTANCE OF PARTNER TO ANCHOR 
         df['distance_from_anchor'] = np.sqrt(df['relative_partner_x']**2 + df['relative_partner_y']**2)
 
-        df = df.sort_values(['interaction_id','Normalized Frame'])
+        # Order in time within each interaction
+        df = df.sort_values(['interaction_id', 'Normalized Frame'])
 
-        ## SHIFT POSITION AND DISTANCE FOR FUTURE CALCULATIONS
-
+        # Previous-frame values
         df['prev_relative_partner_x'] = df.groupby('interaction_id')['relative_partner_x'].shift(1)
         df['prev_relative_partner_y'] = df.groupby('interaction_id')['relative_partner_y'].shift(1)
         df['prev_distance_from_anchor'] = df.groupby('interaction_id')['distance_from_anchor'].shift(1)
 
-        ## STEP VECTOR: HOW THE RELATIVE POSITION CHANGED BETWEEN FRAMES (WHICH WAY THE PARTNER MOVED)
-
+        # Step vector & length
         df['relative_step_x'] = df['relative_partner_x'] - df['prev_relative_partner_x']
         df['relative_step_y'] = df['relative_partner_y'] - df['prev_relative_partner_y']
-
-        
-        ## STEP LENGTH: DISTANCE OF THE RELATIVE POSIITON CHANGE (MAGNITUDE OF VECTOR)
-
         df['relative_step_length'] = np.sqrt(df['relative_step_x']**2 + df['relative_step_y']**2)
 
-        ## MOVED CLOSER TO THE ANCHOR?
+        # Unit direction (anchor -> partner) at previous frame
+        df['prev_direction_x'] = df['prev_relative_partner_x'] / (df['prev_distance_from_anchor'] + eps)
+        df['prev_direction_y'] = df['prev_relative_partner_y'] / (df['prev_distance_from_anchor'] + eps)
 
-        df['distance_change'] = df['prev_distance_from_anchor'] - df['distance_from_anchor'] # distance moved of partner relative to anchor
-        # Goal-aware distance change (positive = good for that phase)
-        df['distance_change_check'] = np.where(
-    df['window'] == 'pre',   # pre → want to move toward (distance decrease)
-    df['distance_change'],
-    -df['distance_change']  # post → want to move away (distance increase)
-)
-        
-        df['distance_change_expected'] = df['distance_change_check'] > 0 ## True: moved toward; False: moved away
-
-
-        ## WIGGILNESS - HOW MUCH MOVE RIGHT OR LEFT (0 STRAIGHT TOWARD ANCHOR)
-           ## prev position of the partner - direct line to the anchor - how much has deviated laterally for the current partner position
-
-        eps = 1e-9  # just a tiny number to avoid dividing by zero # cant i just use np.nan
-
-        # DIRECTION OF PREV PARTNER POSITION TO PREV ANCHOR POSITION
-        df['prev_direction_x'] = df['prev_relative_partner_x'] / (df['prev_distance_from_anchor'] + eps) # ref direction of partner -> anchor
-        df['prev_direction_y'] = df['prev_relative_partner_y'] / (df['prev_distance_from_anchor'] + eps) # ref direction of partner -> anchor
-
-        # DID THE PARTNER ACTUALLY TAKE A STEP IN THAT DIRECTION TOWARD THE ANCHOR (USED DOT PRODUCT IDK MINUS SIGN= DONT GET MATHS) / AWAY FROM THE ANCHOR
-        df['forward_progress'] = -(df['relative_step_x'] * df['prev_direction_x'] + df['relative_step_y'] * df['prev_direction_y'])
-
-        df['goal_forward_progress'] = np.where(
-    df['window'] == 'pre',  df['forward_progress'],   # toward is good
-                           -df['forward_progress'])    # away is good in the post phase so want to make it positive
-
-
-        # HOW MUCH PARTNER MOVED SIDWAYS (0 = FORWARD)
-        df['sideways_wiggle'] = np.sqrt(np.maximum(0.0, df['relative_step_length']**2 - df['forward_progress']**2))
-        
-        # HOW MUCH WIGGLE OCCURED RELATIVE TO HOW MUCH PROGRESS WAS MADE (MOVING FORWARD)
-        df['wiggle_ratio'] = df['sideways_wiggle'] / (df['goal_forward_progress'] + eps)
-
-
-        ## DEFINING PRE AND POST WINDOW BASED ON CONTINIOUS FRAMES AND NOT TOUCHING < 1mm
-           ## pre phase -15 to 5 and post phase 5 to 15 - however if any frame < 1mm i remove it?
-
-        df['phase'] = np.select(
-            [
-                (df['window'] == 'pre')  & df['Normalized Frame'].between(-15, -5, inclusive='both'),
-                (df['window'] == 'post') & df['Normalized Frame'].between(5, 15, inclusive='both')
-            ],
-            ['pre', 'post'],
-            default=np.nan
+        # Signed forward progress: positive = toward, negative = away
+        df['forward_progress'] = -(
+            df['relative_step_x'] * df['prev_direction_x'] +
+            df['relative_step_y'] * df['prev_direction_y']
         )
 
-        # keep only the frames that belong to those two phases
-        df = df[df['phase'].notna()].copy()
-
-        # Mark if this phase is fully contact-free
-        df['phase_contact_free'] = df.groupby(['interaction_id', 'phase'])['min_distance']\
-            .transform(lambda s: (s > 1.0).all())
-
-        # Count how many unique frames exist in the window
-        df['phase_n_frames'] = df.groupby(['interaction_id', 'phase'])['Normalized Frame']\
-            .transform('nunique')
-
-        # Keep only good phases
-        df = df[(df['phase_contact_free']) & (df['phase_n_frames'] == 11)].copy()
-
-
-        grp = df.groupby(['interaction_id', 'phase'], sort=False) ##
-
-        # 1) Directness (sum of positive distance closings / total step length)
-        directness_scores = (
-            (grp['distance_change_check'].apply(lambda s: s.clip(lower=0).sum())) /
-            (grp['relative_step_length'].sum() + eps)
-        ).rename('directness').reset_index()
-
-        # 2) Consistency (% of steps that moved closer)
-        consistency_scores = grp['distance_change_expected'].mean().rename('consistency').reset_index()
-
-        # 3) Wiggliness (sideways / forward)
-        wiggle_scores = (
-            (grp['sideways_wiggle'].sum()) /
-            (grp['goal_forward_progress'].apply(lambda s: s.clip(lower=0).sum()) + eps)
-        ).rename('wiggliness').reset_index()
-
-        # 4) QC: number of steps used
-        nsteps = grp.size().rename('n_steps').reset_index()
-
-        # Merge the three metrics + n_steps
-        scores = (
-            directness_scores
-            .merge(consistency_scores, on=['interaction_id','phase'])
-            .merge(wiggle_scores,      on=['interaction_id','phase'])
-            .merge(nsteps,             on=['interaction_id','phase'])
+            # Sideways wiggle: how much movement occurred off-axis (lateral deviation)
+        df['sideways_wiggle'] = np.sqrt(
+            np.maximum(0.0, df['relative_step_length']**2 - df['forward_progress']**2)
         )
 
+        df['prev_forward_progress'] = df.groupby('interaction_id')['forward_progress'].shift(1)
+
+        # Radial acceleration (per frame units): change in forward_progress frame-to-frame
+        df['forward_accel'] = df['forward_progress'] - df['prev_forward_progress']
+ 
+
+                # Select per-frame columns to plot
+        out_cols = [
+            'interaction_id',
+            'Normalized Frame',
+            'forward_progress',          # <-- your per-frame score
+            'relative_step_length',      # optional QC
+            'distance_from_anchor',      # optional context
+            'sideways_wiggle',       # lateral deviation magnitude
+            'forward_accel',             # rate of change of that speed (acceleration)
+
+            cluster_name,
+            'condition'
+        ]
+        per_frame = df[out_cols].copy()
+
+        outdir = os.path.join(self.directory, "morphology_score")
+        os.makedirs(outdir, exist_ok=True)
+        outpath = os.path.join(outdir, "partner_morphology_trace.csv")
+        per_frame.to_csv(outpath, index=False)
+
+        # sns.lineplot(data=per_frame, x='Normalized Frame', y='forward_progress', hue=cluster_name)
+
+        # plt.show()
+        # plt.close()
+
+        # sns.lineplot(data=per_frame, x='Normalized Frame', y='sideways_wiggle', hue=cluster_name)
+        # plt.show()
+        # plt.close()
+
+
+        # sns.lineplot(data=per_frame, x='Normalized Frame', y='forward_accel', hue=cluster_name)
+        # plt.show()
+        # plt.close()
+
+        # --- AUCs (per interaction) ---
+        # Pre-AUC: total approach effort before 0
+        # Post-AUC: total retreat effort after 0 (likely negative)
+        # Net AUC: overall bias (pre + post)
+
+        grp = df.groupby('interaction_id', sort=False)
+
+        pre_auc = grp.apply(
+            lambda g: g.loc[g['Normalized Frame'] < 0, 'forward_progress'].sum()
+        ).rename('auc_pre')
+
+        post_auc = grp.apply(
+            lambda g: g.loc[g['Normalized Frame'] > 0, 'forward_progress'].sum()
+        ).rename('auc_post')
+
+        auc = (
+            pre_auc.reset_index()
+            .merge(post_auc.reset_index(), on='interaction_id', how='outer')
+        )
+        auc['auc_net'] = auc['auc_pre'].fillna(0) + auc['auc_post'].fillna(0)
+        auc['auc_net_magntiude'] = auc['auc_pre'].fillna(0) + (-auc['auc_post'].fillna(0))
+
+        # Attach labels (one row per interaction)
         lookup = (
-            df[['interaction_id', 'phase', cluster_name, 'condition']]
-            .drop_duplicates()
+            df[['interaction_id', self.cluster_name, 'condition']]
+            .drop_duplicates('interaction_id')
         )
+        auc = auc.merge(lookup, on='interaction_id', how='left')
 
-        scores = scores.merge(lookup, on=['interaction_id','phase'], how='left')
+        # Save alongside your other outputs
+        outdir = os.path.join(self.directory, "morphology_score")
+        os.makedirs(outdir, exist_ok=True)
+        auc_path = os.path.join(outdir, "partner_morphology_auc.csv")
+        auc.to_csv(auc_path, index=False)
 
-        output = os.path.join(self.directory, "morphology_score")
-        os.makedirs(output, exist_ok=True)
+        print(auc.head())
 
-        scores_path = os.path.join(output, "partner_morphology_scores.csv")
-        scores.to_csv(scores_path, index=False)
-        print(scores)
+        order = (auc.groupby(cluster_name)['auc_pre']
+           .mean()
+           .sort_values(ascending=False)
+           .index)
 
-        ######## PLOTTING INDIVIDUAL METRICS
+        sns.barplot(data=auc, x=cluster_name, y='auc_pre', order=order, estimator=np.mean, errorbar='se')
+        sns.stripplot(data=auc, x=cluster_name, y='auc_pre', order=order, color='k', alpha=0.4, jitter=0.2, size=3)
 
-        df = scores
-
-        ## DIRECTNESS
-
-        plt.figure(figsize=(8,6))
-
-        sns.barplot(data=df, x='Yhat.idt.pca', y='directness', hue='phase', hue_order=['pre','post'], errorbar="sd")
-
-        plt.ylabel('Directness of Trajectory')
-        plt.xlabel('Cluster')
-        # plt.ylim(0, 1)
-        plt.legend(title='Phase', frameon=False)
-        plt.tight_layout()
-
-        save_path = os.path.join(output, 'directness.png')
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
         plt.close()
 
-
-        ## CONSISTENCY
-
-        plt.figure(figsize=(8,6))
-
-        sns.barplot(data=df, x='Yhat.idt.pca', y='consistency', hue='phase', hue_order=['pre','post'], errorbar="sd")
-
-        plt.ylabel('Consistency of Trajectory')
-        plt.xlabel('Cluster')
-        # plt.ylim(0, 1)
-        plt.legend(title='Phase', frameon=False)
-        plt.tight_layout()
-
-        save_path = os.path.join(output, 'consistency.png')
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        sns.barplot(data=auc, x=cluster_name, y='auc_post', estimator=np.mean, errorbar='se')
+        plt.show()
         plt.close()
 
+        sns.barplot(data=auc, x=cluster_name, y='auc_net', estimator=np.mean, errorbar='se')
+        plt.show()
+        plt.close()
 
-        ## WIGGLINESS
-
-        plt.figure(figsize=(8,6))
-
-        sns.barplot(data=df, x='Yhat.idt.pca', y='wiggliness', hue='phase', hue_order=['pre','post'], errorbar="sd")
-
-        plt.ylabel('Wiggliness of Trajectory')
-        plt.xlabel('Cluster')
-        plt.ylim(0, None)
-        plt.legend(title='Phase', frameon=False)
-        plt.tight_layout()
-
-        save_path = os.path.join(output, 'wiggliness.png')
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        sns.barplot(data=auc, x=cluster_name, y='auc_net_magntiude', estimator=np.mean, errorbar='se')
+        plt.show()
         plt.close()
 
 
@@ -3247,19 +3386,10 @@ class ClusterPipeline:
 
 
 
+#### Forward progress measures how much the partner’s position changes along the line that connects it to the anchor — 
+# in other words, how much closer or farther the partner moves relative to the anchor in a single frame
 
 
-
-
-
-
-      
-
-
-
-
-
-        
 
 
 
@@ -3318,7 +3448,7 @@ if __name__ == "__main__":
     # pipeline.grid_videos()
     # pipeline.raw_trajectories()
     # pipeline.mean_trajectories()
-    pipeline.barplots() 
+    # pipeline.barplots() 
     # pipeline.speed()
     # pipeline.acceleration()
     # pipeline.heading_angle()
@@ -3333,7 +3463,7 @@ if __name__ == "__main__":
     # pipeline.mean_traces_gifs()
     # pipeline.spatial_cluster()
     # pipeline.cluster_over_time()
-    # pipeline.partner_morphology()
+    pipeline.partner_morphology()
 
 
 

@@ -20,7 +20,7 @@ def perform_analysis(directory):
         return
 
     print("Starting analysis...")
-    analysis = HoleAnalysis(directory)
+    analysis = HoleAnalysis()
 
     # analysis.post_processing()
     # analysis.quality_control()

@@ -70,8 +70,9 @@ for y in y_cols:
     ax_top.set_xlabel("")
     ax_top.tick_params(axis="x", labelbottom=False)
     ax_top.legend(title="Both best score", loc="upper right")
+    ax_top.set_title('')
 
-    # annotate a few tallest bars to avoid clutter (top 15)
+
     for p in ax_top.patches:
         h = p.get_height()
         if np.isfinite(h):
@@ -111,3 +112,4 @@ for y in y_cols:
     plt.close()
 
 print(f"Saved all plots to: {outdir}")
+
