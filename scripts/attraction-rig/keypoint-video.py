@@ -345,8 +345,8 @@ for track_id, color in track_colors.items():
 ######################################################################################################################################################## 
 #%% TRACKS WITH DESIGNATED PALETTE ON BLACK BACKGROUND
 
-df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/video-keypoint/original-videos/2025-03-25_09-11-04_td13.tracks.feather')
-output_path = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n10/video-keypoint/2025-03-25_09-11-04_td13.mp4'
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/2025-02-24_11-59-11_td14.tracks.feather')
+output_path = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/check.mp4'
 
 track_colors = {
     0: (249, 236, 48),   # Red
@@ -407,8 +407,9 @@ import numpy as np
 import cv2
 import random
 
-df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/sleap-keypoint-videos/2025-03-31_16-57-35_td12.tracks.feather')
-output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/sleap-keypoint-videos/2025-03-31_16-57-35_td12.tracks.mp4'
+df = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/2025-02-24_11-59-11_td14.tracks.feather')
+output = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/check.mp4'
+
 
 image_size = 1400
 

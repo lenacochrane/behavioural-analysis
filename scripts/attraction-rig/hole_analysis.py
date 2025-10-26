@@ -121,7 +121,6 @@ class HoleAnalysis:
 
             
 
-
     # METHOD POST_PROCESSING: 1) FILTERS TRACK'S AVERAGE INSTANCE SCORE < 0.9 
 
     def post_processing(self):
@@ -198,6 +197,18 @@ class HoleAnalysis:
         for file in video_files:
             video_path = os.path.join(self.directory, file)
             process_video(video_path)
+    
+    def merged_dataframes(self):
+        
+        dfs = []
+        for track_file in self.track_files:
+            df = self.track_data[track_file]
+            df['file'] = track_file
+            dfs.append(df)
+
+        df = pd.concat(dfs, ignore_index=True)
+        output = os.path.join(self.directory, 'merged.track.feather')
+        df.to_feather(output)
 
 
     # METHOD HOLE_BOUNDARY: CREATES A POLYGON AROUND THE HOLE BOUNDARY WITH SCALAR OPTION

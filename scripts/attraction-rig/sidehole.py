@@ -20,7 +20,10 @@ def perform_analysis(directory):
         return
 
     print("Starting analysis...")
-    analysis = HoleAnalysis()
+    # analysis = HoleAnalysis()
+    analysis = HoleAnalysis(directory)
+
+    analysis.merged_dataframes()
 
     # analysis.post_processing()
     # analysis.quality_control()
@@ -31,7 +34,7 @@ def perform_analysis(directory):
 
     ## REMOVE DIGGING FROM ANALYSIS 
 
-    analysis.digging_mask()
+    # analysis.digging_mask()
 
     ### PSEUDO POPULATION MODEL
 
@@ -53,7 +56,7 @@ def perform_analysis(directory):
 
     # analysis.nearest_neighbour()
     # analysis.interactions()
-    analysis.interaction_types()
+    # analysis.interaction_types()
     # analysis.interaction_type_bout()
     # analysis.interaction_bout_dynamics() 
     # analysis.contacts(proximity_threshold=5)
@@ -103,13 +106,12 @@ if __name__ == "__main__":
         run_gui()    
 
 
-
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')

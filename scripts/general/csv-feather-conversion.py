@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Users/cochral/Desktop/SLAEP/COMPLETE/2025-03-07_12-57-17_td6.tracks.000_2025-03-07_12-57-17_td6.analysis.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/cleaned-tracks/socially-isolated/n10/GROUP-HOUSED/2025-02-24_11-59-11_td14.csv')
 
 print(df['track'].unique())
 
