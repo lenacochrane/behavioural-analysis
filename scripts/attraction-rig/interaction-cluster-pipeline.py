@@ -1938,6 +1938,98 @@ class ClusterPipeline:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
 
+    
+
+        ## DISTANCE TRAVELLED OVER TIME
+
+        data = []
+
+        for cluster_id in sorted(df[cluster_name].unique()):
+            cluster_df = df[df[cluster_name] == cluster_id]
+
+            for inter_id in cluster_df["interaction_id"].unique():
+                inter_df = cluster_df[cluster_df["interaction_id"] == inter_id].sort_values("Normalized Frame").copy()
+
+                inter_df["partner_distance"] = np.hypot(
+                        inter_df["partner x_body"].diff(),
+                        inter_df["partner y_body"].diff()
+                    ).fillna(0)
+                
+                inter_df["anchor_distance"] = np.hypot(
+                        inter_df["anchor x_body"].diff(),
+                        inter_df["anchor y_body"].diff()
+                    ).fillna(0)
+                
+                cols = ['interaction_id', cluster_name, 'Normalized Frame', 'partner_distance', 'anchor_distance']
+
+                filtered = inter_df[cols]
+                data.append(filtered)
+
+        distance = pd.concat(data, ignore_index=True)
+        save_path = os.path.join(output, "partner_anchor_distance.png")
+        distance.to_csv(save_path, index=False)
+
+        distance_melted = distance.melt(
+                id_vars=["interaction_id", cluster_name, "Normalized Frame"],
+                value_vars=["partner_distance", "anchor_distance"],
+                var_name="role",
+                value_name="distance"
+            )
+
+
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+            sns.lineplot(
+                data=distance_melted,
+                x='Normalized Frame',
+                y='distance',
+                ci=95,
+                legend=False,
+                ax=ax,
+                color='lightpurple', hue='role'
+            )
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Distance Travelled')
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Distance Travelled', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(output, "partner_anchor_distance.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     #### METHOD CONTACT: DURATION AND TYPE OF CONTACT
@@ -3224,368 +3316,9 @@ class ClusterPipeline:
         plt.close()
     
 
-    # #### METHOD PARTNER_MORPHOLOGY:
-    # def relative_partner_metrics(self):
 
-    #     """ relative_step_length = how far the partner moved relative to the anchor
-    #         forward_progress = how much of that movement was toward the anchor
-    #         sideways_wiggle = how much of the partners movement went sideways, instead of toward or away from the anchor
-    #         forward_change = how much the forward_progress changed from the last frame
-    #         auc_pre = total forward_progress before frame 0
-    #         auc_post = total forward_progress after frame 0
-    #         auc_net = overall bias (before + after)
-    #         auc_net_magnitude = overall size of the behavior, ignoring direction
-    #     """
 
-    #     df = self.df.copy()
-    #     cluster_name = self.cluster_name
-    #     eps = 1e-9 # dont divide by 0 ltr on 
-
-    #     # relative partner to anchor xy coordinates 
-
-    #     df['relative_partner_x'] = df['partner x_body'] - df['anchor x_body']
-    #     df['relative_partner_y'] = df['partner y_body'] - df['anchor y_body']
-
-    #     # partner distance from anchor
-    #     df['distance_from_anchor'] = np.sqrt(df['relative_partner_x']**2 + df['relative_partner_y']**2)
-
-    #     df = df.sort_values(['interaction_id', 'Normalized Frame'])
-
-    #     # Previous-frame values
-    #     df['prev_relative_partner_x'] = df.groupby('interaction_id')['relative_partner_x'].shift(1)
-    #     df['prev_relative_partner_y'] = df.groupby('interaction_id')['relative_partner_y'].shift(1)
-    #     df['prev_distance_from_anchor'] = df.groupby('interaction_id')['distance_from_anchor'].shift(1)
-
-    #     # movement from the previous frame to the current frame
-    #     df['relative_step_x'] = df['relative_partner_x'] - df['prev_relative_partner_x']
-    #     df['relative_step_y'] = df['relative_partner_y'] - df['prev_relative_partner_y']
-    #     df['relative_step_length'] = np.sqrt(df['relative_step_x']**2 + df['relative_step_y']**2)
-
-    #     # Unit direction (anchor -> partner) at previous frame
-    #     df['prev_direction_x'] = df['prev_relative_partner_x'] / (df['prev_distance_from_anchor'] + eps)
-    #     df['prev_direction_y'] = df['prev_relative_partner_y'] / (df['prev_distance_from_anchor'] + eps)
-
-    #     # Signed progress toward anchor: positive = toward, negative = away
-    #     df['forward_progress'] = -(
-    #         df['relative_step_x'] * df['prev_direction_x'] +
-    #         df['relative_step_y'] * df['prev_direction_y'])
-
-    #     # Sideways wiggle: how much movement occurred off-axis (lateral deviation)
-    #     df['sideways_wiggle'] = np.sqrt(
-    #         np.maximum(0.0, df['relative_step_length']**2 - df['forward_progress']**2)
-    #     )
-
-    #     df['prev_forward_progress'] = df.groupby('interaction_id')['forward_progress'].shift(1)
-
-    #     # acceleration: change in forward_progress frame-to-frame
-    #     df['forward_change'] = df['forward_progress'] - df['prev_forward_progress']
- 
-
-    #     out_cols = [
-    #         'interaction_id',
-    #         'Normalized Frame',
-    #         'forward_progress',          # per-frame score
-    #         'relative_step_length',      
-    #         'distance_from_anchor',      
-    #         'sideways_wiggle',       # lateral deviation magnitude
-    #         'forward_change',         # rate of change of that speed (acceleration)
-    #         cluster_name,
-    #         'condition'
-    #     ]
-        
-    #     traj_progress = df[out_cols].copy()
-
-    #     outdir = os.path.join(self.directory, "relative_partner_metrics")
-    #     os.makedirs(outdir, exist_ok=True)
-    #     outpath = os.path.join(outdir, "partner_morphology.csv")
-    #     traj_progress.to_csv(outpath, index=False)
-
-    #     grp = df.groupby('interaction_id', sort=False)
-
-    #     pre_auc = grp.apply(
-    #         lambda g: g.loc[g['Normalized Frame'] < 0, 'forward_progress'].sum()).rename('auc_pre')
-
-    #     post_auc = grp.apply(
-    #         lambda g: g.loc[g['Normalized Frame'] > 0, 'forward_progress'].sum()).rename('auc_post')
-
-    #     auc = (
-    #         pre_auc.reset_index()
-    #         .merge(post_auc.reset_index(), on='interaction_id', how='outer'))
-        
-    #     auc['auc_net'] = auc['auc_pre'].fillna(0) + auc['auc_post'].fillna(0)
-    #     auc['auc_net_magnitiude'] = auc['auc_pre'].fillna(0) + (-auc['auc_post'].fillna(0))
-
-    #     # Attach labels (one row per interaction)
-    #     lookup = (
-    #         df[['interaction_id', self.cluster_name, 'condition']]
-    #         .drop_duplicates('interaction_id')
-    #     )
-    #     auc = auc.merge(lookup, on='interaction_id', how='left')
-
-    #     auc_path = os.path.join(outdir, "partner_morphology_auc.csv")
-    #     auc.to_csv(auc_path, index=False)
-
-    #     """ dfs: traj_progress and auc """ 
-
-    #     ### 1. forward_progress: how much of that movement was toward the anchor
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.lineplot(data=traj_progress, x='Normalized Frame', y='forward_progress', hue=cluster_name, legend='full', ci=95)
-    #     plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Progress', fontsize=12, fontweight='bold')
-    #     plt.title('Directed Movement Toward Anchor', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "forward_progress.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    #     clusters = sorted(traj_progress[cluster_name].dropna().unique())
-    #     cols = 4
-    #     rows = int(np.ceil(len(clusters) / cols))
-    #     fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
-    #     axes = axes.flatten()
-
-    #     for i, cluster in enumerate(clusters): # index n label
-    #         ax = axes[i]  
-    #         d = traj_progress[traj_progress[cluster_name] ==cluster]
-
-    #         sns.lineplot(
-    #             data=d,
-    #             x='Normalized Frame',
-    #             y='forward_progress',
-    #             ci=95,
-    #             legend=False,
-    #             ax=ax,
-    #             color='purple'
-    #         )
-
-    #         ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
-    #         ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
-    #         ax.grid(alpha=0.2)
-    #         ax.set_xlabel('Normalized Time')
-    #         ax.set_ylabel('Forward Progress')
-
-    #     # hide any unused subplots
-    #     for j in range(i + 1, rows * cols):
-    #         fig.delaxes(axes[j])
-
-    #     # common labels + overall title
-    #     fig.suptitle('Directed Movement Toward Anchor by Cluster', fontsize=16, fontweight='bold')
-    #     fig.supxlabel('')
-    #     fig.supylabel('')
-
-    #     plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
-    #     plt.savefig(os.path.join(outdir, "forward_progress_by_cluster.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-    #     ### 2. forward_change: how much the forward_progress changed from the last frame
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.lineplot(data=traj_progress, x='Normalized Frame', y='forward_change', hue=cluster_name, legend='full', ci=95)
-    #     plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Progress', fontsize=12, fontweight='bold')
-    #     plt.title('Directed Movement Toward Anchor', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "forward_change.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    #     clusters = sorted(traj_progress[cluster_name].dropna().unique())
-    #     cols = 4
-    #     rows = int(np.ceil(len(clusters) / cols))
-    #     fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
-    #     axes = axes.flatten()
-
-    #     for i, cluster in enumerate(clusters): # index n label
-    #         ax = axes[i]  
-    #         d = traj_progress[traj_progress[cluster_name] ==cluster]
-
-    #         sns.lineplot(
-    #             data=d,
-    #             x='Normalized Frame',
-    #             y='forward_change',
-    #             ci=95,
-    #             legend=False,
-    #             ax=ax,
-    #             color='pink'
-    #         )
-
-    #         ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
-    #         ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
-    #         ax.grid(alpha=0.2)
-    #         ax.set_xlabel('Normalized Time')
-    #         ax.set_ylabel('Forward Progress Change')
-
-    #     # hide any unused subplots
-    #     for j in range(i + 1, rows * cols):
-    #         fig.delaxes(axes[j])
-
-    #     # common labels + overall title
-    #     fig.suptitle('Change in Directed Movement Toward Anchor by Cluster', fontsize=16, fontweight='bold')
-    #     fig.supxlabel('')
-    #     fig.supylabel('')
-
-    #     plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
-    #     plt.savefig(os.path.join(outdir, "forward_change_by_cluster.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    #     ### 3. relative_step_length = how far the partner moved relative to the anchor 
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.lineplot(data=traj_progress, x='Normalized Frame', y='relative_step_length', hue=cluster_name, legend='full', ci=95)
-    #     plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Movement', fontsize=12, fontweight='bold')
-    #     plt.title('Relative Movement relative to Anchor', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "relative_step_length.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    #     clusters = sorted(traj_progress[cluster_name].dropna().unique())
-    #     cols = 4
-    #     rows = int(np.ceil(len(clusters) / cols))
-    #     fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
-    #     axes = axes.flatten()
-
-    #     for i, cluster in enumerate(clusters): # index n label
-    #         ax = axes[i]  
-    #         d = traj_progress[traj_progress[cluster_name] ==cluster]
-
-    #         sns.lineplot(
-    #             data=d,
-    #             x='Normalized Frame',
-    #             y='relative_step_length',
-    #             ci=95,
-    #             legend=False,
-    #             ax=ax,
-    #             color='blue'
-    #         )
-
-    #         ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
-    #         ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
-    #         ax.grid(alpha=0.2)
-    #         ax.set_xlabel('Normalized Time')
-    #         ax.set_ylabel('Movement')
-
-    #     # hide any unused subplots
-    #     for j in range(i + 1, rows * cols):
-    #         fig.delaxes(axes[j])
-
-    #     # common labels + overall title
-    #     fig.suptitle('Movement Relative to Anchor by Cluster', fontsize=16, fontweight='bold')
-    #     fig.supxlabel('')
-    #     fig.supylabel('')
-
-    #     plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
-    #     plt.savefig(os.path.join(outdir, "relative_movement_cluster.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    # ### 4. sideways_wiggle = how much of the partners movement went sideways, instead of toward or away from the anchor
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.lineplot(data=traj_progress, x='Normalized Frame', y='sideways_wiggle', hue=cluster_name, legend='full', ci=95)
-    #     plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Wiggle', fontsize=12, fontweight='bold')
-    #     plt.title('Wiggliness', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "sideways_wiggle.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-
-    #     clusters = sorted(traj_progress[cluster_name].dropna().unique())
-    #     cols = 4
-    #     rows = int(np.ceil(len(clusters) / cols))
-    #     fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
-    #     axes = axes.flatten()
-
-    #     for i, cluster in enumerate(clusters): # index n label
-    #         ax = axes[i]  
-    #         d = traj_progress[traj_progress[cluster_name] ==cluster]
-
-    #         sns.lineplot(
-    #             data=d,
-    #             x='Normalized Frame',
-    #             y='sideways_wiggle',
-    #             ci=95,
-    #             legend=False,
-    #             ax=ax,
-    #             color='green'
-    #         )
-
-    #         ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
-    #         ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
-    #         ax.grid(alpha=0.2)
-    #         ax.set_xlabel('Normalized Time')
-    #         ax.set_ylabel('Sideways Wiggle')
-
-    #     # hide any unused subplots
-    #     for j in range(i + 1, rows * cols):
-    #         fig.delaxes(axes[j])
-
-    #     # common labels + overall title
-    #     fig.suptitle('Wiggliness Toward Anchor by Cluster', fontsize=16, fontweight='bold')
-    #     fig.supxlabel('')
-    #     fig.supylabel('')
-
-    #     plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
-    #     plt.savefig(os.path.join(outdir, "wiggliness_by_cluster.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-        
-    
-    #     ### 5. auc_pre = otal forward_progress before frame 0
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.barplot(data=auc, x=cluster_name, y='auc_pre', ci=95, color='#AFE1AF', alpha=0.8, edgecolor='black', linewidth=1.2 )
-    #     plt.xlabel('', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Total Movement Toward Partner', fontsize=12, fontweight='bold')
-    #     plt.title('Total Movement Toward Partner', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "auc_pre.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-    #     ### 6. auc_post = total forward_progress after frame 0
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.barplot(data=auc, x=cluster_name, y='auc_post', ci=95, color='#AFE1AF', alpha=0.8, edgecolor='black', linewidth=1.2 )
-    #     plt.xlabel('', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Total Movement from Partner', fontsize=12, fontweight='bold')
-    #     plt.title('Total Movement from Partner', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "auc_post.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-    #     ### 7. auc_net = overall bias (before + after)
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.barplot(data=auc, x=cluster_name, y='auc_net', ci=95, color='#AFE1AF', alpha=0.8, edgecolor='black', linewidth=1.2 )
-    #     plt.xlabel('', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Net Movement', fontsize=12, fontweight='bold')
-    #     plt.title('Net Movement', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "auc_net.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
-    #      ### 8. auc_net_magnitude = overall size of the behavior, ignoring direction
-
-    #     plt.figure(figsize=(8,8))
-    #     sns.barplot(data=auc, x=cluster_name, y='auc_net_magnitiude', ci=95, color='#AFE1AF', alpha=0.8, edgecolor='black', linewidth=1.2 )
-    #     plt.xlabel('', fontsize=12, fontweight='bold')
-    #     plt.ylabel('Total Movement', fontsize=12, fontweight='bold')
-    #     plt.title('Total Movement', fontsize=16, fontweight='bold')
-    
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(outdir, "auc_net_magnitiude.png"), dpi=300, bbox_inches="tight")
-    #     plt.close()
-
+    #### METHOD RELATIVE_PARTNER_METRICS: COMPARES THE PROJECTED VECTOR BETWEEN THE PREVIOUS PARTNER AND THE ANCHOR AND THE PREVIOUS PARTNER TO THE CURRENT PARTNER
     def relative_partner_metrics(self):
 
         """https://en.wikipedia.org/wiki/Vector_projection#Scalar_projection_2"""
@@ -3651,6 +3384,7 @@ class ClusterPipeline:
         outpath = os.path.join(outdir, "projected_versus_actual_partner.csv")
         data.to_csv(outpath, index=False)
 
+        ### PLOTTING
         plt.figure(figsize=(8,8))
         sns.lineplot(data=data, x='Normalized Frame', y='deviation_angle', hue=cluster_name, legend='full', ci=95)
         plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
@@ -3661,7 +3395,48 @@ class ClusterPipeline:
         plt.savefig(os.path.join(outdir, "deviated_angle.png"), dpi=300, bbox_inches="tight")
         plt.close()
 
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='deviation_angle',
+                ci=95,
+                legend=False,
+                ax=ax,
+                color='lightpurple'
+            )
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Angle Deviation')
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Angle Deviation from Expected Trajectory', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "deviated_angle_subplot.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
         
+
         plt.figure(figsize=(8,8))
         sns.lineplot(data=data, x='Normalized Frame', y='sideways_movement', hue=cluster_name, legend='full', ci=95)
         plt.xlabel('Normalised Time', fontsize=12, fontweight='bold')
@@ -3671,6 +3446,8 @@ class ClusterPipeline:
         plt.tight_layout()
         plt.savefig(os.path.join(outdir, "sideways_movement.png"), dpi=300, bbox_inches="tight")
         plt.close()
+
+
 
         plt.figure(figsize=(8,8))
         sns.lineplot(data=data, x='Normalized Frame', y='forward_movement', hue=cluster_name, legend='full', ci=95)
@@ -3685,17 +3462,6 @@ class ClusterPipeline:
 
 
 
-
-
-
-
-
-
-
-
-
-
-    
 
     def proximal_conspecifs(self):
 
@@ -3940,7 +3706,7 @@ if __name__ == "__main__":
     # pipeline.approach_angle()
     # pipeline.body_distance()
     # pipeline.min_distance()
-    # pipeline.distance()
+    pipeline.distance()
     # pipeline.contact()
     # pipeline.summary_quantifications()
     # pipeline.summary_anchor_partner()
