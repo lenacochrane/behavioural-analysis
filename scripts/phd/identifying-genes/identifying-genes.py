@@ -51,7 +51,7 @@ def count_papers_by_context(gene, contexts):
 # ------------------------------------------------------------------------------
 # PUBMED_COUNT: total number of papers mentioning the gene in a given context 
 # ------------------------------------------------------------------------------
-def pubmed_count(df, sleep_s=0.35,  include_aliases=True):
+def pubmed_count(df, sleep_s=0.5,  include_aliases=True):
     """
     Compute PubMed counts per gene and context.
 
@@ -88,9 +88,19 @@ def pubmed_count(df, sleep_s=0.35,  include_aliases=True):
         # ("term1"[TIAB] OR "term2"[TIAB] ...)
         return "(" + " OR ".join(f"\"{t}\"[Title/Abstract]" for t in terms) + ")"
 
-    data = []
+    # data = []
 
-    for row in df.itertuples(index=False):
+    df["aliases_used"] = None
+    df["total"] = None
+    df['disease model'] = None
+    df["mouse"] = None
+    df['cell line'] = None
+    df['drosophila'] = None
+    df["human"] = None
+    df["specific_disease"] = None
+
+    # for row in df.itertuples(index=False):
+    for i, row in enumerate(df.itertuples(index=False)):
         
         # include_aliases: use all aliases or gene name 
         if include_aliases:
@@ -159,24 +169,34 @@ def pubmed_count(df, sleep_s=0.35,  include_aliases=True):
         else:
             disease_hits = 0
 
-        context_counts["specific_disease"] = disease_hits
+        # context_counts["specific_disease"] = disease_hits
+        # time.sleep(sleep_s)
+
+        # data.append({
+        #     "gene": row.gene,
+        #     "aliases_used": search,
+        #     "total": total,
+        #     **context_counts,
+        # })
+
+            # --- write results directly into dataframe ---
+        df.at[i, "aliases_used"] = search
+        df.at[i, "total"] = total
+        df.at[i, "disease model"] = context_counts.get("disease model")
+        df.at[i, "mouse"] = context_counts.get("mouse")
+        df.at[i, "human"] = context_counts.get("human")
+        df.at[i, "cell line"] = context_counts.get("cell line")
+        df.at[i, "drosophila"] = context_counts.get("drosophila")
+        df.at[i, "specific_disease"] = disease_hits
+
         time.sleep(sleep_s)
 
-        data.append({
-            "gene": row.gene,
-            "aliases_used": search,
-            "total": total,
-            **context_counts,
-        })
-
-        time.sleep(sleep_s)
-
-    pubmed_df = pd.DataFrame(
-        data,
-        columns=["gene", "aliases_used", "total", 'disease model', "mouse", "human", "cell line", "drosophila", 'specific_disease']
-    )
-    # df = df.merge(pubmed_df, on="gene", how="left", validate="one_to_one")
-    df = df.merge(pubmed_df, on="gene", how="left")
+    # pubmed_df = pd.DataFrame(
+    #     data,
+    #     columns=["gene", "aliases_used", "total", 'disease model', "mouse", "human", "cell line", "drosophila", 'specific_disease']
+    # )
+    # # df = df.merge(pubmed_df, on="gene", how="left", validate="one_to_one")
+    # df = df.merge(pubmed_df, on="gene", how="left")
     return df
 
 
@@ -627,7 +647,7 @@ def disease_association(df):
         "Accept": "application/json"
     })
 
-    def gene_summary(symbol):
+    def gene_summary(symbol, disease):
         """
         Query DisGeNET for high-level gene–disease associations for one gene.
         Returns a list of disease names with score ≥ 0.8.
@@ -661,15 +681,16 @@ def disease_association(df):
         ]
         target_diseases_lower = [d.lower() for d in target_diseases]
 
-
         filtered = []
         for disease in diseases:
             if disease.lower() in target_diseases_lower:
                 filtered.append(disease)
         return filtered
     
-    genes = df["gene"].astype(str).str.upper()
 
+
+
+    genes = df["gene"].astype(str).str.upper()
     results = []
     for gene in genes:
         results.append(gene_summary(gene))
@@ -678,6 +699,7 @@ def disease_association(df):
     df["disgenet_associations"] = results
 
     return df
+
 
 # ------------------------------------------------------------------------------
 # DISEASE_ASSOCIATION_DF: identifies gene x disease assocations 
