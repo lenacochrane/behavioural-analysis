@@ -148,17 +148,19 @@ def pubmed_count(df, sleep_s=0.5,  include_aliases=True):
             
 
         diseases = []
-        # add from disgenet_associations
+
         if row.disgenet_associations:
-            for d in row.disgenet_associations:
-                diseases.append(d)
+            if isinstance(row.disgenet_associations, list) and len(row.disgenet_associations) == 1 and isinstance(row.disgenet_associations[0], list):
+                diseases.extend(row.disgenet_associations[0])
+            else:
+                diseases.extend(row.disgenet_associations)
 
         # add from Disease_disgenet_matched
         if row.Disease_disgenet_matched:
-            for d in row.Disease_disgenet_matched:
-                diseases.append(d)
+            diseases.extend(row.Disease_disgenet_matched)
 
         print(diseases)
+
 
         if diseases:
             disease_queries = [
@@ -647,7 +649,7 @@ def disease_association(df):
         "Accept": "application/json"
     })
 
-    def gene_summary(symbol, disease):
+    def gene_summary(symbol, original_disease):
         """
         Query DisGeNET for high-level gene–disease associations for one gene.
         Returns a list of disease names with score ≥ 0.8.
@@ -685,20 +687,45 @@ def disease_association(df):
         for disease in diseases:
             if disease.lower() in target_diseases_lower:
                 filtered.append(disease)
-        return filtered
+
+        score = None
+        for record in payload:
+            name = record.get("diseaseName", "")
+            # if name.lower() == original_disease.lower():
+            if original_disease.lower() in name.lower() or name.lower() in original_disease.lower():
+                score = record.get("score", None)
+                break
+
+        return filtered, score
     
 
+    df = df.reset_index(drop=True)
+    df["disgenet_associations"] = None
+    df["gda_score"] = None
 
+    for i, row in enumerate(df.itertuples(index=False)):
 
-    genes = df["gene"].astype(str).str.upper()
-    results = []
-    for gene in genes:
-        results.append(gene_summary(gene))
-        time.sleep(0.75)  # wait half a second between each request
+        gene = str(row.gene).upper()
+        original_disease = row.Disease_disgenet_matched[0]
 
-    df["disgenet_associations"] = results
+        disease_associations, score = gene_summary(gene,original_disease)
+        disease_associations = list(disease_associations)
 
+        df.at[i, "disgenet_associations"] = [disease_associations]          # list of >=0.7 matches in your target set
+        df.at[i, "gda_score"] = score 
+
+        time.sleep(0.75)
+    
     return df
+
+
+    #genes = df["gene"].astype(str).str.upper()
+    # results = []
+    # for gene in genes:
+    #     results.append(gene_summary(gene))
+    #     time.sleep(0.75)  # wait half a second between each request
+
+    # df["disgenet_associations"] = results
 
 
 # ------------------------------------------------------------------------------
