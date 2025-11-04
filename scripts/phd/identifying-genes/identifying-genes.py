@@ -585,116 +585,178 @@ def add_aliases(df, max_terms=10):
 
 
 
+
 def disease_association(df):
-    import requests
-    import time
 
-    def get_diseases(ensembl_id):
-        """Query OpenTargets for disease associations by Ensembl ID."""
-        if not isinstance(ensembl_id, str) or not ensembl_id.startswith("ENSG"):
-            return None
+    DISGENET_TOKEN = "1a851ae4-eae3-4209-a5f1-bdb1f4582256" # personal token
 
-        url = "https://api.platform.opentargets.org/api/v4/graphql"
-        query = """
-        query diseaseAssoc($ensembl: String!) {
-          target(ensemblId: $ensembl) {
-            associatedDiseases {
-              rows {
-                disease {
-                  name
-                }
-              }
-            }
-          }
-        }
-        """
-        try:
-            response = requests.post(url, json={"query": query, "variables": {"ensembl": ensembl_id}})
-            if response.status_code != 200:
-                return None
-            
-            data = response.json()
-            target = data.get("data", {}).get("target")
-            if not target or not target.get("associatedDiseases"):
-                return None
-
-            rows = target["associatedDiseases"].get("rows", [])
-            # only keep strong associations (score >= 0.5)
-            strong = [
-                r["disease"]["name"]
-                for r in rows
-                if r.get("disease") and r.get("association_score", 0) >= 0.5
-            ]
-
-            return sorted(set(strong)) if strong else None
-
-        except Exception as e:
-            print(f"Error fetching {ensembl_id}: {e}")
-            return None
-
-    disease_results = []
-    for ensembl in df["ensembl_id"]:
-        diseases = get_diseases(ensembl)
-        disease_results.append(diseases)
-        time.sleep(0.3)  # pause 0.3 seconds between queries
-
-    df["disease_association"] = disease_results
-
-    return df
+    # Create a persistent session (reuses the same connection = faster for many genes)
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {DISGENET_TOKEN}",
+        "Accept": "application/json"
+    })
 
 
 
-# def disease_association(df):
-#     import requests
-#     import time
+    # url = "https://api.disgenet.com/api/v1/gda/summary?gene_symbol=SHANK3"
+    # response = session.get(url)
 
-#     # ⬇️ You’ll need to paste your DisGeNET API token here
-#     DISGENET_TOKEN = "YOUR_DISGENET_API_KEY"
+    # print("Status code:", response.status_code)
+    # print("Response headers:", response.headers.get("content-type"))
+    # print("Response preview:", response.text[:500])
 
-#     def get_diseases(ensembl_id):
-#         """Query DisGeNET for curated gene-disease associations."""
-#         if not isinstance(ensembl_id, str) or not ensembl_id.startswith("ENSG"):
-#             return None
+    # def get_gene_diseases(gene_symbol):
+    #     url = f"https://api.disgenet.com/api/v1/gda/gene/{gene_symbol}?source=CURATED"
+    #     response = session.get(url)
 
-#         url = f"https://www.disgenet.org/api/gda/gene/{ensembl_id}"
-#         headers = {"Authorization": f"Bearer {DISGENET_TOKEN}"}
+    #     print("Status code:", response.status_code)
+    #     print("Content type:", response.headers.get("content-type"))
 
-#         try:
-#             response = requests.get(url, headers=headers)
-#             if response.status_code != 200:
-#                 print(f"Error fetching {ensembl_id}: {response.status_code}")
-#                 return None
+    #     data = response.json().get("data", [])
+    #     if not data:
+    #         print(f"No curated data found for {gene_symbol}")
+    #         return None
 
-#             data = response.json()
-#             # Each entry typically includes: disease_name, score, disease_type, etc.
-#             diseases = [
-#                 d["disease_name"]
-#                 for d in data
-#                 if d.get("score", 0) >= 0.3  # optional threshold for stronger associations
-#             ]
+    #     for entry in data[:5]:
+    #         print({
+    #             "gene_symbol": entry.get("gene_symbol"),
+    #             "disease_name": entry.get("disease_name"),
+    #             "score": entry.get("score"),
+    #             "source": entry.get("source")
+    #         })
 
-#             return sorted(set(diseases)) if diseases else None
+    #     return data
 
-#         except Exception as e:
-#             print(f"Error fetching {ensembl_id}: {e}")
-#             return None
+    # get_gene_diseases("SHANK3")
 
-#     # same loop as before
-#     disease_results = []
-#     for ensembl in df["ensembl_id"]:
-#         diseases = get_diseases(ensembl)
-#         disease_results.append(diseases)
-#         time.sleep(0.3)  # polite delay between requests
+    # def get_gene_diseases(gene_symbol):
+    #     """
+    #     Diagnostic version: prints every step to identify where the failure happens.
+    #     """
+    #     # STEP 1: confirm which gene we’re querying
+    #     print(f"\n[DEBUG] Starting query for gene: {gene_symbol}")
 
-#     df["disease_association"] = disease_results
-#     return df
+    #     # STEP 2: build URL explicitly
+    #     url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
+    #     print(f"[DEBUG] Full request URL: {url}")
 
-## DisGeNET look into their scoring sysrem 
+    #     # STEP 3: print headers being sent
+    #     print("[DEBUG] Session headers:")
+    #     for k, v in session.headers.items():
+    #         print(f"    {k}: {v}")
+
+    #     # STEP 4: send the request
+    #     print("[DEBUG] Sending request...")
+    #     response = session.get(url)
+    #     print(f"[DEBUG] Response received. Status code: {response.status_code}")
+
+    #     # STEP 5: show what kind of content came back
+    #     print(f"[DEBUG] Response content type: {response.headers.get('content-type')}")
+    #     print(f"[DEBUG] Raw text preview (first 300 chars): {response.text[:300]}")
+
+    #     # STEP 6: parse JSON safely
+    #     try:
+    #         json_data = response.json()
+    #         print("[DEBUG] JSON parsed successfully.")
+    #     except Exception as e:
+    #         print(f"[ERROR] JSON parsing failed: {e}")
+    #         print("[DEBUG] Raw text snippet:", response.text[:500])
+    #         return None
+
+    #     # STEP 7: inspect the JSON structure
+    #     if isinstance(json_data, dict):
+    #         print(f"[DEBUG] JSON top-level keys: {list(json_data.keys())}")
+    #         data = json_data.get("data", [])
+    #         print(f"[DEBUG] Type of 'data' field: {type(data)}; Length: {len(data)}")
+    #     else:
+    #         print("[DEBUG] JSON is not a dict — unexpected structure.")
+    #         return None
+
+    #     # STEP 8: print first few records if they exist
+    #     if not data:
+    #         print(f"[INFO] No results returned for {gene_symbol}")
+    #         return None
+
+    #     print("[DEBUG] First few entries:")
+    #     for entry in data[:5]:
+    #         print({
+    #             "gene_symbol": entry.get("gene_symbol"),
+    #             "disease_name": entry.get("disease_name"),
+    #             "score": entry.get("score"),
+    #             "source": entry.get("source")
+    #         })
+
+    #     return data
+
+
+    # # 🔍 TEST IT
+    # get_gene_diseases("SHANK3")
+
+
+    # def get_gene_diseases(gene_symbol):
+    #     url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
+    #     response = session.get(url)
+
+    #     print("Status code:", response.status_code)
+    #     print("Content type:", response.headers.get("content-type"))
+
+    #     json_data = response.json()
+    #     print("Top-level keys:", list(json_data.keys()))
+
+    #     # ✅ Corrected here: use 'payload'
+    #     data = json_data.get("payload", [])
+    #     print("Number of records in payload:", len(data))
+
+    #     if not data:
+    #         print(f"No data found for {gene_symbol}")
+    #         return None
+
+    #     for entry in data[:5]:
+    #         print({
+    #             "gene_symbol": entry.get("gene_symbol"),
+    #             "disease_name": entry.get("disease_name"),
+    #             "score": entry.get("score"),
+    #             "source": entry.get("source")
+    #         })
+
+    #     return data
+
+    # get_gene_diseases("SHANK3")
+
+
+    def get_gene_diseases(gene_symbol):
+        url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
+        response = session.get(url)
+        json_data = response.json()
+
+        data = json_data.get("payload", [])
+        print(f"Total records: {len(data)}")
+
+        # Print one raw record to inspect structure
+        if data:
+            import json
+            print("[DEBUG] Example record structure:")
+            print(json.dumps(data[0], indent=2))
+        else:
+            print("No data found.")
+
+    get_gene_diseases("SHANK3")
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+    
 
 
 
@@ -727,11 +789,6 @@ def check_two_aliases(a1, a2):
 
 
 
-
-
-
-
-
 ## genes
 genes = [
     "SETD1A", "GRIN2A", "GRIA3", "CACNA1G", "SP4", "RB1CC1", "TRIO", "XPO7", "CUL1", "HERC1",
@@ -754,18 +811,25 @@ genes = [
     "NSD1", "CREBBP", "MECP2", "FMR1", "SETD5", "PPP2R5D"]
 
 
-# df = orthologue(genes)
+## test
+genes = [
+    "SETD1A", "CHD8", "SHANK3",]
+
+
+df = orthologue(genes)
+df = disease_association(df)
 # df = goterm(df)
 # df = add_aliases(df) # might be worth here checking if aliases make sense 
 # df = pubmed_count(df, include_aliases=True)
-# df = disease_association(df)
 
-df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
-df2= pd.read_csv('/Users/cochral/Desktop/merged_gene_automated_alias_2.csv')
-df = merge(df1,df2)
+
+
+# df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
+# df2= pd.read_csv('/Users/cochral/Desktop/merged_gene_automated_alias_2.csv')
+# df = merge(df1,df2)
 
 directory = '/Users/cochral/Desktop'
-output = os.path.join(directory, 'merged_gene_automated_alias.csv')
+output = os.path.join(directory, 'disease_testing.csv')
 df.to_csv(output, index=False)
 
 

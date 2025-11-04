@@ -19,6 +19,11 @@ import matplotlib as mpl
 from scipy.stats import binomtest
 from statsmodels.stats.multitest import multipletests
 import ast
+import matplotlib.gridspec as gridspec
+from matplotlib.colors import Normalize
+from matplotlib.lines import Line2D
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.image as mpimg
 
 
 #### FUNCTION CREATE_CROPPED_INTERACTIONS: ORIGINAL GROUP AND ISO INTERACTIONS MERGED AND INTERACTIONS CROPPED 30 FRAMES
@@ -629,7 +634,7 @@ class ClusterPipeline:
             # figure grid size
             n = int(np.ceil(np.sqrt(len(sample_ids))))
             fig, axes = plt.subplots(n, n, figsize=(n * 2, n * 2), 
-                                    sharex=False, sharey=False, constrained_layout=True,   )
+                                    sharex=False, sharey=False, constrained_layout=True)
             axes = axes.flatten()
 
             for ax, interaction_id in zip(axes, sample_ids):
@@ -1096,6 +1101,398 @@ class ClusterPipeline:
 
 
 
+    def barplot_deviation(self):
+
+        df = self.clusters
+        df_interaction = self.df
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "barplot_deviation")
+        os.makedirs(output, exist_ok=True)
+
+        mpl.rcParams['pdf.fonttype'] = 42
+        mpl.rcParams['ps.fonttype']  = 42
+
+        ### OBSERVED - EXPECTED DEVIATION 
+
+        cluster_counts = (df.groupby([cluster_name, 'condition']).size().unstack(fill_value=0).reindex(columns=['group', 'iso'], fill_value=0))  # count number per cluster per condition
+
+        total_group = cluster_counts['group'].sum()
+        total_iso   = cluster_counts['iso'].sum()
+        total_all   = total_group + total_iso
+
+        expected_group = total_group / total_all   # e.g., ~0.56
+
+        observed_group_frac = cluster_counts['group'] / (cluster_counts['group'] + cluster_counts['iso']).replace({0: np.nan}) ## observed fraction
+        observed_group_frac = observed_group_frac.fillna(0.0)
+
+        deviation = observed_group_frac - expected_group ## expected fraction
+
+        deviation_sorted = deviation.sort_values()
+        colors = ['C1' if val < 0 else 'C0' for val in deviation_sorted.values]
+
+        ## Binomial test per cluster
+        results = []
+        for cluster_id, row in cluster_counts.iterrows():
+            k = row['group']
+            n = row['group'] + row['iso']
+            if n > 0:
+                p_exp = expected_group
+                res = binomtest(k, n, p_exp, alternative='two-sided')
+                results.append((cluster_id, res.pvalue))
+            else:
+                results.append((cluster_id, np.nan))
+
+        pvals = pd.DataFrame(results, columns=['cluster_id', 'p_value'])
+
+        ## correct for multple test - false positives
+        pvals['p_adj'] = multipletests(pvals['p_value'], method='fdr_bh')[1]
+        path = os.path.join(output, 'deviation_pvals.csv')
+        pvals.to_csv(path, index=False, float_format='%.10f')
+
+
+         ### CONTACT FRAME SUMMARY
+
+        interaction_contact_summary = []
+
+        for cluster_id in sorted(df_interaction[cluster_name].unique()):
+            cluster_df = df_interaction[df_interaction[cluster_name] == cluster_id]
+            for inter_id in cluster_df["interaction_id"].unique():
+                inter_df = cluster_df[cluster_df["interaction_id"] == inter_id]
+                n_close = (inter_df["min_distance"] < 1).sum()
+                interaction_contact_summary.append({
+                    "cluster": cluster_id,
+                    "interaction_id": inter_id,
+                    "frames_below_1mm": n_close
+                })
+
+        # Convert to DataFrame
+        df_interaction_contact = pd.DataFrame(interaction_contact_summary)
+
+
+
+        ## === TOP: DEVIATION BARPLOT WITH SIGNIFICANCE STARS ==
+        fig = plt.figure(figsize=(10, 8))
+        gs = gridspec.GridSpec(2, 1, height_ratios=[6, 0.3], hspace=0.05)
+
+        ax1 = fig.add_subplot(gs[0])  # top: bar chart
+        ax2 = fig.add_subplot(gs[1])  # middle: heatmap box
+
+        x_labels = deviation_sorted.index.astype(str)
+        x_pos = np.arange(len(x_labels))
+
+        # Plot with Matplotlib's bar (since sns.barplot expects a DataFrame)
+        ax1.bar(
+            deviation_sorted.index.astype(str),
+            deviation_sorted.values,
+            color=colors,            # keep your C0/C1 mapping
+            alpha=0.7,              # <— makes the fill lighter
+            edgecolor='black',       # <— black border
+            linewidth=1.5            # <— thicker border
+        )
+
+        # Add reference line
+        ax1.axhline(0, color='k', linestyle='--', linewidth=1)
+
+        # --- Annotate significance stars ---
+
+        # Map adjusted p-values to cluster ids
+        p_map = pvals.set_index('cluster_id')['p_adj']
+
+        def stars(p):
+            if p < 0.001: return '***'
+            if p < 0.01:  return '**'
+            if p < 0.05:  return '*'
+            return ''
+
+        # Vertical offset for labels
+        ymin, ymax = ax1.get_ylim()
+        dy = 0.015 * (ymax - ymin)
+
+        # Annotate bars
+        for i, cid in enumerate(deviation_sorted.index):
+            p = p_map.get(cid, np.nan)
+            if pd.notna(p):
+                s = stars(p)
+                if s:
+                    y = deviation_sorted.loc[cid]
+                    ax1.text(
+                        i,
+                        y + (dy if y >= 0 else -dy),
+                        s,
+                        ha='center',
+                        va='bottom' if y >= 0 else 'top',
+                        fontsize=10,
+                        fontweight='bold',
+                        color='black')
+        
+        ax1.set_title("Cluster Deviation from Expected", fontsize=16, fontweight='bold', pad=15)
+        ax1.set_ylabel("Deviation from Expected")
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels('')
+        
+
+        # === BOTTOM: 1×N heatmap strip of avg contact frames per cluster ===
+        # 1) mean frames below 1mm per cluster
+        mean_frames = (
+            df_interaction_contact
+            .groupby('cluster')['frames_below_1mm']
+            .mean()
+        )
+
+        # 2) ensure index types match the deviation index (important for reindex)
+        mean_frames.index = mean_frames.index.astype(deviation_sorted.index.dtype)
+
+        # 3) align to the same x-order as the bar plot
+        avg_contact_aligned = mean_frames.reindex(deviation_sorted.index, fill_value=0)
+
+        # 4) reshape to 1×N for imshow
+        heat = avg_contact_aligned.to_numpy()[np.newaxis, :]
+
+        ax2.set_xlim(ax1.get_xlim())
+
+        # define your color stops (dark → sea → cadet)
+        colors = ["skyblue", "mediumseagreen", "darkgreen"]
+        from matplotlib.colors import LinearSegmentedColormap
+        # build a sequential colormap from those
+        my_cmap = LinearSegmentedColormap.from_list("greenblue_custom", colors)
+
+        # 5) draw the heat “box” (single row)
+        im = ax2.imshow(
+            heat,
+            aspect='auto',
+            interpolation='nearest',
+            vmin=0,  # anchor scale at 0
+            cmap=my_cmap,
+            # cmap='PuBuGn' 
+        )
+        ax2.set_yticks([0])
+        ax2.set_yticklabels(['Average Contact\nFrames'])
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(x_labels, fontweight='bold', fontsize=14)
+        ax2.tick_params(axis='x', pad=15)
+
+        # optional: make the heat row compact and boxy
+        for spine in ax2.spines.values():
+            spine.set_visible(False)
+        
+        # === add colorbar OUTSIDE grid ===
+        cbar = fig.colorbar(
+            im,
+            ax=[ax1, ax2],        # anchors to both axes (so it aligns with total figure height)
+            fraction=0.03,         # width of colorbar relative to figure
+            pad=0.02,              # horizontal gap between plots and colorbar
+            location='right'       # move to right side
+        )
+        cbar.set_label('Average Contact Frames', rotation=270, labelpad=15)
+
+
+        plt.tight_layout()
+        path = os.path.join(output, 'deviations.png')  
+        plt.savefig(path, dpi=300, bbox_inches='tight')
+        path = os.path.join(output, 'deviations.pdf')  
+        plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300, transparent=True)
+        plt.close()
+
+
+
+
+        ### OBSERVED - EXPECTED DEVIATION - HIERARCHAL 
+
+        group_map = {
+                    1: '1+2', 2: '1+2',
+                    3: '3+4', 4: '3+4',
+                    6: '6+7', 7: '6+7',
+                    8: '8+9', 9: '8+9',
+                    10: '10+11', 11: '10+11',
+                    5: '5+12', 12: '5+12'
+                }
+        
+        df['hierarchal_group'] = df[cluster_name].map(group_map)
+        df_interaction['hierarchal_group'] = df_interaction[cluster_name].map(group_map)
+        df_interaction['hierarchal_group'] = pd.to_numeric(df_interaction['hierarchal_group'], errors='coerce').astype('Int64')
+
+
+
+        cluster_counts = (df.groupby(['hierarchal_group', 'condition']).size().unstack(fill_value=0).reindex(columns=['group', 'iso'], fill_value=0))  # count number per cluster per condition
+
+        total_group = cluster_counts['group'].sum()
+        total_iso   = cluster_counts['iso'].sum()
+        total_all   = total_group + total_iso
+
+        expected_group = total_group / total_all   # e.g., ~0.56
+
+        observed_group_frac = cluster_counts['group'] / (cluster_counts['group'] + cluster_counts['iso']).replace({0: np.nan}) ## observed fraction
+        observed_group_frac = observed_group_frac.fillna(0.0)
+
+        deviation = observed_group_frac - expected_group ## expected fraction
+
+        deviation_sorted = deviation.sort_values()
+        colors = ['C1' if val < 0 else 'C0' for val in deviation_sorted.values]
+
+        ## Binomial test per cluster
+        results = []
+        for cluster_id, row in cluster_counts.iterrows():
+            k = row['group']
+            n = row['group'] + row['iso']
+            if n > 0:
+                p_exp = expected_group
+                res = binomtest(k, n, p_exp, alternative='two-sided')
+                results.append((cluster_id, res.pvalue))
+            else:
+                results.append((cluster_id, np.nan))
+
+        hierarchical_pvals = pd.DataFrame(results, columns=['cluster_id', 'p_value'])
+
+        ## correct for multple test - false positives
+        hierarchical_pvals['p_adj'] = multipletests(hierarchical_pvals['p_value'], method='fdr_bh')[1]
+        path = os.path.join(output, 'hierarchal_deviation_pvals.csv')
+        hierarchical_pvals.to_csv(path, index=False, float_format='%.10f')
+
+
+         ### CONTACT FRAME SUMMARY
+
+        interaction_contact_summary_2 = []
+
+        for cluster_id in sorted(df_interaction['hierarchal_group'].unique()):
+            cluster_df = df_interaction[df_interaction['hierarchal_group'] == cluster_id]
+            for inter_id in cluster_df["interaction_id"].unique():
+                inter_df = cluster_df[cluster_df["interaction_id"] == inter_id]
+                n_close = (inter_df["min_distance"] < 1).sum()
+                interaction_contact_summary_2.append({
+                    "cluster": cluster_id,
+                    "interaction_id": inter_id,
+                    "frames_below_1mm": n_close
+                })
+
+        # Convert to DataFrame
+        df_interaction_contact_2 = pd.DataFrame(interaction_contact_summary_2)
+
+
+
+        ## === TOP: DEVIATION BARPLOT WITH SIGNIFICANCE STARS ==
+        fig = plt.figure(figsize=(10, 8))
+        gs = gridspec.GridSpec(2, 1, height_ratios=[6, 0.3], hspace=0.05)
+
+        ax1 = fig.add_subplot(gs[0])  # top: bar chart
+        ax2 = fig.add_subplot(gs[1])  # middle: heatmap box
+
+        x_labels = deviation_sorted.index.astype(str)
+        x_pos = np.arange(len(x_labels))
+
+        # Plot with Matplotlib's bar (since sns.barplot expects a DataFrame)
+        ax1.bar(
+            deviation_sorted.index.astype(str),
+            deviation_sorted.values,
+            color=colors,            # keep your C0/C1 mapping
+            alpha=0.7,              # <— makes the fill lighter
+            edgecolor='black',       # <— black border
+            linewidth=1.5            # <— thicker border
+        )
+
+        # Add reference line
+        ax1.axhline(0, color='k', linestyle='--', linewidth=1)
+
+        # --- Annotate significance stars ---
+
+        # Map adjusted p-values to cluster ids
+        p_map = hierarchical_pvals.set_index('cluster_id')['p_adj']
+
+
+        def stars(p):
+            if p < 0.001: return '***'
+            if p < 0.01:  return '**'
+            if p < 0.05:  return '*'
+            return ''
+
+        # Vertical offset for labels
+        ymin, ymax = ax1.get_ylim()
+        dy = 0.015 * (ymax - ymin)
+
+        # Annotate bars
+        for i, cid in enumerate(deviation_sorted.index):
+            p = p_map.get(cid, np.nan)
+            if pd.notna(p):
+                s = stars(p)
+                if s:
+                    y = deviation_sorted.loc[cid]
+                    ax1.text(
+                        i,
+                        y + (dy if y >= 0 else -dy),
+                        s,
+                        ha='center',
+                        va='bottom' if y >= 0 else 'top',
+                        fontsize=10,
+                        fontweight='bold',
+                        color='black')
+        
+        ax1.set_title("Cluster Deviation from Expected", fontsize=16, fontweight='bold', pad=15)
+        ax1.set_ylabel("Deviation from Expected")
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels('')
+        
+        
+        # === BOTTOM: 1×N heatmap strip of avg contact frames per cluster ===
+        # 1) mean frames below 1mm per cluster
+        mean_frames = (
+            df_interaction_contact_2
+            .groupby('cluster')['frames_below_1mm']
+            .mean()
+        )
+
+        # 2) ensure index types match the deviation index (important for reindex)
+        mean_frames.index = mean_frames.index.astype(deviation_sorted.index.dtype)
+
+        # 3) align to the same x-order as the bar plot
+        avg_contact_aligned = mean_frames.reindex(deviation_sorted.index, fill_value=0)
+
+        # 4) reshape to 1×N for imshow
+        heat = avg_contact_aligned.to_numpy()[np.newaxis, :]
+
+        ax2.set_xlim(ax1.get_xlim())
+
+        # define your color stops (dark → sea → cadet)
+        colors = ["skyblue", "mediumseagreen", "darkgreen"]
+        from matplotlib.colors import LinearSegmentedColormap
+        # build a sequential colormap from those
+        my_cmap = LinearSegmentedColormap.from_list("greenblue_custom", colors)
+
+        # 5) draw the heat “box” (single row)
+        im = ax2.imshow(
+            heat,
+            aspect='auto',
+            interpolation='nearest',
+            vmin=0,  # anchor scale at 0
+            cmap=my_cmap,
+            # cmap='PuBuGn' 
+        )
+        ax2.set_yticks([0])
+        ax2.set_yticklabels(['Average Contact\nFrames'])
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(x_labels, fontweight='bold', fontsize=14)
+        ax2.tick_params(axis='x', pad=15)
+
+        # optional: make the heat row compact and boxy
+        for spine in ax2.spines.values():
+            spine.set_visible(False)
+        
+        # === add colorbar OUTSIDE grid ===
+        cbar = fig.colorbar(
+            im,
+            ax=[ax1, ax2],        # anchors to both axes (so it aligns with total figure height)
+            fraction=0.03,         # width of colorbar relative to figure
+            pad=0.02,              # horizontal gap between plots and colorbar
+            location='right'       # move to right side
+        )
+        cbar.set_label('Average Contact Frames', rotation=270, labelpad=15)
+
+
+        plt.tight_layout()
+        path = os.path.join(output, 'deviations_hierarchical.png')  
+        plt.savefig(path, dpi=300, bbox_inches='tight')
+        path = os.path.join(output, 'deviations.pdf')  
+        plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300, transparent=True)
+        plt.close()
 
 
     
@@ -1216,6 +1613,7 @@ class ClusterPipeline:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
     
+
 
     ## METHOD ACCELERATION: CALCULATES ACCELERATION
     def acceleration(self):
@@ -1707,6 +2105,77 @@ class ClusterPipeline:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             plt.close()
 
+        
+        ## plot total pre min-distance and post min-distance slopes per cluster
+        df['window'] = df['Normalized Frame'].apply(lambda x: 'pre' if x < 0 else 'post')
+
+        summary = (
+            df.groupby([cluster_name, "window"])["min_distance"]
+            .sum()
+            .reset_index()
+        )
+
+        plt.figure(figsize=(10, 6))
+        sns.barplot(data=summary, x=cluster_name, y="min_distance", hue="window")
+        plt.title("Total Min Distance by Cluster (Pre vs Post)", fontsize=14)
+        plt.xlabel("Cluster")
+        plt.ylabel("Summed Min Distance")
+        plt.xticks(rotation=45)
+        save_path = os.path.join(output, "min_distance_pre_post_total.png")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        pivoted = summary.pivot(index=cluster_name, columns="window", values="min_distance").reset_index()
+        # 3. Compute difference: pre - post
+        pivoted["difference"] = pivoted["pre"] - pivoted["post"]
+
+        plt.figure(figsize=(10, 6))
+        sns.barplot(data=pivoted, x=cluster_name, y="difference")
+        plt.title("Net Min Distance by Cluster (Pre - Post)", fontsize=14)
+        plt.xlabel("Cluster")
+        plt.ylabel("Net Min Distance")
+        plt.xticks(rotation=45)
+        save_path = os.path.join(output, "min_distance_pre_post_net.png")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+        # Two subplots: pre vs post (aggregated means)
+        fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=True)
+
+        # --- PRE ---
+        sns.barplot(
+            data=summary[summary["window"] == "pre"],
+            x=cluster_name, y="min_distance",
+            color="coral", ax=axes[0],
+        )
+        axes[0].set_title("Pre")
+        axes[0].set_xlabel("Cluster")
+        axes[0].set_ylabel("Summed Min Distance")
+        axes[0].tick_params(axis="x", rotation=45)
+
+        # --- POST ---
+        sns.barplot(
+            data=summary[summary["window"] == "post"],
+            x=cluster_name, y="min_distance",
+            color="steelblue", ax=axes[1],
+        )
+        axes[1].set_title("Post")
+        axes[1].set_xlabel("Cluster")
+        axes[1].tick_params(axis="x", rotation=45)
+
+        plt.suptitle("Mean Min Distance by Cluster (Pre vs Post)", fontsize=14)
+        plt.tight_layout(rect=[0, 0, 1, 0.94])
+
+        save_path = os.path.join(output, "min_distance_pre_post.png")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        
+
+
+
         # --- Collect slopes per cluster (mean trace), excluding frame 0
 
         cluster_ids = sorted(df[cluster_name].unique())
@@ -1825,6 +2294,9 @@ class ClusterPipeline:
 
 
 
+
+
+
     #### METHOD DISTANCE: DISTANCE TRAVELLED
     def distance(self):
 
@@ -1834,7 +2306,9 @@ class ClusterPipeline:
         output = os.path.join(self.directory, 'distance-travelled')
         os.makedirs(output, exist_ok=True)
 
+        df['window'] = df['Normalized Frame'].apply(lambda x: 'pre' if x < 0 else 'post')
 
+        ## total distance travelled per window 
         track_distances = []
 
         for cluster_id in sorted(df[cluster_name].unique()):
@@ -1844,9 +2318,11 @@ class ClusterPipeline:
                 inter_df = cluster_df[cluster_df['interaction_id'] == inter_id]
                 inter_df = inter_df.sort_values("Frame")
 
+            # split interaction into pre/post subsets
+            for window_value, subset in inter_df.groupby('window'):
                 for track in ["mm_Track_1", "mm_Track_2"]:
-                    x = inter_df[f"{track} x_body"].values
-                    y = inter_df[f"{track} y_body"].values
+                    x = subset[f"{track} x_body"].values
+                    y = subset[f"{track} y_body"].values
 
                     if len(x) < 2:
                         continue
@@ -1855,14 +2331,19 @@ class ClusterPipeline:
 
                     track_distances.append({
                         "cluster": cluster_id,
-                        "distance": dist
+                        "distance": dist,
+                        "window": window_value  # either 'pre' or 'post'
                     })
 
         df_distances = pd.DataFrame(track_distances)
 
+        print(df_distances['window'].unique())
+
+        hue_order = ['pre', 'post']
+
         # Plot violin
-        plt.figure(figsize=(10, 6))
-        sns.violinplot(data=df_distances, x="cluster", y="distance", inner="box", cut=0, palette="Set2")
+        plt.figure(figsize=(15, 6))
+        sns.boxplot(data=df_distances, x="cluster", y="distance",  hue='window',  palette={"pre": "coral", "post": "steelblue"}, hue_order=hue_order)
         plt.title("Track-wise Distance Travelled per Cluster")
         plt.xlabel("Cluster")
         plt.ylabel("Distance Travelled")
@@ -1870,6 +2351,101 @@ class ClusterPipeline:
 
         plt.savefig(os.path.join(output, "distance_violin.png"), dpi=300)
         plt.close()
+
+        # Plot violin
+        plt.figure(figsize=(15, 6))
+        sns.pointplot(data=df_distances, x="cluster", y="distance",  hue='window',  palette={"pre": "coral", "post": "steelblue"}, hue_order=hue_order, join=False)
+        plt.title("Track-wise Distance Travelled per Cluster")
+        plt.xlabel("Cluster")
+        plt.ylabel("Distance Travelled")
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(output, "distance_pointplot.png"), dpi=300)
+        plt.close()
+
+
+
+
+
+        #### anchor/partner distance travelled per window
+        track_distances_ap = []
+
+        for cluster_id in sorted(df[cluster_name].unique()):
+            cluster_df = df[df[cluster_name] == cluster_id]
+
+            for inter_id in cluster_df['interaction_id'].unique():
+                inter_df = cluster_df[cluster_df['interaction_id'] == inter_id]
+                inter_df = inter_df.sort_values("Frame")
+
+                # split interaction into pre/post subsets
+                for window_value, subset in inter_df.groupby('window'):
+                    for track in ["partner", "anchor"]:
+                        x = subset[f"{track} x_body"].values
+                        y = subset[f"{track} y_body"].values
+
+                        if len(x) < 2:
+                            continue
+
+                        dist = np.sum(np.sqrt(np.diff(x)**2 + np.diff(y)**2))
+
+                        track_distances_ap.append({
+                            "cluster": cluster_id,
+                            'role': track,
+                            "distance": dist,
+                            "window": window_value  # either 'pre' or 'post'
+                        })
+
+        df_distances = pd.DataFrame(track_distances_ap)
+        print(df_distances) # printed and the data is present - its the plotting
+
+        # Force consistent categories
+        df_distances["window"] = (
+            df_distances["window"].astype(str).str.strip().str.lower()
+            .map({"pre": "pre", "post": "post"})  # collapse variants if any
+        )
+        df_distances["role"] = (
+            df_distances["role"].astype(str).str.strip().str.lower()
+            .map({"anchor": "anchor", "partner": "partner"})
+        )
+
+
+        cluster_ids = sorted(df_distances["cluster"].unique())
+        cols = 4
+        rows = int(np.ceil(len(cluster_ids) / cols))
+
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 3), sharey=True)
+        axes = axes.flatten()
+
+        hue_order = ['anchor', 'partner']
+        order = ['pre', 'post']
+
+        for idx, cluster_id in enumerate(cluster_ids):
+            ax = axes[idx]
+            cluster_data = df_distances[df_distances["cluster"] == cluster_id]
+
+            print(cluster_data)
+
+            sns.pointplot(data=cluster_data, x='window', order=order,y='distance', hue='role', palette={"anchor": "coral", "partner": "steelblue"}, hue_order=hue_order, ax=ax)
+            ax.set_title(f"Cluster {cluster_id}")
+            # ax.set_ylim(0, 24)
+            # ax.set_xticks([])
+            # ax.set_yticks([])
+        
+        
+        # Clean unused  subplots
+        for i in range(len(cluster_ids), len(axes)):
+            axes[i].axis('off')
+
+        # Save and close
+        plt.suptitle("Distance Travelled per Cluster", fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        save_path = os.path.join(output, "distance_violin_subplot.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+
+
 
     
         ## MEAN DISTANCE TRAVELLED OVER TIME
@@ -1977,7 +2553,7 @@ class ClusterPipeline:
             )
 
 
-        clusters = sorted(data[cluster_name].dropna().unique())
+        clusters = sorted(distance_melted[cluster_name].dropna().unique())
         cols = 4
         rows = int(np.ceil(len(clusters) / cols))
         fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
@@ -1985,16 +2561,15 @@ class ClusterPipeline:
 
         for i, cluster in enumerate(clusters): # index n label
             ax = axes[i]  
-            d = data[data[cluster_name] ==cluster]
+            d = distance_melted[distance_melted[cluster_name] ==cluster]
 
             sns.lineplot(
-                data=distance_melted,
+                data=d,
                 x='Normalized Frame',
                 y='distance',
                 ci=95,
-                legend=False,
                 ax=ax,
-                color='lightpurple', hue='role'
+             hue='role'
             )
 
             ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
@@ -2015,12 +2590,6 @@ class ClusterPipeline:
         plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
         plt.savefig(os.path.join(output, "partner_anchor_distance.png"), dpi=300, bbox_inches="tight")
         plt.close()
-
-
-
-
-
-
 
 
 
@@ -2350,6 +2919,7 @@ class ClusterPipeline:
             ax0.set_visible(True)
 
 
+
             ## 1. SPEED
             ax1 = axes_ap[1, column]
 
@@ -2427,7 +2997,7 @@ class ClusterPipeline:
             sns.lineplot(data=cluster_df, x='Normalized Frame', y='partner_distance', label='Partner', errorbar=('ci', 95), color='orange', ax=ax7)
 
             ax7.axvline(0, color="gray", ls="--", lw=0.5)
-            ax7.set_ylim(0, 30)
+            ax7.set_ylim(0, 14)
             # ax5.set_xticks([])
             # ax1.set_yticks([])
             ax7.set_visible(True)
@@ -2481,6 +3051,7 @@ class ClusterPipeline:
             ax8.text(0.55, 0.76, f"post slope: {slope_post:.2f}", transform=ax8.transAxes, fontsize=8)
 
 
+
             # ---- 9–12. CONTACT SUMMARY (match standalone) ----
             interaction_colors = {
                 "head-head": "red",
@@ -2488,8 +3059,9 @@ class ClusterPipeline:
                 "head-tail": "yellow",
                 "body-body": "black",
                 "tail-tail": "green",
-                "tail-body": "purple",
-            }
+                "tail-body": "purple"}
+
+
             interaction_merge_map = {
                 "head-tail": "head-tail", "tail-head": "head-tail",
                 "tail-body": "tail-body", "body-tail": "tail-body",
@@ -2596,6 +3168,7 @@ class ClusterPipeline:
             ax11.set_xticks([])
             ax11.set_visible(True)
 
+
             # ---------- ROW 12: Contact Frames <1mm (mean ± sd) ----------
             ax12 = axes_ap[12, column]
             frames_vals = pd.Series([v for _, v in frames_close_list])
@@ -2612,6 +3185,141 @@ class ClusterPipeline:
         out_path = os.path.join(self.directory, "summary_anchor_partner.png")
         plt.savefig(out_path, dpi=300, bbox_inches='tight')
         plt.close(fig_ap)
+
+
+    def hierarchal_summary(self):
+
+        """Generate a hierarchal summary of the Clusters"""
+
+        df = self.df
+        cluster_name = self.cluster_name
+
+        group_map = {
+                    1: 'G1', 2: 'G1',
+                    3: 'G2', 4: 'G2',
+                    6: 'G3', 7: 'G3',
+                    8: 'G4', 9: 'G4',
+                    10: 'G5', 11: 'G5',
+                    5: 'G6', 12: 'G6'
+                }
+        
+        df['hierarchal_group'] = df[cluster_name].map(group_map)
+
+        output = os.path.join(self.directory, 'hierarchal_summary')
+        os.makedirs(output, exist_ok=True)
+
+        ## 1. Distance Travelled 
+
+        data = []
+
+        for cluster_id in sorted(df[cluster_name].unique()):
+            cluster_df = df[df[cluster_name] == cluster_id]
+
+            for inter_id in cluster_df["interaction_id"].unique():
+                inter_df = cluster_df[cluster_df["interaction_id"] == inter_id].sort_values("Normalized Frame").copy()
+
+                inter_df["partner"] = np.hypot(
+                        inter_df["partner x_body"].diff(),
+                        inter_df["partner y_body"].diff()
+                    ).fillna(0)
+                
+                inter_df["anchor"] = np.hypot(
+                        inter_df["anchor x_body"].diff(),
+                        inter_df["anchor y_body"].diff()
+                    ).fillna(0)
+                
+                cols = ['interaction_id', cluster_name, 'hierarchal_group', 'Normalized Frame', 'partner', 'anchor']
+
+                filtered = inter_df[cols]
+                data.append(filtered)
+
+        distance = pd.concat(data, ignore_index=True)
+
+        distance_melted = distance.melt(
+                id_vars=["interaction_id", cluster_name, "Normalized Frame", 'hierarchal_group'],
+                value_vars=["partner", "anchor"],
+                var_name="role",
+                value_name="distance"
+            )
+        
+        distance_melted['cluster_role'] = distance_melted[cluster_name].astype(str) + '_' + distance_melted['role']
+
+        save_path = os.path.join(output, "partner_anchor_distance.csv")
+        distance.to_csv(save_path, index=False)
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        ## pallette for cluster_role
+        group_A = [1, 3, 5, 6, 8, 10]
+        group_B = [2, 4, 7, 9, 11, 12]
+
+        palette = {}
+
+        for c in group_A:
+            palette[f"{c}_anchor"]  = "#1f77b4"   # dark blue
+            palette[f"{c}_partner"] = "#90c9e8"   # dark orange
+
+        for c in group_B:
+            palette[f"{c}_partner"]  = "#edc078"   # light blue
+            palette[f"{c}_anchor"] = "#ff7f0e"   # light orange
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(distance_melted.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="distance", ax=ax, hue='cluster_role', palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            ax.set_ylim(0, None)
+            ax.set_xlim(-14, 15)
+        
+        plt.title("Distance Travelled", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()        
+        save_path = os.path.join(output, "distance.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+
+        ## min distance
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        ## pallette for cluster_role
+        group_A = [1, 3, 5, 6, 8, 10]
+        group_B = [2, 4, 7, 9, 11, 12]
+
+        palette = {}
+
+        for c in group_A:
+            palette[c]  = "#1f77b4"   # dark blue
+        for c in group_B:
+            palette[c] = "#ff7f0e"   # light orange
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(df.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="min_distance", ax=ax, hue=cluster_name, palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            ax.set_ylim(0, None)
+            ax.set_xlim(-14, 15)
+        
+        plt.title("Min Distance", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()        
+        save_path = os.path.join(output, "min-distance.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+
+
+
+
+        
+
+        
+
+        
 
 
 
@@ -2979,7 +3687,172 @@ class ClusterPipeline:
         render_figure("head", "overview_head.png")
         render_figure("body", "overview_body.png")
         render_figure("tail", "overview_tail.png")
-    
+
+
+    def mean_trace_temporal(self):
+        """
+        Static overview with time-encoded color (light→dark) for both larvae,
+        plotting head/body/tail together per cluster. Head is slightly larger.
+        Output: mean_traces/overview_temporal_all.png
+        """
+
+        df = self.df
+        cluster_name = self.cluster_name
+
+        # Fixed view + styling
+        xlim = (-50, 100)
+        ylim = (-10, 300)
+        anchor_base = "#4F7942"   # base hues kept for semantic consistency
+        partner_base = "#916288"
+        anchor_cmap = plt.cm.Greens
+        partner_cmap = plt.cm.Purples
+
+        # Marker shapes & sizes (head slightly bigger)
+        node_marker = {"head": "o", "body": "s", "tail": "^"}
+        size_head = 26
+        size_body = 22
+        size_tail = 20
+        size_map = {"head": size_head, "body": size_body, "tail": size_tail}
+
+        node_alpha = 0.9
+        trail_alpha = 0.7
+        trail_lw = 1.2
+
+        # Global frame range for consistent normalization across clusters
+        frames_all = sorted([f for f in df["Normalized Frame"].dropna().unique().tolist() if np.isfinite(f)])
+        if not frames_all:
+            return  # nothing to plot
+        norm = Normalize(vmin=frames_all[0], vmax=frames_all[-1])
+
+        clusters = sorted(df[cluster_name].unique())
+
+        # Figure sizing consistent with your GIFs
+        n = len(clusters)
+        fig_w = max(8, n * 2.5)
+        fig_h = 6
+        fig, axes = plt.subplots(1, n, figsize=(fig_w, fig_h))
+        if n == 1:
+            axes = [axes]
+
+        for ax, cid in zip(axes, clusters):
+            cdf = df[df[cluster_name] == cid].copy()
+            g = cdf.sort_values("Normalized Frame").groupby("Normalized Frame")
+            frames = list(g.groups.keys())
+            frames = [f for f in frames if f == f]  # drop NaN frames guard
+
+            # Helper to fetch mean series for a given node & role
+            def mean_xy(role: str, node: str):
+                x = g[f"{role} x_{node}"].mean()
+                y = g[f"{role} y_{node}"].mean()
+                return x, y
+
+            # ===== Temporal trails (across time) for each node & role =====
+            for node in ("head", "body", "tail"):
+                # Anchor trail
+                ax_mean_x, ax_mean_y = mean_xy("anchor", node)
+                # Iterate over consecutive frame pairs; draw a segment if both ends exist
+                for f0, f1 in zip(frames[:-1], frames[1:]):
+                    if f0 in ax_mean_x.index and f1 in ax_mean_x.index:
+                        x0, y0 = ax_mean_x.loc[f0], ax_mean_y.loc[f0]
+                        x1, y1 = ax_mean_x.loc[f1], ax_mean_y.loc[f1]
+                        if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(x1) and np.isfinite(y1):
+                            ax.plot([x0, x1], [y0, y1],
+                                    color=anchor_cmap(norm(f1)), alpha=trail_alpha,
+                                    linewidth=trail_lw, zorder=1)
+
+                # Partner trail
+                px_mean_x, px_mean_y = mean_xy("partner", node)
+                for f0, f1 in zip(frames[:-1], frames[1:]):
+                    if f0 in px_mean_x.index and f1 in px_mean_x.index:
+                        x0, y0 = px_mean_x.loc[f0], px_mean_y.loc[f0]
+                        x1, y1 = px_mean_x.loc[f1], px_mean_y.loc[f1]
+                        if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(x1) and np.isfinite(y1):
+                            ax.plot([x0, x1], [y0, y1],
+                                    color=partner_cmap(norm(f1)), alpha=trail_alpha,
+                                    linewidth=trail_lw, zorder=1)
+
+            # ===== Per-frame skeleton (head→body→tail) in time color (optional but nice) =====
+            for f in frames:
+                # Anchor skeleton
+                parts = {}
+                for node in ("head", "body", "tail"):
+                    x, y = g[f"anchor x_{node}"].mean(), g[f"anchor y_{node}"].mean()
+                    if f in x.index:
+                        xv, yv = x.loc[f], y.loc[f]
+                        if np.isfinite(xv) and np.isfinite(yv):
+                            parts[node] = (xv, yv)
+                if len(parts) == 3:
+                    ax.plot([parts["head"][0], parts["body"][0], parts["tail"][0]],
+                            [parts["head"][1], parts["body"][1], parts["tail"][1]],
+                            color=anchor_cmap(norm(f)), alpha=0.75, linewidth=1.0, zorder=2)
+
+                # Partner skeleton
+                parts = {}
+                for node in ("head", "body", "tail"):
+                    x, y = g[f"partner x_{node}"].mean(), g[f"partner y_{node}"].mean()
+                    if f in x.index:
+                        xv, yv = x.loc[f], y.loc[f]
+                        if np.isfinite(xv) and np.isfinite(yv):
+                            parts[node] = (xv, yv)
+                if len(parts) == 3:
+                    ax.plot([parts["head"][0], parts["body"][0], parts["tail"][0]],
+                            [parts["head"][1], parts["body"][1], parts["tail"][1]],
+                            color=partner_cmap(norm(f)), alpha=0.75, linewidth=1.0, zorder=2)
+
+            # ===== Scatter nodes per frame with time-encoded color =====
+            for node in ("head", "body", "tail"):
+                a_x, a_y = mean_xy("anchor", node)
+                p_x, p_y = mean_xy("partner", node)
+                size = size_map[node]
+                marker = node_marker[node]
+
+                for f in frames:
+                    if f in a_x.index:
+                        xv, yv = a_x.loc[f], a_y.loc[f]
+                        if np.isfinite(xv) and np.isfinite(yv):
+                            ax.scatter(xv, yv,
+                                    s=size, alpha=node_alpha, color=anchor_cmap(norm(f)),
+                                    marker=marker, zorder=3)
+                    if f in p_x.index:
+                        xv, yv = p_x.loc[f], p_y.loc[f]
+                        if np.isfinite(xv) and np.isfinite(yv):
+                            ax.scatter(xv, yv,
+                                    s=size, alpha=node_alpha, color=partner_cmap(norm(f)),
+                                    marker=marker, zorder=3)
+
+            # Panel formatting
+            ax.set_xlim(*xlim)
+            ax.set_ylim(*ylim)
+            ax.set_aspect('equal', adjustable='box')
+            ax.set_title(f"Cluster {cid}", fontweight='bold', fontsize=11)
+            ax.axis('off')
+
+        # Figure-level legend (shapes → nodes; hues → larvae)
+        shape_handles = [
+            Line2D([0], [0], marker='o', color='none', markerfacecolor='gray', markersize=np.sqrt(size_head), label='Head'),
+            Line2D([0], [0], marker='o', color='none', markerfacecolor='gray', markersize=np.sqrt(size_body), label='Body'),
+            Line2D([0], [0], marker='o', color='none', markerfacecolor='gray', markersize=np.sqrt(size_tail), label='Tail'),
+        ]
+        hue_handles = [
+            Line2D([0], [0], color=anchor_base, lw=3, label='Anchor'),
+            Line2D([0], [0], color=partner_base, lw=3, label='Partner'),
+        ]
+        legend1 = fig.legend(shape_handles, [h.get_label() for h in shape_handles],
+                            loc="center right", bbox_to_anchor=(1.02, 0.8), fontsize=10)
+        legend2 = fig.legend(hue_handles, [h.get_label() for h in hue_handles],
+                            loc="center right", bbox_to_anchor=(1.02, 0.62), fontsize=10)
+
+        plt.tight_layout()
+        out_dir = os.path.join(self.directory, "mean_traces")
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, "overview_temporal_all.png")
+        plt.savefig(out_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+
+
+
+
     def mean_traces_gifs(self):
     
         df = self.df
@@ -3070,14 +3943,130 @@ class ClusterPipeline:
                 os.rmdir(tmpdir)
             except OSError:
                 pass
+        
+        def render_gif_all(out_name: str):
+            # Precompute: body traces once + node series for head/body/tail
+            pre = {}
+            node_labels = ["head", "body", "tail"]
+            for cid in clusters:
+                cdf = df[df[cluster_name] == cid].sort_values("Normalized Frame")
+                g = cdf.groupby("Normalized Frame")
+                entry = {
+                    't1x': g["anchor x_body"].mean(),
+                    't1y': g["anchor y_body"].mean(),
+                    't2x': g["partner x_body"].mean(),
+                    't2y': g["partner y_body"].mean(),
+                    'nodes': {}
+                }
+                for nl in node_labels:
+                    entry['nodes'][nl] = {
+                        'ax': g[f"anchor x_{nl}"].mean(),
+                        'ay': g[f"anchor y_{nl}"].mean(),
+                        'px': g[f"partner x_{nl}"].mean(),
+                        'py': g[f"partner y_{nl}"].mean(),
+                    }
+                pre[cid] = entry
+
+            # styling for node overlays
+            # (different markers so they’re distinguishable while preserving your colors)
+            node_marker = {"head": "o", "body": "o", "tail": "o"}
+            node_size = int(marker_size * 0.7)  # a touch smaller than your single-node GIFs
+            node_alpha = 0.9
+            edgecolor = "white"
+            linewidth = 0.5
+
+            out_dir = os.path.join(self.directory, "mean_traces")
+            os.makedirs(out_dir, exist_ok=True)
+            tmpdir = os.path.join(out_dir, "_tmp_all")
+            os.makedirs(tmpdir, exist_ok=True)
+
+            frame_paths = []
+            for f in frames:
+                fig, axes = plt.subplots(1, len(clusters), figsize=(fig_w, fig_h))
+                if len(clusters) == 1:
+                    axes = [axes]
+
+                for ax, cid in zip(axes, clusters):
+                    d = pre[cid]
+
+                    # # static dashed body markers
+                    # ax.plot(d['t1x'], d['t1y'], color=anchor_color, linestyle="None",
+                    #         marker="|", markersize=10, alpha=0.6)
+                    # ax.plot(d['t2x'], d['t2y'], color=partner_color, linestyle="None",
+                    #         marker="_", markersize=10, alpha=0.6)
+
+                    # overlay all three nodes at this frame
+                    for nl in node_labels:
+                        n = d['nodes'][nl]
+                        if f in n['ax'].index:
+                            ax.scatter(n['ax'].loc[f], n['ay'].loc[f],
+                                    s=node_size, alpha=node_alpha, color=anchor_color,
+                                    marker=node_marker[nl], edgecolors=edgecolor, linewidths=linewidth)
+                        if f in n['px'].index:
+                            ax.scatter(n['px'].loc[f], n['py'].loc[f],
+                                    s=node_size, alpha=node_alpha, color=partner_color,
+                                    marker=node_marker[nl], edgecolors=edgecolor, linewidths=linewidth)
+                
+                    # connect anchor nodes (head-body-tail)
+                    if all(f in d['nodes'][nl]['ax'].index for nl in node_labels):
+                        ax.plot(
+                            [d['nodes']['head']['ax'].loc[f],
+                            d['nodes']['body']['ax'].loc[f],
+                            d['nodes']['tail']['ax'].loc[f]],
+                            [d['nodes']['head']['ay'].loc[f],
+                            d['nodes']['body']['ay'].loc[f],
+                            d['nodes']['tail']['ay'].loc[f]],
+                            color=anchor_color, alpha=0.7, linewidth=1.5
+                        )
+
+                    # connect partner nodes (head-body-tail)
+                    if all(f in d['nodes'][nl]['px'].index for nl in node_labels):
+                        ax.plot(
+                            [d['nodes']['head']['px'].loc[f],
+                            d['nodes']['body']['px'].loc[f],
+                            d['nodes']['tail']['px'].loc[f]],
+                            [d['nodes']['head']['py'].loc[f],
+                            d['nodes']['body']['py'].loc[f],
+                            d['nodes']['tail']['py'].loc[f]],
+                            color=partner_color, alpha=0.7, linewidth=1.5
+                        )
+
+
+                    ax.set_xlim(*xlim)
+                    ax.set_ylim(*ylim)
+                    ax.set_aspect('equal', adjustable='box')
+                    ax.set_title(f"Cluster {cid}", fontweight='bold', fontsize=11)
+                    ax.axis('off')
+
+                plt.tight_layout()
+                frame_path = os.path.join(tmpdir, f"frame_{int(f):04d}.png")
+                plt.savefig(frame_path, dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                frame_paths.append(frame_path)
+
+            # stitch into a gif
+            images = [imageio.imread(p) for p in frame_paths]
+            imageio.mimsave(os.path.join(out_dir, out_name), images, duration=0.08)
+
+            # clean up temp frames
+            for p in frame_paths:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            try:
+                os.rmdir(tmpdir)
+            except OSError:
+                pass
 
         # make the three GIFs
         render_gif("head", "overview_head.gif")
         render_gif("body", "overview_body.gif")
         render_gif("tail", "overview_tail.gif")
+        render_gif_all("overview_all.gif")
 
-    
-    ## METHOD SPATIAL_CLUSTER: MAP OUT WHERE EACH INTERACTION OCCURED ON THE PETRI DISH 
+
+    ## METHOD SPATIAL_CLUSTER: MAP OUT WHERE EACH INTERACTION OCCURED ON THE PETRI DISH
     def spatial_cluster(self):
 
         df = self.df
@@ -3342,14 +4331,6 @@ class ClusterPipeline:
 
         # axis=1 - accross each row / frame
 
-        # def calculate_angle_between_two_angles(a , b):
-        #     theta = np.arccos(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-        #     return theta 
-        
-        # def get_scalar_rejection(a, theta):
-        #     rejection_magnitude = np.linalg.norm(a) * np.sin(theta)
-        #     return rejection_magnitude
-
         def calculate_angle_between_two_angles(a, b):
             # rowwise dot and norms
             cos_theta = (a * b).sum(axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
@@ -3365,24 +4346,40 @@ class ClusterPipeline:
             projection_magnitude = np.linalg.norm(a, axis=1) * np.cos(theta)
             return projection_magnitude
         
+        def distance(x, y):
+            diff = x - y
+            distance = np.linalg.norm(diff, axis=1)
+            return distance
+        
         # deviation angle from projected path 
         df['deviation_angle'] = calculate_angle_between_two_angles(partner_direction, projection)
         # deviated movement / magnitude 
         df['sideways_movement'] = get_scalar_rejection(partner_direction, df['deviation_angle'])
-        df['sideways_movement'] = df['sideways_movement'].fillna(0)
+        df['sideways_movement'] = df['sideways_movement'].fillna(np.nan)
         # forward movement 
         df['forward_movement'] = get_scalar_projection(partner_direction, df['deviation_angle'])
 
         df['deviation_angle'] = np.degrees(df['deviation_angle']) # radians to degrees
 
-        columns_to_keep = ['interaction_id', 'Normalized Frame', cluster_name, 'deviation_angle', 'sideways_movement', 'forward_movement']
+        ## distance between anchor + partner
+        df['distance_between'] = distance(partner_position, anchor_position)
 
+        ## distance between partner + previous partner
+        df['partner_distance'] = distance(partner_position, partner_prev_position)
+
+        ## represents the fraction of motion directed toward the anchor.
+        # how aligned is the motion with the target direction?
+        df['aligned_movement'] = df['forward_movement'] / df['partner_distance'] 
+
+
+        columns_to_keep = ['interaction_id', 'Normalized Frame', cluster_name, 'deviation_angle', 'sideways_movement', 'forward_movement', 'distance_between', 'aligned_movement']
         data = df[columns_to_keep]
 
         outdir = os.path.join(self.directory, "relative_partner_metrics")
         os.makedirs(outdir, exist_ok=True)
         outpath = os.path.join(outdir, "projected_versus_actual_partner.csv")
         data.to_csv(outpath, index=False)
+
 
         ### PLOTTING
         plt.figure(figsize=(8,8))
@@ -3412,7 +4409,7 @@ class ClusterPipeline:
                 ci=95,
                 legend=False,
                 ax=ax,
-                color='lightpurple'
+                color='purple'
             )
 
             ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
@@ -3434,8 +4431,137 @@ class ClusterPipeline:
         plt.savefig(os.path.join(outdir, "deviated_angle_subplot.png"), dpi=300, bbox_inches="tight")
         plt.close()
 
+        ## DISTANCE BETWEEN + ANGLE
 
-        
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+
+            ## distance between 
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='distance_between',
+                ci=95,
+                ax=ax,
+                color='green',
+                label='Distance'
+            )
+
+            # second y-axis for forward movement
+            ax2 = ax.twinx()
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='deviation_angle',
+                ci=95,
+                ax=ax2,
+                color='purple',
+                label='Angle Deviation'
+            )
+
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Distance Between Anchor and Partner')
+            ax2.set_ylabel('Angle')
+
+            ax2.spines['right'].set_color('purple')
+            ax2.tick_params(axis='y', colors='purple')
+            ax.spines['left'].set_color('green')
+            ax.tick_params(axis='y', colors='green')
+            ax2.set_ylim(0, 150)
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Distance Between Anchor and Partner', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "distance_between.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+        ## DISTANCE COVERED ON THE SCALAR PROJECTION (DIRECTED MOVEMENT IN LINE WITH A-P TRAJECTORY) + ANGLE
+
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+
+            ## distance between 
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='forward_movement',
+                ci=95,
+                ax=ax,
+                color='green',
+                label='Projected Distance'
+            )
+
+            # second y-axis for forward movement
+            ax2 = ax.twinx()
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='deviation_angle',
+                ci=95,
+                ax=ax2,
+                color='purple',
+                label='Angle Deviation'
+            )
+
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Scalar Projection')
+            ax2.set_ylabel('Angle')
+
+            ax2.spines['right'].set_color('purple')
+            ax2.tick_params(axis='y', colors='purple')
+            ax.spines['left'].set_color('green')
+            ax.tick_params(axis='y', colors='green')
+            ax2.set_ylim(0, 150)
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Projected Coverage and Angle', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "scalar_projection_angle.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+        ##
 
         plt.figure(figsize=(8,8))
         sns.lineplot(data=data, x='Normalized Frame', y='sideways_movement', hue=cluster_name, legend='full', ci=95)
@@ -3447,6 +4573,98 @@ class ClusterPipeline:
         plt.savefig(os.path.join(outdir, "sideways_movement.png"), dpi=300, bbox_inches="tight")
         plt.close()
 
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='sideways_movement',
+                ci=95,
+                legend=False,
+                ax=ax,
+                color='purple'
+            )
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Sideways Deviation')
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Sideways Movement from Expected Trajectory', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "sideways_movement_subplot.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+
+
+
+        plt.figure(figsize=(8,8))
+        sns.lineplot(data=data, x='Normalized Frame', y='aligned_movement', hue=cluster_name, legend='full', ci=95, palette='summer')
+        plt.xlabel('Normalized Time', fontsize=12, fontweight='bold')
+        plt.ylabel('scalar projection movement / total movement', fontsize=12, fontweight='bold')
+        plt.title('Fraction of Movement in Anchor Direction', fontsize=16, fontweight='bold')
+    
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, "aligned_movement.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='aligned_movement',
+                ci=95,
+                legend=False,
+                ax=ax,
+                color='mediumseagreen'
+            )
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('scalar projection movement / total movement')
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Fraction of Movement in Anchor Trajectory', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "aligned_movement_subplot.png"), dpi=300, bbox_inches="tight")
+        plt.close()
 
 
         plt.figure(figsize=(8,8))
@@ -3458,6 +4676,135 @@ class ClusterPipeline:
         plt.tight_layout()
         plt.savefig(os.path.join(outdir, "forward_movement.png"), dpi=300, bbox_inches="tight")
         plt.close()
+
+        clusters = sorted(data[cluster_name].dropna().unique())
+        cols = 4
+        rows = int(np.ceil(len(clusters) / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 3.2*rows), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for i, cluster in enumerate(clusters): # index n label
+            ax = axes[i]  
+            d = data[data[cluster_name] ==cluster]
+
+            sns.lineplot(
+                data=d,
+                x='Normalized Frame',
+                y='forward_movement',
+                ci=95,
+                legend=False,
+                ax=ax,
+                color='purple'
+            )
+
+            ax.set_title(f"Cluster {cluster}", fontsize=12, pad=6)
+            ax.axvline(0, linestyle='--', linewidth=0.8, color='0.5')
+            ax.grid(alpha=0.2)
+            ax.set_xlabel('Normalized Time')
+            ax.set_ylabel('Movement Aligned to the Expected Trajectory')
+
+        # hide any unused subplots
+        for j in range(i + 1, rows * cols):
+            fig.delaxes(axes[j])
+
+        # common labels + overall title
+        fig.suptitle('Movement in Expected Trajectory', fontsize=16, fontweight='bold')
+        fig.supxlabel('')
+        fig.supylabel('')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
+        plt.savefig(os.path.join(outdir, "forward_movement_subplpt.png"), dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+
+
+
+
+        ####### HIERARAJCAL OF ABOVE #######
+
+        group_map = {
+                    1: 'G1', 2: 'G1',
+                    3: 'G2', 4: 'G2',
+                    6: 'G3', 7: 'G3',
+                    8: 'G4', 9: 'G4',
+                    10: 'G5', 11: 'G5',
+                    5: 'G6', 12: 'G6'
+                }
+        
+        df['hierarchal_group'] = df[cluster_name].map(group_map)
+
+        #### ANGLE
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        ## pallette for cluster_role
+        group_A = [1, 3, 5, 6, 8, 10]
+        group_B = [2, 4, 7, 9, 11, 12]
+
+        palette = {}
+
+        for c in group_A:
+            palette[c]  = "#1f77b4"   # dark blue
+        for c in group_B:
+            palette[c] = "#ff7f0e"   # light orange
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(df.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="deviation_angle", ax=ax, hue=cluster_name, palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            ax.set_ylim(0, 180)
+            # ax.set_xlim(-14, 15)
+
+        plt.title("Deviation Angle", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()
+        save_path = os.path.join(outdir, "hierarchical-deviation-angle.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig) 
+
+
+        #### SIDEWAYS MOVEMENT
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(df.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="sideways_movement", ax=ax, hue=cluster_name, palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            # ax.set_ylim(0, 180)
+            # ax.set_xlim(-14, 15)
+
+        plt.title("Sideways Movement", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()
+        save_path = os.path.join(outdir, "hierarchical-sideways-movement.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig) 
+
+        #### FORWARD MOVEMENT
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(df.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="forward_movement", ax=ax, hue=cluster_name, palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            # ax.set_ylim(0, 180)
+            # ax.set_xlim(-14, 15)
+
+        plt.title("Forward Movement", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()
+        save_path = os.path.join(outdir, "hierarchical-forward-movement.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig) 
+
+
+
 
 
 
@@ -3622,9 +4969,343 @@ class ClusterPipeline:
         plt.tight_layout(rect=[0, 0, 1, 0.97])  # leave room for suptitle
         plt.savefig(os.path.join(outdir, "proximal_larvae_subplot.png"), dpi=300, bbox_inches="tight")
         plt.close()
+    
+
+    def hierarchal_mean_trace_summary(self):
+        
+        df = self.df.copy()
+        cluster_name = self.cluster_name
+       
+        hierarchal_tree = (( ((1,2), (3,4)), (5, (6,7)) ),( ((8,9), (10,11)), 12 ))
+
+        ## LEVEL 0
+        x1, y1 = 1, 0
+        x2, y2 = 2, 0
+        x3, y3 = 3, 0
+        x4, y4 = 4, 0
+        x5, y5 = 5, 0
+        x6, y6 = 6, 0
+        x7, y7 = 7, 0
+        x8, y8 = 8, 0
+        x9, y9 = 9, 0
+        x10, y10 = 10, 0
+        x11, y11 = 11, 0
+        x12, y12 = 12, 0
+
+        ## LEVEL 1
+        x_12, y_12 = (x1 + x2) / 2, 1 # (midpoint of x1, x2) and (y=1) is coordinates 
+        x34, y34 = (x3 + x4) / 2, 1
+        x67, y67 = (x6 + x7) / 2, 1
+        x89, y89 = (x8 + x9) / 2, 1
+        x1011, y1011 = (x10 + x11) / 2, 1
+
+        ## LEVEL 2
+        x1234, y1234 = (x_12 + x34) / 2, 2
+        x567, y567 = (x5 + x67) / 2, 2
+        x891011, y891011 = (x89 + x1011) / 2, 2
+
+        ## LEVEL 3
+        x1234567, y1234567 = (x1234 + x567) / 2, 3
+        x89101112, y89101112 = (x891011 + x12) / 2, 3   
+
+        ## LEVEL 4
+        x_123456789101112, y_123456789101112 = (x1234567 + x89101112) / 2, 4
 
 
-                                    
+
+        fig = plt.figure(figsize=(15, 4))
+        gs = gridspec.GridSpec(3, 1, height_ratios=[0.3, 0.6, 0.05], hspace=0.3)
+
+        ax1 = fig.add_subplot(gs[0])  # top: hierarchal tree
+        # ax2 = fig.add_subplot(gs[1])
+        sub_ax2 = gs[1].subgridspec(1, 12, wspace=0.1)
+        axes_ax2 = [fig.add_subplot(sub_ax2[0, i]) for i in range(12)]
+
+        #ax3 = fig.add_subplot(gs[2])  # bottom: average contact frames
+        sub_ax3 = gs[2].subgridspec(1, 12, wspace=0.1)
+        ax3 = fig.add_subplot(sub_ax3[0, :])  # one long axis spanning all 12 columns
+
+        ## PLOTTING HIERARCHAL TREE - MANUALLY USING COORDINATES ABOVE 
+        # ax.plot([x_start, x_end], [y_start, y_end])
+
+        ax1.plot([x1, x1], [y1, y_12], color='black') #12
+        ax1.plot([x2, x2], [y2, y_12], color='black') #12
+        ax1.plot([x1, x2], [y_12, y_12], color='black') #12
+
+        ax1.plot([x3, x3], [y3, y34], color='black') #34
+        ax1.plot([x4, x4], [y4, y34], color='black') #34
+        ax1.plot([x3, x4], [y34, y34], color='black') #34
+
+        ax1.plot([x_12, x_12], [y_12, y1234], color='black') #1234
+        ax1.plot([x34, x34], [y34, y1234], color='black') #1234
+        ax1.plot([x_12, x34], [y1234, y1234], color='black') #1234
+
+        ax1.plot([x6, x6], [y6, y67], color='black') #67
+        ax1.plot([x7, x7], [y7, y67], color='black') #67
+        ax1.plot([x6, x7], [y67, y67], color='black') #67
+
+        ax1.plot([x67, x67], [y67, y567], color='black') #567
+        ax1.plot([x5, x5], [y5, y567], color='black') #567
+        ax1.plot([x5, x67], [y567, y567], color='black') #567
+
+        ax1.plot([x8, x8], [y8, y89], color='black') #89
+        ax1.plot([x9, x9], [y9, y89], color='black') #89
+        ax1.plot([x8, x9], [y89, y89], color='black') #89
+
+        ax1.plot([x10, x10], [y10, y1011], color='black') #1011
+        ax1.plot([x11, x11], [y11, y1011], color='black') #1011
+        ax1.plot([x10, x11], [y1011, y1011], color='black') #1011
+
+        ax1.plot([x89, x89], [y89, y891011], color='black') #891011
+        ax1.plot([x1011, x1011], [y1011, y891011], color='black') #891011
+        ax1.plot([x89, x1011], [y891011, y891011], color='black') #891011
+
+        ax1.plot([x1234, x1234], [y1234, y1234567], color='black') #1234567
+        ax1.plot([x567, x567], [y567, y1234567], color='black') #1234567
+        ax1.plot([x1234, x567], [y1234567, y1234567], color='black') #1234567
+
+        ax1.plot([x12, x12], [y12, y89101112], color='black') #89101112
+        ax1.plot([x891011, x891011], [y891011, y89101112], color='black') #89101112
+        ax1.plot([x12, x891011], [y89101112, y89101112], color='black') #89101112
+
+        ax1.plot([x1234567, x1234567], [y1234567, y_123456789101112], color='black') #123456789101112
+        ax1.plot([x89101112, x89101112], [y89101112, y_123456789101112], color='black') #123456789101112
+        ax1.plot([x1234567, x89101112], [y_123456789101112, y_123456789101112], color='black') #123456789101112
+
+        for spine in ax1.spines.values():
+            spine.set_visible(False)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        
+        ## MEAN TRACES PLOTTING
+
+        anchor_base = "#4F7942"   
+        partner_base = "#916288"
+        anchor_cmap = plt.cm.Greens
+        partner_cmap = plt.cm.Purples
+
+        ordered_frames = sorted(df["Normalized Frame"].dropna().unique())
+        norm_frames = Normalize(vmin=ordered_frames[0], vmax=ordered_frames[-1]) #ltr for colour mapping
+
+        clusters = sorted(df[cluster_name].unique())
+
+        for cluster, ax in zip(clusters, axes_ax2):
+            cluster_df = df[df[cluster_name] == cluster].copy()
+            by_frame = cluster_df.sort_values("Normalized Frame").groupby("Normalized Frame")
+            frames = [f for f in by_frame.groups.keys() if f == f] # list of frames (non-nan)
+            
+            # role+node, return mean X series and mean Y series (indexed by frame)
+            def get_means(role, node):
+                mx = by_frame[f"{role} x_{node}"].mean()  # Series: index = frame → mean x
+                my = by_frame[f"{role} y_{node}"].mean()  # Series: index = frame → mean y
+                return mx, my
+
+            ## DRAW TRAILS
+            for node in ("head", "body", "tail"):
+                anchor_x, anchor_y = get_means("anchor",  node) # xy means per frame for anchor
+                partner_x, partner_y = get_means("partner", node) # xy means per frame for partner
+
+                for f0, f1 in zip(frames[:-1], frames[1:]): # consecutive frame pairs (frame 0, frame 1), (frame 1, frame 2), ...
+                    # anchor
+                    if f0 in anchor_x.index and f1 in anchor_x.index: # check that both frames have data
+                        x0, y0 = anchor_x.loc[f0], anchor_y.loc[f0]
+                        x1, y1 = anchor_x.loc[f1], anchor_y.loc[f1]
+                        if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(x1) and np.isfinite(y1):
+                            ax.plot([x0, x1], [y0, y1],
+                                    color=anchor_cmap(norm_frames(f1)), alpha=0.7, linewidth=1.2, zorder=1)
+                    # partner
+                    if f0 in partner_x.index and f1 in partner_x.index:
+                        x0, y0 = partner_x.loc[f0], partner_y.loc[f0]
+                        x1, y1 = partner_x.loc[f1], partner_y.loc[f1]
+                        if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(x1) and np.isfinite(y1):
+                            ax.plot([x0, x1], [y0, y1],
+                                    color=partner_cmap(norm_frames(f1)), alpha=0.7, linewidth=1.2, zorder=1) #zorder=1 trails goes underneath skeletons and markers
+        
+            ## DRAW SKELETONS: CONNECT HEAD→BODY→TAIL PER FRAME (TIME-COLORED)
+            for f in frames:
+                # anchor
+                parts = {}
+                for node in ("head", "body", "tail"):
+                    x_means = by_frame[f"anchor x_{node}"].mean() 
+                    y_means = by_frame[f"anchor y_{node}"].mean()
+
+                    if f in x_means.index:
+                        x, y = x_means.loc[f], y_means.loc[f]
+                        if np.isfinite(x) and np.isfinite(y):
+                            parts[node] = (x, y)
+                
+                if len(parts) == 3:
+                 ax.plot([parts["head"][0], parts["body"][0], parts["tail"][0]],
+                            [parts["head"][1], parts["body"][1], parts["tail"][1]],
+                            color=anchor_cmap(norm_frames(f)), alpha=0.75, linewidth=1.0, zorder=2)
+                # partner
+                parts = {}
+                for node in ("head", "body", "tail"):
+                    x_means = by_frame[f"partner x_{node}"].mean()
+                    y_means = by_frame[f"partner y_{node}"].mean()
+                    if f in x_means.index:
+                        x, y = x_means.loc[f], y_means.loc[f]
+                        if np.isfinite(x) and np.isfinite(y):
+                            parts[node] = (x, y)
+                if len(parts) == 3:
+                    ax.plot([parts["head"][0], parts["body"][0], parts["tail"][0]],
+                            [parts["head"][1], parts["body"][1], parts["tail"][1]],
+                            color=partner_cmap(norm_frames(f)), alpha=0.75, linewidth=1.0, zorder=2)
+
+
+            ## POINTS FOR NODES AT EACH FRAME (TIME COLORED; HEAD BIGGER)
+            node_marker = {"head": "o", "body": "o", "tail": "o"}
+            size_map  = {"head": 6, "body": 4, "tail": 2}
+
+            for node in ("head", "body", "tail"):
+                anchor_x_means, anchor_y_means = get_means("anchor",  node)
+                partner_x_means, partner_y_means = get_means("partner", node)
+                for f in frames:
+                    if f in anchor_x_means.index:
+                        x, y = anchor_x_means.loc[f], anchor_y_means.loc[f]
+                        if np.isfinite(x) and np.isfinite(y):
+                            ax.scatter(x, y, s=size_map[node], marker=node_marker[node],
+                                        color=anchor_cmap(norm_frames(f)), alpha=0.9, zorder=3)
+                    
+                    if f in partner_x_means.index:
+                        x, y = partner_x_means.loc[f], partner_y_means.loc[f]
+                        if np.isfinite(x) and np.isfinite(y):
+                            ax.scatter(x, y, s=size_map[node], marker=node_marker[node],
+                                        color=partner_cmap(norm_frames(f)), alpha=0.9, zorder=3)
+
+            # 6) tidy the one big axis
+            xlim = (-50, 100)
+            ylim = (-10, 300)
+            ax.set_xlim(*xlim)
+            ax.set_ylim(*ylim)
+            # ax.set_aspect("equal", adjustable="box")
+            ax.set_title(cluster, fontsize=16, fontweight='bold')
+            for ax in axes_ax2:
+                ax.axis('off')
+
+        # 7) put one legend for the whole figure (so panels don’t shift)
+        # hue_handles = [
+        #     Line2D([0],[0], color=anchor_base, lw=3, label='Anchor'),
+        #     Line2D([0],[0], color=partner_base, lw=3, label='Partner'),
+        # ]
+        # fig.legend(hue_handles, [h.get_label() for h in hue_handles],
+        #         loc="center right", bbox_to_anchor=(1.02, 0.62), fontsize=10)
+        
+
+        ## AVERAGE CONTACT FRAMES 
+
+        interaction_contact_summary = []
+
+        for cluster_id in sorted(df[cluster_name].unique()):
+            cluster_df = df[df[cluster_name] == cluster_id]
+            for inter_id in cluster_df["interaction_id"].unique():
+                inter_df = cluster_df[cluster_df["interaction_id"] == inter_id]
+                n_close = (inter_df["min_distance"] < 1).sum()
+                interaction_contact_summary.append({
+                    "cluster": cluster_id,
+                    "interaction_id": inter_id,
+                    "frames_below_1mm": n_close})
+
+        df_interaction_contact = pd.DataFrame(interaction_contact_summary)
+
+        mean_frames = (
+            df_interaction_contact
+            .groupby('cluster')['frames_below_1mm']
+            .mean()
+        )
+
+        # 2) ensure index types match the deviation index (important for reindex)
+        mean_frames.index = mean_frames.index.astype(int)
+        order = [1,2,3,4,5,6,7,8,9,10,11,12]   # matches your dendrogram order
+        mean_frames = mean_frames.reindex(order, fill_value=0)
+        heat = mean_frames.to_numpy()[np.newaxis, :]
+
+
+        colors = ["skyblue", "mediumseagreen", "darkgreen"]
+        # build a sequential colormap from those
+        my_cmap = LinearSegmentedColormap.from_list("greenblue_custom", colors)
+
+        # 5) draw the heat “box” (single row)
+        im = ax3.imshow(
+            heat,
+            aspect='auto',
+            interpolation='nearest',
+            vmin=0,  # anchor scale at 0
+            cmap=my_cmap,
+            # cmap='PuBuGn' 
+        )
+
+        ax3.set_yticklabels([])
+        ax3.set_yticks([])
+        ax3.tick_params(left=False)
+        ax3.set_xlabel("")             # remove x-axis label
+        ax3.set_xticklabels([])        # remove tick labels
+        ax3.set_xticks([])             # remove ticks entirely
+        ax3.tick_params(bottom=False)  # remove the small tick lines
+
+
+        # optional: make the heat row compact and boxy
+        for spine in ax3.spines.values():
+            spine.set_visible(False)
+        
+        # === add colorbar OUTSIDE grid ===
+        cbar = fig.colorbar(
+            im,
+            ax=[ax1, *axes_ax2, ax3],        # anchors to both axes (so it aligns with total figure height)
+            fraction=0.01,         # width of colorbar relative to figure
+            pad=0.01,              # horizontal gap between plots and colorbar
+            location='right'       # move to right side
+        )
+        cbar.set_label('Average Contact Frames', rotation=270, labelpad=15)
+
+        # fig.subplots_adjust(hspace=0.0)
+        output = os.path.join(self.directory, "hierarchal_mean_trace_summary.png")
+        plt.savefig(output, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+
+    def schematic(self):
+
+        df =self.df.copy()
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "schematic")
+        os.makedirs(output, exist_ok=True)
+        
+        ## PLOTTING SCHEMATIC IMAGES FOR EACH CLUSTER
+        files = [ 
+        '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/custer_illastration/head-head.png', 
+        '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/custer_illastration/vertical_pass.png',
+        '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/custer_illastration/horizontal_pass.png',
+        '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/custer_illastration/tailing.png'
+        ]
+     
+        order = [0,0,0,0,3,2,2,1,1,2,2,3] ## order of files - index matched to schematic
+
+        fig, axes = plt.subplots(1, 12, figsize=(24, 3))  # width x height in inches
+
+        for col, ax in enumerate(axes):
+            img = mpimg.imread(files[order[col]])
+            ax.imshow(img)
+            ax.axis("off")  # no ticks/frames
+            ax.set_title(f"{col + 1}", fontsize=14, fontweight='bold', pad=10)
+
+        # Tight spacing; tweak if needed
+        plt.subplots_adjust(wspace=0.02, left=0.01, right=0.99, top=0.90, bottom=0.05)
+
+        save_path = os.path.join(output, "schematic_panel.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0.02)
+
+        plt.show()
+
+        plt.close(fig)
+
+
+
+
+
+
+
 
 
 
@@ -3633,7 +5314,7 @@ class ClusterPipeline:
 
 
       
-
+    
 
 
 
@@ -3682,9 +5363,9 @@ class ClusterPipeline:
 
 if __name__ == "__main__":
     # Set your paths
-    directory = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/test3_F18/test-new-pipeline/Yhat.idt.pca"
+    directory = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1"
     interactions = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/test4_F29/cropped_interactions.csv"
-    clusters = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/test3_F18/pca-data2-F18.csv"
+    clusters = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/pca-data2-F18.csv"
     cluster_name = "Yhat.idt.pca"   # or whatever your cluster column is
     video_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/videos_original"
 
@@ -3698,24 +5379,29 @@ if __name__ == "__main__":
     
     # pipeline.grid_videos()
     # pipeline.raw_trajectories()
-    # # pipeline.mean_trajectories()
+    # pipeline.mean_trajectories()
     # pipeline.barplots() 
+    # pipeline.barplot_deviation()
     # pipeline.speed()
     # pipeline.acceleration()
     # pipeline.heading_angle()
     # pipeline.approach_angle()
     # pipeline.body_distance()
     # pipeline.min_distance()
-    pipeline.distance()
+    # pipeline.distance()
     # pipeline.contact()
     # pipeline.summary_quantifications()
     # pipeline.summary_anchor_partner()
+    # pipeline.hierarchal_summary()
     # pipeline.mean_traces()
-    # pipeline.mean_traces_gifs()
+    # pipeline.mean_trace_temporal()
+    # pipeline.mean_traces_gifs() 
     # pipeline.spatial_cluster()
     # pipeline.cluster_over_time()
-    pipeline.relative_partner_metrics()
+    # pipeline.relative_partner_metrics()
     # pipeline.proximal_conspecifs()
+    # pipeline.hierarchal_mean_trace_summary()
+    pipeline.schematic()
 
 
 

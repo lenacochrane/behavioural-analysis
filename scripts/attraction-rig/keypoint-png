@@ -1,0 +1,88 @@
+import pandas as pd 
+import numpy as np
+import matplotlib as plt
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import cv2
+import random
+import shapely.wkt
+import glob
+
+
+def generate_random_color():
+    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+# Set the image size (pixel resolution of videos)
+image_size = 1400
+
+# Directory containing the CSV files
+directory_path = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated'
+output_directory = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated/keypoint-png'
+
+# Make sure the output directory exists
+  # means it won't throw an error if the directory already exists
+os.makedirs(output_directory, exist_ok=True)
+
+# Loop through all CSV files in the directory
+  # glob glob allows iteration over files in a directory
+for csv_file in glob.glob(os.path.join(directory_path, '*.tracks.feather')):
+    # Load the dataframe from a csv file
+    df = pd.read_feather(csv_file)
+    df = df[df['frame'] < 100]
+    # sort by frame 
+    df = df.sort_values('frame')
+
+    # Create an image array
+      # image size and 3 color channels (RGB)
+    # tracks_image = np.zeros((image_size, image_size, 3), dtype=np.uint8)
+
+    tracks_image = np.full((image_size, image_size, 3), 255, dtype=np.uint8)
+
+
+    # Create a dictionary to hold colors for each track
+      # aims to ensure each track has a unique color 
+    track_colors = {}
+
+    # Process each track 
+    for track in df['track_id'].unique():
+        # ensure track is unique 
+        track_df = df[df['track_id'] == track]
+        # assign the track a random color using random color definition
+        track_colors[track] = generate_random_color()
+
+
+        # iterate over the track data 
+
+        for i in range(1, len(track_df)):
+
+            # access the current and previous frames
+            prev_frame = track_df.iloc[i-1]
+            curr_frame = track_df.iloc[i]
+
+            # this checks that none of the coordinates are missing using isna 
+            if not prev_frame[['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'x_tail']].isna().any() and not curr_frame[['x_head', 'y_head', 'x_body', 'y_body', 'x_tail', 'x_tail']].isna().any():
+                # Draw lines for each segment
+                  # draws lines between consecutive points
+                cv2.line(tracks_image, 
+                         (int(prev_frame['x_head']), int(prev_frame['y_head'])), 
+                         (int(curr_frame['x_head']), int(curr_frame['y_head'])), 
+                         color=track_colors[track], 
+                         thickness=1)
+                cv2.line(tracks_image, 
+                         (int(prev_frame['x_body']), int(prev_frame['y_body'])), 
+                         (int(curr_frame['x_body']), int(curr_frame['y_body'])), 
+                         color=track_colors[track], 
+                         thickness=1)
+                cv2.line(tracks_image, 
+                         (int(prev_frame['x_tail']), int(prev_frame['y_tail'])), 
+                         (int(curr_frame['x_tail']), int(curr_frame['y_tail'])), 
+                         color=track_colors[track], 
+                         thickness=1)
+
+    # Construct the output file name based on the CSV file name
+    output_file_name = os.path.basename(csv_file).replace('.feather', '_100_white.png')
+    output_file_path = os.path.join(output_directory, output_file_name)
+
+    # Save the image
+    cv2.imwrite(output_file_path, tracks_image)
