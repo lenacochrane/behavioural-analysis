@@ -14,3 +14,10 @@ import glob
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+
+df = pd.read_csv('/Users/cochral/Desktop/disease_testing_2.csv')
+
+df = df[["Disease", "disgenet_associations"] + [c for c in df.columns if c not in ["Disease", "disgenet_associations"]]]
+
+df.to_csv('/Users/cochral/Desktop/disease_testing_2.csv', index=False)

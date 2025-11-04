@@ -135,24 +135,51 @@ def pubmed_count(df, sleep_s=0.35,  include_aliases=True):
 
             context_counts[label] = search_pubmed(q)
             time.sleep(sleep_s / 2)  # gentle delay between context queries
+            
 
-        other = (total or 0) - sum((context_counts.get(k) or 0) for k in ["mouse", "human", "cell line", "drosophila"]) # doesnt make sense due to so much overlap
+        diseases = []
+        # add from disgenet_associations
+        if row.disgenet_associations:
+            for d in row.disgenet_associations:
+                diseases.append(d)
+
+        # add from Disease_disgenet_matched
+        if row.Disease_disgenet_matched:
+            for d in row.Disease_disgenet_matched:
+                diseases.append(d)
+
+        print(diseases)
+
+        if diseases:
+            disease_queries = [
+                f'({make_tiab(search)}) AND ("{d}"[Title/Abstract])'
+                for d in diseases
+            ]
+            disease_hits = sum(search_pubmed(q) or 0 for q in disease_queries)
+        else:
+            disease_hits = 0
+
+        context_counts["specific_disease"] = disease_hits
+        time.sleep(sleep_s)
 
         data.append({
             "gene": row.gene,
             "aliases_used": search,
             "total": total,
             **context_counts,
-            'other': other
         })
+
         time.sleep(sleep_s)
 
     pubmed_df = pd.DataFrame(
         data,
-        columns=["gene", "aliases_used", "total", 'disease model', "mouse", "human", "cell line", "drosophila", 'other']
+        columns=["gene", "aliases_used", "total", 'disease model', "mouse", "human", "cell line", "drosophila", 'specific_disease']
     )
-    df = df.merge(pubmed_df, on="gene", how="left", validate="one_to_one")
+    # df = df.merge(pubmed_df, on="gene", how="left", validate="one_to_one")
+    df = df.merge(pubmed_df, on="gene", how="left")
     return df
+
+
 
 # ------------------------------------------------------------------------------
 # ORTHOLOGUE: identifies mouse and fly orthologues
@@ -579,14 +606,89 @@ def add_aliases(df, max_terms=10):
 
     return df
 
-
-
-
-
-
-
-
+# ------------------------------------------------------------------------------
+# DISEASE_ASSOCIATION: identifies assocations in target disorders
+# ------------------------------------------------------------------------------
 def disease_association(df):
+    
+    """
+    Requires df['Gene'];
+    Screen for >= 0.7 scored associated diseases;
+    Identifies if hits are within target disorders;
+    Return df['disgenet_assocations']
+    """
+
+    DISGENET_TOKEN = "1a851ae4-eae3-4209-a5f1-bdb1f4582256" # personal token
+
+    # Create a persistent session (reuses the same connection = faster for many genes)
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {DISGENET_TOKEN}",
+        "Accept": "application/json"
+    })
+
+    def gene_summary(symbol):
+        """
+        Query DisGeNET for high-level gene–disease associations for one gene.
+        Returns a list of disease names with score ≥ 0.8.
+        """
+        url = f"https://api.disgenet.com/api/v1/gda/summary?gene_symbol={symbol}"
+        r = session.get(url)
+
+        if r.status_code != 200:
+            print(f"⚠️ Request failed for {symbol}: {r.status_code}")
+            return []
+
+        payload = r.json().get("payload", [])
+        if not payload:
+            print(f"No data found for {symbol}")
+            return []
+
+        diseases = []
+        for record in payload:
+            score = record.get("score", 0)
+            name = record.get("diseaseName")
+            if score >= 0.7 and name: ### edit score simply for assocations 
+                diseases.append(name)
+        
+        # Define your target disease categories
+        target_diseases = [
+            "Schizophrenia",
+            "Autism Spectrum Disorders",
+            "Attention Deficit Hyperactivity Disorder",
+            "Epilepsy",
+            "Intellectual Disability"
+        ]
+        target_diseases_lower = [d.lower() for d in target_diseases]
+
+
+        filtered = []
+        for disease in diseases:
+            if disease.lower() in target_diseases_lower:
+                filtered.append(disease)
+        return filtered
+    
+    genes = df["gene"].astype(str).str.upper()
+
+    results = []
+    for gene in genes:
+        results.append(gene_summary(gene))
+        time.sleep(0.75)  # wait half a second between each request
+
+    df["disgenet_associations"] = results
+
+    return df
+
+# ------------------------------------------------------------------------------
+# DISEASE_ASSOCIATION_DF: identifies gene x disease assocations 
+# ------------------------------------------------------------------------------
+
+def disease_association_df(genes):
+
+    """
+    Query DisGeNET for high-level gene disease associations for all genes listed in df['Gene'].
+    Returns a combined DataFrame of strong associations (score ≥ 0.7).
+    """
 
     DISGENET_TOKEN = "1a851ae4-eae3-4209-a5f1-bdb1f4582256" # personal token
 
@@ -598,178 +700,87 @@ def disease_association(df):
     })
 
 
+    def gene_summary(symbol):
+        """
+        Query DisGeNET for high-level gene disease associations for one gene.
+        Returns a tidy DataFrame with summary fields.
+        """
+        url = f"https://api.disgenet.com/api/v1/gda/summary?gene_symbol={symbol}"
+        r = session.get(url)
 
-    # url = "https://api.disgenet.com/api/v1/gda/summary?gene_symbol=SHANK3"
-    # response = session.get(url)
+        # Check response and extract payload
+        if r.status_code != 200:
+            print(f"⚠️ Request failed for {symbol}: {r.status_code}")
+            return pd.DataFrame(columns=[
+                "symbolOfGene", "diseaseName",  
+                "score", "el", "ei"
+            ])
 
-    # print("Status code:", response.status_code)
-    # print("Response headers:", response.headers.get("content-type"))
-    # print("Response preview:", response.text[:500])
+        payload = r.json().get("payload", [])
+        print(f"Fetched {len(payload)} records for {symbol}")
 
-    # def get_gene_diseases(gene_symbol):
-    #     url = f"https://api.disgenet.com/api/v1/gda/gene/{gene_symbol}?source=CURATED"
-    #     response = session.get(url)
+        # Convert to DataFrame directly
+        if not payload:
+            print(f"No data found for {symbol}")
+            return pd.DataFrame(columns=[
+                "symbolOfGene", "diseaseName", 
+                "score", "el", "ei"
+            ])
 
-    #     print("Status code:", response.status_code)
-    #     print("Content type:", response.headers.get("content-type"))
+        df = pd.DataFrame(payload)[[
+            "symbolOfGene", "diseaseName", 
+            "score", "el", "ei", 
+        ]].copy()
 
-    #     data = response.json().get("data", [])
-    #     if not data:
-    #         print(f"No curated data found for {gene_symbol}")
-    #         return None
+        # Sort descending by score and remove score assocations < 0.6 tbh for now no score
+        df = df[df["score"] >= 0.0].sort_values(by="score", ascending=False).reset_index(drop=True)
+        print(df)
 
-    #     for entry in data[:5]:
-    #         print({
-    #             "gene_symbol": entry.get("gene_symbol"),
-    #             "disease_name": entry.get("disease_name"),
-    #             "score": entry.get("score"),
-    #             "source": entry.get("source")
-    #         })
-
-    #     return data
-
-    # get_gene_diseases("SHANK3")
-
-    # def get_gene_diseases(gene_symbol):
-    #     """
-    #     Diagnostic version: prints every step to identify where the failure happens.
-    #     """
-    #     # STEP 1: confirm which gene we’re querying
-    #     print(f"\n[DEBUG] Starting query for gene: {gene_symbol}")
-
-    #     # STEP 2: build URL explicitly
-    #     url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
-    #     print(f"[DEBUG] Full request URL: {url}")
-
-    #     # STEP 3: print headers being sent
-    #     print("[DEBUG] Session headers:")
-    #     for k, v in session.headers.items():
-    #         print(f"    {k}: {v}")
-
-    #     # STEP 4: send the request
-    #     print("[DEBUG] Sending request...")
-    #     response = session.get(url)
-    #     print(f"[DEBUG] Response received. Status code: {response.status_code}")
-
-    #     # STEP 5: show what kind of content came back
-    #     print(f"[DEBUG] Response content type: {response.headers.get('content-type')}")
-    #     print(f"[DEBUG] Raw text preview (first 300 chars): {response.text[:300]}")
-
-    #     # STEP 6: parse JSON safely
-    #     try:
-    #         json_data = response.json()
-    #         print("[DEBUG] JSON parsed successfully.")
-    #     except Exception as e:
-    #         print(f"[ERROR] JSON parsing failed: {e}")
-    #         print("[DEBUG] Raw text snippet:", response.text[:500])
-    #         return None
-
-    #     # STEP 7: inspect the JSON structure
-    #     if isinstance(json_data, dict):
-    #         print(f"[DEBUG] JSON top-level keys: {list(json_data.keys())}")
-    #         data = json_data.get("data", [])
-    #         print(f"[DEBUG] Type of 'data' field: {type(data)}; Length: {len(data)}")
-    #     else:
-    #         print("[DEBUG] JSON is not a dict — unexpected structure.")
-    #         return None
-
-    #     # STEP 8: print first few records if they exist
-    #     if not data:
-    #         print(f"[INFO] No results returned for {gene_symbol}")
-    #         return None
-
-    #     print("[DEBUG] First few entries:")
-    #     for entry in data[:5]:
-    #         print({
-    #             "gene_symbol": entry.get("gene_symbol"),
-    #             "disease_name": entry.get("disease_name"),
-    #             "score": entry.get("score"),
-    #             "source": entry.get("source")
-    #         })
-
-    #     return data
-
-
-    # # 🔍 TEST IT
-    # get_gene_diseases("SHANK3")
-
-
-    # def get_gene_diseases(gene_symbol):
-    #     url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
-    #     response = session.get(url)
-
-    #     print("Status code:", response.status_code)
-    #     print("Content type:", response.headers.get("content-type"))
-
-    #     json_data = response.json()
-    #     print("Top-level keys:", list(json_data.keys()))
-
-    #     # ✅ Corrected here: use 'payload'
-    #     data = json_data.get("payload", [])
-    #     print("Number of records in payload:", len(data))
-
-    #     if not data:
-    #         print(f"No data found for {gene_symbol}")
-    #         return None
-
-    #     for entry in data[:5]:
-    #         print({
-    #             "gene_symbol": entry.get("gene_symbol"),
-    #             "disease_name": entry.get("disease_name"),
-    #             "score": entry.get("score"),
-    #             "source": entry.get("source")
-    #         })
-
-    #     return data
-
-    # get_gene_diseases("SHANK3")
-
-
-    def get_gene_diseases(gene_symbol):
-        url = f"https://api.disgenet.com/api/v1/gda/evidence?gene_symbol={gene_symbol}"
-        response = session.get(url)
-        json_data = response.json()
-
-        data = json_data.get("payload", [])
-        print(f"Total records: {len(data)}")
-
-        # Print one raw record to inspect structure
-        if data:
-            import json
-            print("[DEBUG] Example record structure:")
-            print(json.dumps(data[0], indent=2))
-        else:
-            print("No data found.")
-
-    get_gene_diseases("SHANK3")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return df
     
 
+    genes = [g.upper() for g in genes]
 
+    dfs = []
+    for gene in genes:
+        df = gene_summary(gene)
+        df['Gene'] = gene
+        dfs.append(df)
+        time.sleep(0.75)
+
+    disease_association_df = pd.concat(dfs, ignore_index=True)
+    disease_association_df = disease_association_df[["Gene", "symbolOfGene", "diseaseName", "score", "el", "ei"]]
+
+    return disease_association_df
 
 # ------------------------------------------------------------------------------
 # MERGE: merges the output dataframe with the original gene panel dataframe
 # ------------------------------------------------------------------------------
 def merge(df1, df2):
-    df2 = df2.rename(columns={"gene": "Gene"}) # newly generated df
+    # df2 = df2.rename(columns={"gene": "Gene"}) # newly generated df
+    df2["Gene"] = df2["gene"]
     merged = df1.merge(df2, on="Gene", how="left")
     merged = merged.sort_values(by='weighted_score')
     merged["filtered_weighted_score"] = merged["weighted_score"] >= 7
-    return merged
 
+    # --- create a list version of disease names --- chatgpt called them weridly 
+    def expand_disease(name):
+        # extract full name and abbreviation in parentheses if present
+        match = re.match(r"^(.*?)\s*\((.*?)\)\s*$", name)
+        if match:
+            full = match.group(1).strip()
+            abbr = match.group(2).strip()
+            # normalize ADHD style naming (remove hyphens etc.)
+            full_clean = full.replace("-", " ").replace("/", " ")
+            return [full_clean, abbr.lower()]
+        else:
+            # no parentheses — just return cleaned full name
+            return [name]
+
+    merged["Disease_disgenet_matched"] = merged["Disease"].apply(expand_disease)
+    merged = merged.dropna(subset=["gene"])
+    return merged
+    
 # ------------------------------------------------------------------------------
 # CHECK_TWO_ALIASES: checks whether pubmed search behaving as expected 
 # ------------------------------------------------------------------------------
@@ -810,31 +821,30 @@ genes = [
     "GABRA1", "GABRG2", "DEPDC5", "CDKL5", "PCDH19", "KCNT1", "SLC2A1", "TSC1", "TSC2", "KMT2A",
     "NSD1", "CREBBP", "MECP2", "FMR1", "SETD5", "PPP2R5D"]
 
-
-## test
-genes = [
-    "SETD1A", "CHD8", "SHANK3",]
+genes = ['MECP2', 'DYRK1A']
 
 
-df = orthologue(genes)
+
+df2 = orthologue(genes)
+df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
+df = merge(df1,df2) #merge to chatgpt panel 
+
 df = disease_association(df)
-# df = goterm(df)
-# df = add_aliases(df) # might be worth here checking if aliases make sense 
-# df = pubmed_count(df, include_aliases=True)
-
-
-
-# df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
-# df2= pd.read_csv('/Users/cochral/Desktop/merged_gene_automated_alias_2.csv')
-# df = merge(df1,df2)
+df = goterm(df)
+df = add_aliases(df) # might be worth here checking if aliases make sense 
+df = pubmed_count(df, include_aliases=True)
 
 directory = '/Users/cochral/Desktop'
-output = os.path.join(directory, 'disease_testing.csv')
+output = os.path.join(directory, 'disease.csv')
 df.to_csv(output, index=False)
 
 
 
+# df = disease_association_df(genes) # whole new disease x disease dataframe
 
+# df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
+# df2= pd.read_csv('/Users/cochral/Desktop/disease_testing.csv')
+# df = merge(df1,df2)
 
  
 
