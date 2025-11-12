@@ -43,9 +43,37 @@ def weighted_ortholog_score(df, output_directory):
     norm = plt.Normalize(top['similarity_percent'].min(), top['similarity_percent'].max())
     palette = [cm.YlGnBu(norm(v)) for v in top['similarity_percent'].values]
 
+
+    # Convert stringified lists to actual lists if needed
+    df["all_diseases"] = df["all_diseases"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x) 
+
+    expanded = df.explode("all_diseases").dropna(subset=["all_diseases"]) 
+
+    # Normalise all_diseases into consistent lowercase naming
+    def disease_name(name):
+        if not isinstance(name, str):
+            return name
+        n = name.strip().lower()
+        # merge variants
+        if "autism spectrum" in n or n =='asd':
+            return "autism spectrum disorder"
+        if "intellectual disability" in n or n == "id":
+            return "intellectual disability"
+        if "attention deficit" in n or n == "adhd":
+            return "attention deficit hyperactivity disorder"
+        if "schizophrenia" in n or n == "scz":
+            return "schizophrenia"
+        if "epilepsy" in n:
+            return "epilepsy"
+        return n
+
+    # apply normalisation
+    expanded["all_diseases"] = expanded["all_diseases"].apply(disease_name)
+
     # DISEASE X GENE MEMBERSHIP MATRIX
-    mat = (df.assign(flag=1)
-            .pivot_table(index="Disease", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
+    mat = (expanded.assign(flag=1)
+            .pivot_table(index="all_diseases", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
 
     
     # FIGURE SIZE / LAYOUT 
@@ -145,7 +173,7 @@ def weighted_ortholog_score(df, output_directory):
 # ------------------------------------------------------------------------------
 # SCATTER_SIMILARITY_IDENTITY: scatter plot of similarity versus identity
 # ------------------------------------------------------------------------------
-def scatter_similarity_identitiy(df, output_directory, include_hue=True):
+def scatter_similarity_identitiy(df, output_directory, include_hue=False):
 
     plt.figure(figsize=(10,8))
 
@@ -295,11 +323,10 @@ def scatter_similarity_identitiy_weightedscore(df, output_directory):
     save_path = f"{output_directory}/scatter_similarity_identity_weightedscore.png"
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
-
 # ------------------------------------------------------------------------------
 # SCATTER_SIMILARITY_IDENTITY_PER_DISEASE: similarity versus identity
 # ------------------------------------------------------------------------------
-def scatter_similarity_identitiy_per_disease(df, output_directory, include_hue=True):
+def scatter_similarity_identitiy_per_disease(df, output_directory):
 
     for disease in df["Disease"].dropna().unique():
         sub = df[df["Disease"] == disease]
@@ -310,9 +337,8 @@ def scatter_similarity_identitiy_per_disease(df, output_directory, include_hue=T
             "x":"identity_percent",
             "y":"similarity_percent",
             "s":60,
-            "edgecolor":"grey"}
-        if include_hue:
-            scatter_arguments["hue"] = "both_best_score"
+            "edgecolor":"grey", "hue":"gda_score"}
+       
 
         sns.scatterplot(**scatter_arguments)
         plt.xlabel("Identity (%)", fontsize=12, fontweight='bold')
@@ -350,11 +376,59 @@ def scatter_similarity_identitiy_per_disease(df, output_directory, include_hue=T
         plt.close()
 
 # ------------------------------------------------------------------------------
+# SCATTER_SIMILARITY_IDETNTIY_GDA_SCORE: scatter with gda score (specific to disease)
+# ------------------------------------------------------------------------------
+def scatter_similarity_identitiy_gda_score(df, output_directory):
+
+    plt.figure(figsize=(10,8))
+
+    scatter_arguments = {
+        "data":df,
+        "x":"identity_percent",
+        "y":"similarity_percent",
+        "s":60,
+        'hue':"gda_score",   
+        "palette":"viridis",              
+        "edgecolor":"grey",  "legend": False}
+    
+    scatter = sns.scatterplot(**scatter_arguments)
+
+    norm = plt.Normalize(df["gda_score"].min(), df["gda_score"].max())
+    sm = plt.cm.ScalarMappable(cmap="viridis", norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=scatter, fraction=0.03, pad=0.02)
+    cbar.set_label("GDA Score", fontsize=10)
+
+    plt.xlabel("Identity (%)", fontsize=12, fontweight='bold')
+    plt.ylabel("Similarity (%)", fontsize=12, fontweight='bold')
+    plt.title("Fly Orthologues: Identity vs Similarity", fontsize=16, fontweight='bold')
+    plt.xlim(0,90)
+    plt.ylim(0,90)
+    # plt.axvline(x=30, color='grey', linestyle='--', linewidth=1)  # vertical at identity = 40
+    # plt.axhline(y=50, color='grey', linestyle='--', linewidth=1)  # horizontal at similarity = 50
+
+    # --- small static text labels next to each point ---
+    for _, row in df.iterrows():
+        plt.text(
+            row["identity_percent"] + 0.4,  # small x-offset so text doesn't overlap the dot
+            row["similarity_percent"],
+            row["Gene"],
+            fontsize=7,
+            alpha=0.7)
+
+    plt.tight_layout()
+
+    # --- save static version before interactive part ---
+    save_path = f"{output_directory}/scatter_similarity_identity_gdascore.png"
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+# ------------------------------------------------------------------------------
 # BARPLOT_PUBMED: barplot for pubmed counts
 # ------------------------------------------------------------------------------
-def barplot_pubmed(df, output_directory, include_hue=True):
+def barplot_pubmed(df, output_directory, include_hue=False):
 
-    y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila"]
+    y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila", 'specific_disease']
 
     # --- loop per disease ---
     for disease, dsub in df.groupby("Disease", dropna=True):
@@ -380,10 +454,9 @@ def barplot_pubmed(df, output_directory, include_hue=True):
                 "x":'Gene',
                 "y":y,
                 "order":gene_order,
-                "edgecolor":'black'}
+                "edgecolor":'black',
+                'hue': "gda_score"}
             
-            if include_hue:
-                bar_argument['hue'] = "both_best_score"
 
             ax = sns.barplot(**bar_argument)
 
@@ -421,12 +494,13 @@ def barplot_pubmed(df, output_directory, include_hue=True):
             plt.savefig(output, dpi=300, bbox_inches="tight")
             plt.close()
 
+
 # ------------------------------------------------------------------------------
 # GENES_DISEASE: barplot and disease assocation
 # ------------------------------------------------------------------------------
-def genes_disease(df, output_directory, include_hue=True):
+def genes_disease(df, output_directory, include_hue=False):
 
-    plotting_y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila"]
+    plotting_y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila", 'specific_disease']
 
     for y in plotting_y_cols:
         if y not in df.columns:
@@ -440,10 +514,38 @@ def genes_disease(df, output_directory, include_hue=True):
         gene_order = top.sort_values(y, ascending=False)["Gene"].tolist()
         top = top.set_index("Gene").loc[gene_order].reset_index() # access data using gene if gene is index : )
 
+        # Convert stringified lists to actual lists if needed
+        df["all_diseases"] = df["all_diseases"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x) 
+
+        expanded = df.explode("all_diseases").dropna(subset=["all_diseases"]) 
+
+        # Normalise all_diseases into consistent lowercase naming
+        def disease_name(name):
+            if not isinstance(name, str):
+                return name
+            n = name.strip().lower()
+            # merge variants
+            if "autism spectrum" in n or n =='asd':
+                return "autism spectrum disorder"
+            if "intellectual disability" in n or n == "id":
+                return "intellectual disability"
+            if "attention deficit" in n or n == "adhd":
+                return "attention deficit hyperactivity disorder"
+            if "schizophrenia" in n or n == "scz":
+                return "schizophrenia"
+            if "epilepsy" in n:
+                return "epilepsy"
+            return n
+
+        # apply normalisation
+        expanded["all_diseases"] = expanded["all_diseases"].apply(disease_name)
+
         # DISEASE X GENE MEMBERSHIP MATRIX
-        mat = (df.assign(flag=1)
-                .pivot_table(index="Disease", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
-        
+        mat = (expanded.assign(flag=1)
+                .pivot_table(index="all_diseases", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
+            
+
         """Create a 0/1 matrix: row = disease, column = gene. Cell = 1 if that disease has that gene anywhere in the full dataframe."""
         
         # FIGURE SIZE / LAYOUT 
@@ -507,17 +609,9 @@ def genes_disease(df, output_directory, include_hue=True):
         # Draw the stripes image
         ax_bot.imshow(img, aspect=0.7, interpolation='nearest', origin='upper')
 
-        # --- tidy labels ---
-        def _clean_disease_label(s):
-            s = str(s)
-            s = re.sub(r'\s*\([^)]*\)', '', s)  # remove parenthetical
-            return s.strip()
 
-        clean_diseases = [_clean_disease_label(d) for d in mat.index.tolist()]
-
-        # Y: diseases on the right, one tick per row
         ax_bot.set_yticks(np.arange(n_dis))
-        ax_bot.set_yticklabels(clean_diseases, fontsize=10)
+        ax_bot.set_yticklabels(mat.index.tolist(), fontsize=10)
         ax_bot.yaxis.tick_right()
 
         # X: genes (same order as the top plot)
@@ -543,27 +637,57 @@ def genes_disease(df, output_directory, include_hue=True):
 # ------------------------------------------------------------------------------
 def genes_disease_weightedscore(df, output_directory):
 
-    plotting_y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila"]
+    plotting_y_cols = ["total", "disease model", "mouse", "human", "cell line", "drosophila", 'specific_disease']
 
     for y in plotting_y_cols:
         if y not in df.columns:
             continue
-
-        top = (df.sort_values(y, ascending=False)
-            .drop_duplicates(subset="Gene", keep="first") # genes appear multiple times - remove
-            .loc[:, ["Gene", y, "weighted_score"]] # keep these columns
-            .dropna(subset=[y])) # drop rows with missing y values
         
+        top = (df.sort_values(y, ascending=False)
+          .drop_duplicates(subset="Gene", keep="first") # genes appear multiple times - remove (keep highest value for specific_disease)
+          .loc[:, ["Gene", y, "weighted_score"]] # keep these columns
+          .dropna(subset=[y])) # drop rows with missing y values
+        
+
         gene_order = top.sort_values(y, ascending=False)["Gene"].tolist()
         top = top.set_index("Gene").loc[gene_order].reset_index() # access data using gene if gene is index : )
 
         norm = plt.Normalize(top['weighted_score'].min(), top['weighted_score'].max())
         palette = [cm.YlGnBu(norm(v)) for v in top['weighted_score'].values]
 
+
+        # Convert stringified lists to actual lists if needed
+        df["all_diseases"] = df["all_diseases"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x) 
+
+        expanded = df.explode("all_diseases").dropna(subset=["all_diseases"]) 
+
+        # Normalise all_diseases into consistent lowercase naming
+        def disease_name(name):
+            if not isinstance(name, str):
+                return name
+            n = name.strip().lower()
+            # merge variants
+            if "autism spectrum" in n or n =='asd':
+                return "autism spectrum disorder"
+            if "intellectual disability" in n or n == "id":
+                return "intellectual disability"
+            if "attention deficit" in n or n == "adhd":
+                return "attention deficit hyperactivity disorder"
+            if "schizophrenia" in n or n == "scz":
+                return "schizophrenia"
+            if "epilepsy" in n:
+                return "epilepsy"
+            return n
+
+        # apply normalisation
+        expanded["all_diseases"] = expanded["all_diseases"].apply(disease_name)
+
         # DISEASE X GENE MEMBERSHIP MATRIX
-        mat = (df.assign(flag=1)
-                .pivot_table(index="Disease", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
+        mat = (expanded.assign(flag=1)
+                .pivot_table(index="all_diseases", columns="Gene", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
         
+
         """Create a 0/1 matrix: row = disease, column = gene. Cell = 1 if that disease has that gene anywhere in the full dataframe."""
         
         # FIGURE SIZE / LAYOUT 
@@ -621,16 +745,8 @@ def genes_disease_weightedscore(df, output_directory):
         ax_bot.imshow(img, aspect=0.7, interpolation='nearest', origin='upper')
 
         # --- tidy labels ---
-        def _clean_disease_label(s):
-            s = str(s)
-            s = re.sub(r'\s*\([^)]*\)', '', s)  # remove parenthetical
-            return s.strip()
-
-        clean_diseases = [_clean_disease_label(d) for d in mat.index.tolist()]
-
-        # Y: diseases on the right, one tick per row
         ax_bot.set_yticks(np.arange(n_dis))
-        ax_bot.set_yticklabels(clean_diseases, fontsize=10)
+        ax_bot.set_yticklabels(mat.index.tolist(), fontsize=10)
         ax_bot.yaxis.tick_right()
 
         # X: genes (same order as the top plot)
@@ -671,22 +787,42 @@ def genes_disease_heatmap(df, output_directory):
 
     all_genes = sorted(df["Gene"].unique())   # all 65
 
+    df["all_diseases"] = df["all_diseases"].apply(
+    lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x
+)
+    # 2) explode to one disease per row
+    expanded = df.explode("all_diseases").dropna(subset=["all_diseases"])
+
+    # 3) normalise names (same rules you already used)
+    def disease_name(n):
+        if not isinstance(n, str):
+            return n
+        n = n.strip().lower()
+        if "autism spectrum" in n or n == "asd": return "autism spectrum disorder"
+        if "intellectual disability" in n or n == "id": return "intellectual disability"
+        if "attention deficit" in n or n == "adhd": return "attention deficit hyperactivity disorder"
+        if "schizophrenia" in n or n == "scz": return "schizophrenia"
+        if "epilepsy" in n: return "epilepsy"
+        return n
+
+    expanded["all_diseases"] = expanded["all_diseases"].apply(disease_name)
+
     mat = (
-        df.assign(flag=1)
-          .pivot_table(index="Disease", columns="Gene", values="flag",
-                       aggfunc="max", fill_value=0)
-          .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
+        expanded.assign(flag=1)
+           .pivot_table(index="all_diseases", columns="Gene", values="flag", aggfunc="max", fill_value=0)
+           .reindex(columns=all_genes, fill_value=0)
     )
 
-    def short_disease(name):
-        m = re.search(r"\(([^)]+)\)", str(name))
-        if m:
-            return m.group(1)
-        return {
-            "Epilepsy": "EPI",
-        }.get(name, name)
+    # optional: shorten row labels
+    short_map = {
+        "epilepsy": "EPI",
+        "schizophrenia": "SCZ",
+        "autism spectrum disorder": "ASD",
+        "intellectual disability": "ID",
+        "attention deficit hyperactivity disorder": "ADHD",
+    }
+    mat.index = [short_map.get(str(x).lower(), x) for x in mat.index]
 
-    mat.index = mat.index.map(short_disease)            
 
     plt.figure(figsize=(12, 5))
     sns.heatmap(mat, cmap="PuBuGn", cbar=False)
@@ -731,27 +867,46 @@ def genes_ontology_heatmap(df, output_directory):
 def disease_ontology_heatmap(df, output_directory):
 
     tmp = df.copy()
-    tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
-    tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
-
-    mat = tmp.pivot_table(
-        index="GO_BP",   # diseases will form the rows (y-axis)
-        columns="Disease",   # GO terms will form the columns (x-axis)
-        values="Gene",     # we’ll count the number of unique genes per cell
-        aggfunc="nunique", # how to combine multiple rows into one number
-        fill_value=0       # fill any missing combos with 0
+    # Ensure lists are actual Python lists
+    tmp["all_diseases"] = tmp["all_diseases"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x
+    )
+    tmp["GO_Slim_BP_Most_Frequent"] = tmp["GO_Slim_BP_Most_Frequent"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x
     )
 
-    def short_disease(name):
-        # use text in parentheses if present: "(ADHD)" -> "ADHD"
-        m = re.search(r"\(([^)]+)\)", str(name))
-        if m:
-            return m.group(1)
-        return {
-            "Epilepsy": "EPI",
-        }.get(name, name)
+    # Expand both axes
+    tmp = tmp.explode("all_diseases").explode("GO_Slim_BP_Most_Frequent").dropna(subset=["all_diseases", "GO_Slim_BP_Most_Frequent"])
 
-    mat = mat.rename(columns={c: short_disease(c) for c in mat.columns})
+    # Normalise disease names (same function you already use elsewhere)
+    def disease_name(n):
+        if not isinstance(n, str):
+            return n
+        n = n.strip().lower()
+        if "autism spectrum" in n or n == "asd":
+            return "ASD"
+        if "intellectual disability" in n or n == "id":
+            return "ID"
+        if "attention deficit" in n or n == "adhd":
+            return "ADHD"
+        if "schizophrenia" in n or n == "scz":
+            return "SCZ"
+        if "epilepsy" in n:
+            return "EPI"
+        return n
+
+    tmp["all_diseases"] = tmp["all_diseases"].apply(disease_name)
+    tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"]
+
+    mat = tmp.pivot_table(
+    index="GO_BP",
+    columns="all_diseases",
+    values="Gene",
+    aggfunc="nunique",
+    fill_value=0
+)
+
+
 
     plt.figure(figsize=(12, 12))
     sns.heatmap(mat, cmap='GnBu' ,cbar=True)
@@ -814,7 +969,6 @@ def genes_alias_ranked_pubmed(df1, df2, output_directory):
     plt.savefig(outfile, dpi=300, bbox_inches="tight")
     plt.close()
 
-
 # ------------------------------------------------------------------------------
 # GENES_RANKED_PUBMED_ALL: ranked genes crossmatched
 # ------------------------------------------------------------------------------
@@ -826,7 +980,7 @@ def genes_ranked_pubmed_all(df, output_directory):
            .tolist())
     
     disease_model = (
-        df.sort_values('disease model', ascending=False)
+        df.sort_values('specific_disease', ascending=False)
            .drop_duplicates(subset='Gene', keep='first')['Gene']
            .tolist())
     
@@ -841,7 +995,7 @@ def genes_ranked_pubmed_all(df, output_directory):
            .tolist())
     
     gene_lists = [total, disease_model, mouse, drosophila]
-    col_labels = ["Total", "Disease Model", "Mouse", "Drosophila"]
+    col_labels = ["Total", "Disease", "Mouse", "Drosophila"]
 
     # Assume same set of genes in all lists; use the first list for iteration
     genes = total
@@ -979,6 +1133,55 @@ def genes_ranked_total_mouse(df, output_directory):
     plt.close()
 
 # ------------------------------------------------------------------------------
+# GENES_RANKED_TOTAL_DISEASE: ranked genes crossmatched
+# ------------------------------------------------------------------------------
+def genes_ranked_total_disease(df, output_directory):
+
+    total = (
+    df.sort_values('total', ascending=False)
+        .drop_duplicates(subset='Gene', keep='first')['Gene']
+        .tolist())
+    
+    disease = (
+        df.sort_values('specific_disease', ascending=False)
+           .drop_duplicates(subset='Gene', keep='first')['Gene']
+           .tolist())
+
+    genes = [g for g in total if g in disease] # check contain same genes
+
+    left_pos = {g: i for i, g in enumerate(total)} # y coord
+    right_pos = {g: i for i, g in enumerate(disease)} # y coord
+
+    plt.figure(figsize=(6, len(genes) * 0.3))
+    ax = plt.gca()
+
+    # draw connecting lines
+    for g in genes:
+        plt.plot(
+            [0, 1],
+            [left_pos[g], right_pos[g]],
+            color="grey", alpha=0.7, linewidth=1
+        )
+
+    # label genes on both sides
+    for g in genes:
+        plt.text(-0.02, left_pos[g], g, ha="right", va="center", fontsize=8)
+        plt.text(1.02, right_pos[g], g, ha="left", va="center", fontsize=8)
+
+    # cosmetics
+    ax.set_xlim(-0.2, 1.2)
+    ax.set_ylim(len(genes)-0.5, -0.5)
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["Total", "Disease"], fontsize=10, fontweight='bold')
+    ax.set_yticks([])
+    ax.set_title('Ranked Order of Papers', fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    outfile = os.path.join(output_directory, 'gene_order_total_disease.png')
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+# ------------------------------------------------------------------------------
 # GENES_SCORING_RANKED: ranking genes
 # ------------------------------------------------------------------------------
 def genes_scoring_ranked(df, output_directory):
@@ -1088,72 +1291,68 @@ def genes_scoring_ranked(df, output_directory):
     
 
 
+""" RUN TO GENERATE PLOTS
+    Scores and Info:
+    https://www.flyrnai.org/diopt
+    - both_best_score: orthologue prediction score = Best score and Best reverse score 
+      Best score = Yes because its the highest ranked
+      Reverse best score is not reliable e.g. FMR1
+    - filtered_weighted_score: score given to evidence of orthologue 
+
+    https://disgenet.com/
+    - gda_score: score of assocation between gene and disease
+      Here refers to score between gene and original panel disease assocation (Disease_disgenet_matched)
+    - disgenet_associations: gene x targetted disease assocations above > 0.6 score 
+    - all_diseases: list of diseases from disgenet_associations (0.6>) and original disease 
     
+    - specific_disease: DECIEVING pubmed count for gene x all associated diseases in target list
+"""
 
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/merged_gene.csv')
-output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/weighted_score_filtered'
-
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_3/alias_false/gene_panel_no_alias.csv')
+output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_3/alias_false/plots'
 df = modify_df(df)
-df = filter(df, 'filtered_weighted_score')
-genes_scoring_ranked(df, output_directory)
 
+## FILTER DF BASED ON BOOLEAN VALUE E.G. WEIGHTED SCORE 
+# df = filter(df, 'filtered_weighted_score') """ filter for score of orthologue similarity >7 """
 
-
-
-
-
-# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene_automated_alias/merged_gene_automated_alias.csv')
-# output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene_automated_alias/weighted_score_filtered'
-
-# """ No filter on genes """
-# df = modify_df(df)
-# df = filter(df, 'filtered_weighted_score')
+## BARPLOTS OF PUBMED COUNTS VERSUS GENE X DISEASE ASSOCATION WEIGHTED ORTHOLOG SCORE AS HUE
 # weighted_ortholog_score(df, output_directory)
+# genes_disease(df, output_directory) # include_hue=True (both_best_score)
 # genes_disease_weightedscore(df, output_directory)
-# scatter_similarity_identitiy(df, output_directory, include_hue=True)
+
+## SIMILARITY V IDENTITIY: DISEASE REFERS TO ORIGINAL ASSOCATION  
+# scatter_similarity_identitiy(df, output_directory) # include_hue=True (both_best_score) 
 # scatter_similarity_identitiy_disease (df, output_directory)
-# scatter_similarity_identitiy_per_disease(df, output_directory, include_hue=True)
+# scatter_similarity_identitiy_per_disease(df, output_directory)
 # scatter_similarity_identitiy_weightedscore(df, output_directory)
-# barplot_pubmed(df, output_directory, include_hue=True)
-# genes_disease(df, output_directory, include_hue=True)
+# scatter_similarity_identitiy_gda_score(df, output_directory)
+
+
+## PUBMED COUNTS PER DISEASE WITH CHATGPT RANKED GENE LIST 
+barplot_pubmed(df, output_directory) # include_hue=True (both_best_score)
+
+## HEATMAPS - INC ALL ASSOCIATED DISEASES
 # genes_disease_heatmap(df, output_directory)
 # genes_ontology_heatmap(df, output_directory)
 # disease_ontology_heatmap(df, output_directory)
+
+## GENE ORDER OF HIGHEST PUBMED COUNT 
 # genes_ranked_pubmed_all(df, output_directory)
 # genes_ranked_total_mouse(df, output_directory)
 # genes_ranked_total_drosoph(df, output_directory)
+# genes_ranked_total_disease(df, output_directory)
 
 
 
+#### this and GDA SCORES PLS 
+# genes_scoring_ranked(df, output_directory) ### shd change the scoring seen
 
 
 
+""" compares pubmed totals from two datasets e.g. aliases used and not used."""
 
-# output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt/alias_used/high_rank_only'
-
-# """ Filter the genes for best score = True aka highly ranked genes"""
-# df = modify_df(df)
-# df = filter(df, 'both_best_score')
-# weighted_ortholog_score(df, output_directory)
-# genes_disease_weightedscore(df, output_directory)
-# scatter_similarity_identitiy(df, output_directory, include_hue=False)
-# scatter_similarity_identitiy_disease (df, output_directory)
-# scatter_similarity_identitiy_weightedscore(df, output_directory)
-# scatter_similarity_identitiy_per_disease(df, output_directory, include_hue=False)
-# barplot_pubmed(df, output_directory, include_hue=False)
-# genes_disease(df, output_directory, include_hue=False)
-# genes_disease_heatmap(df, output_directory)
-# genes_ontology_heatmap(df, output_directory)
-# disease_ontology_heatmap(df, output_directory)
-# genes_ranked_pubmed_all(df, output_directory)
-# genes_ranked_total_mouse(df, output_directory)
-# genes_ranked_total_drosoph(df, output_directory)
-
-
-
-"""Ranked Gene List Comparison"""
 # df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/merged_gene.csv')
 # df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene_automated_alias/merged_gene_automated_alias.csv')
 # output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene_automated_alias'

@@ -16,8 +16,65 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-df = pd.read_csv('/Users/cochral/Desktop/disease_testing_2.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined/epi/Epi25_gene_results_top.csv')
+df['gda_x_weighted'] = df['gda_score'] * df['weighted_score']
 
-df = df[["Disease", "disgenet_associations"] + [c for c in df.columns if c not in ["Disease", "disgenet_associations"]]]
+output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined/epi/plots'
 
-df.to_csv('/Users/cochral/Desktop/disease_testing_2.csv', index=False)
+sns.scatterplot(data=df, x="weighted_score",
+        y="gda_score")
+
+for _, row in df.iterrows():
+    plt.text(
+        row["weighted_score"] + 0.3,  # small x-offset so text doesn't overlap the dot
+        row["gda_score"],
+        row["gene_symbol"],
+        fontsize=7,
+        alpha=0.7)
+
+
+plt.tight_layout()
+plt.legend()
+
+# --- save static version before interactive part ---
+save_path = os.path.join(f"{output_directory}/weigh.png")
+plt.savefig(save_path, dpi=300, bbox_inches="tight")
+plt.tight_layout()
+plt.close()
+
+
+sns.scatterplot(data=df, x="weighted_score",
+        y="gda_score")
+
+for _, row in df.iterrows():
+    plt.text(
+        row["weighted_score"] + 0.3,  # small x-offset so text doesn't overlap the dot
+        row["gda_score"],
+        row["gene_symbol"],
+        fontsize=7,
+        alpha=0.7)
+
+
+plt.tight_layout()
+plt.legend()
+
+# --- save static version before interactive part ---
+save_path = os.path.join(f"{output_directory}/weight.png")
+plt.savefig(save_path, dpi=300, bbox_inches="tight")
+plt.tight_layout()
+plt.close()
+
+
+
+
+df_sorted = df.sort_values('gda_x_weighted', ascending=False)
+
+sns.barplot(data=df_sorted, x='gene_symbol', y='gda_x_weighted')
+plt.xticks(rotation=90)
+
+save_path = os.path.join(f"{output_directory}/bar.png")
+plt.savefig(save_path, dpi=300, bbox_inches="tight")
+plt.tight_layout()
+plt.close()
+
+

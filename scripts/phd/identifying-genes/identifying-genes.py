@@ -148,17 +148,11 @@ def pubmed_count(df, sleep_s=0.5,  include_aliases=True):
             
 
         diseases = []
-
         if row.disgenet_associations:
-            if isinstance(row.disgenet_associations, list) and len(row.disgenet_associations) == 1 and isinstance(row.disgenet_associations[0], list):
-                diseases.extend(row.disgenet_associations[0])
-            else:
-                diseases.extend(row.disgenet_associations)
+            diseases.extend(row.disgenet_associations)
 
-        # add from Disease_disgenet_matched
         if row.Disease_disgenet_matched:
             diseases.extend(row.Disease_disgenet_matched)
-
         print(diseases)
 
 
@@ -359,7 +353,7 @@ def orthologue(genes):
 
 # ------------------------------------------------------------------------------
 # GOTERM: identifies gene ontology profiles for each gene 
-# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ 
 def goterm(df):
 
     """ Retrieve GO annotations and map them to GO-slim terms for each gene 
@@ -659,12 +653,12 @@ def disease_association(df):
 
         if r.status_code != 200:
             print(f"⚠️ Request failed for {symbol}: {r.status_code}")
-            return []
+            return [], None
 
         payload = r.json().get("payload", [])
         if not payload:
             print(f"No data found for {symbol}")
-            return []
+            return [], None
 
         diseases = []
         for record in payload:
@@ -699,6 +693,7 @@ def disease_association(df):
         return filtered, score
     
 
+
     df = df.reset_index(drop=True)
     df["disgenet_associations"] = None
     df["gda_score"] = None
@@ -711,11 +706,15 @@ def disease_association(df):
         disease_associations, score = gene_summary(gene,original_disease)
         disease_associations = list(disease_associations)
 
-        df.at[i, "disgenet_associations"] = [disease_associations]          # list of >=0.7 matches in your target set
+        df.at[i, "disgenet_associations"] = disease_associations          # list of >=0.7 matches in your target set
         df.at[i, "gda_score"] = score 
 
         time.sleep(0.75)
-    
+
+    df["all_diseases"] = df.apply(lambda row: 
+        (row.disgenet_associations or []) + (row.Disease_disgenet_matched or []),
+        axis=1)
+
     return df
 
 
@@ -870,18 +869,19 @@ genes = [
     "GABRA1", "GABRG2", "DEPDC5", "CDKL5", "PCDH19", "KCNT1", "SLC2A1", "TSC1", "TSC2", "KMT2A",
     "NSD1", "CREBBP", "MECP2", "FMR1", "SETD5", "PPP2R5D"]
 
-genes = ['MECP2', 'DYRK1A']
-
 
 
 df2 = orthologue(genes)
 df1= pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/refined_attempt_2/gene/drosophila_behavioral_screening_gene_panel.csv')
 df = merge(df1,df2) #merge to chatgpt panel 
 
+
+
 df = disease_association(df)
 df = goterm(df)
 df = add_aliases(df) # might be worth here checking if aliases make sense 
-df = pubmed_count(df, include_aliases=True)
+
+df = pubmed_count(df, include_aliases=False) #
 
 directory = '/Users/cochral/Desktop'
 output = os.path.join(directory, 'disease.csv')
