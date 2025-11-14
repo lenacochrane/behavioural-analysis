@@ -12,6 +12,7 @@ class HoleGui:
         self.directory = ""
         self.video_files = []
         self.hole_coordinates = []
+        self.holes = []  # NEW: store finalized holes
         self.drawing = False
         self.current_video_index = 0
 
@@ -61,7 +62,8 @@ class HoleGui:
             return
 
         self.temp_frame = frame.copy()
-        self.hole_coordinates = []  # Reset coordinates for each video
+        self.holes = []                 # NEW: reset holes per video
+        self.hole_coordinates = []      # Reset coordinates for each video
 
         cv2.imshow("Draw Hole Perimeter", self.temp_frame)
         cv2.setMouseCallback("Draw Hole Perimeter", self.draw_hole_perimeter, self.temp_frame)
@@ -69,12 +71,18 @@ class HoleGui:
 
     def draw_hole_perimeter(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
+            # ✅ Auto-finalize the previously closed hole before starting a new one
+            if not self.drawing and len(self.hole_coordinates) >= 3:
+                self.holes.append(self.hole_coordinates[:])
+                print(f"Auto-finalized hole #{len(self.holes)} on new draw")
+                self.hole_coordinates = []
+
             self.drawing = True
             self.hole_coordinates.append((x, y))
             print(f"Point added: {(x, y)}")
 
         elif event == cv2.EVENT_MOUSEMOVE:
-            if self.drawing:
+            if self.drawing and self.hole_coordinates:
                 prev_point = self.hole_coordinates[-1]
                 self.hole_coordinates.append((x, y))
                 cv2.line(self.temp_frame, prev_point, (x, y), (0, 0, 255), 2)
@@ -88,8 +96,28 @@ class HoleGui:
                 cv2.line(self.temp_frame, prev_point, self.hole_coordinates[0], (0, 0, 255), 2)
                 cv2.imshow("Draw Hole Perimeter", self.temp_frame)
                 print(f"Closed the hole perimeter by drawing line from {prev_point} to {self.hole_coordinates[0]}")
+                # Not finalized yet; next LBUTTONDOWN (or middle-click) will finalize
+
+        elif event == cv2.EVENT_MBUTTONDOWN:
+            # Finalize current hole and start a new one (optional shortcut)
+            if len(self.hole_coordinates) >= 3:
+                cv2.line(self.temp_frame, self.hole_coordinates[-1], self.hole_coordinates[0], (0, 0, 255), 2)
+                cv2.imshow("Draw Hole Perimeter", self.temp_frame)
+                self.holes.append(self.hole_coordinates[:])
+                print(f"Finalized hole #{len(self.holes)} with {len(self.hole_coordinates)} points")
+                self.hole_coordinates = []
+            else:
+                print("Middle-click ignored: need at least 3 points to finalize a hole.")
 
         elif event == cv2.EVENT_RBUTTONDOWN:
+            # Auto-finalize in-progress hole if valid, then save & next
+            if len(self.hole_coordinates) >= 3:
+                cv2.line(self.temp_frame, self.hole_coordinates[-1], self.hole_coordinates[0], (0, 0, 255), 2)
+                cv2.imshow("Draw Hole Perimeter", self.temp_frame)
+                self.holes.append(self.hole_coordinates[:])
+                print(f"Auto-finalized hole #{len(self.holes)} with {len(self.hole_coordinates)} points before saving")
+                self.hole_coordinates = []
+
             print("Right button clicked, saving coordinates and moving to next video.")
             self.save_coordinates()
             cv2.destroyAllWindows()
@@ -98,20 +126,27 @@ class HoleGui:
 
 
     def save_coordinates(self):
-        if self.hole_coordinates:
+        # If user drew only one hole and never middle-clicked, handle it
+        if not self.holes and len(self.hole_coordinates) >= 3:
+            self.holes.append(self.hole_coordinates[:])
+
+        if self.holes:
             video_file = self.video_files[self.current_video_index]
             video_path = os.path.join(self.directory, video_file)
-            hole_file = os.path.join(self.directory, os.path.basename(video_path).replace('.mp4', '_hole.csv'))
-            print(f"Saving coordinates to {hole_file} with {len(self.hole_coordinates)} points")
-            try:
-                with open(hole_file, 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerows(self.hole_coordinates)
-                print(f"Coordinates saved to {hole_file}")
-            except Exception as e:
-                print(f"Error saving coordinates to {hole_file}: {e}")
+            base = os.path.splitext(os.path.basename(video_path))[0]
 
+            for i, hole in enumerate(self.holes, start=1):
+                hole_file = os.path.join(self.directory, f"{base}_hole{i}.csv")  # NEW: per-hole files
+                print(f"Saving hole #{i} to {hole_file} with {len(hole)} points")
+                try:
+                    with open(hole_file, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerows(hole)
+                    print(f"Coordinates saved to {hole_file}")
+                except Exception as e:
+                    print(f"Error saving coordinates to {hole_file}: {e}")
 
-##########################################################################################################
-
-
+if __name__ == "__main__":
+    root = tk.Tk()
+    HoleGui(root)
+    root.mainloop()

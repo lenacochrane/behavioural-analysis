@@ -699,3 +699,53 @@ cv2.destroyAllWindows()
 
 
 # %%
+## OVERLAY 4 HOLES ONTO MY VIDEO
+
+
+video = '/Users/cochral/Desktop/test/2025-03-04_15-45-11_td7.mp4'
+hole1 = pd.read_csv('/Users/cochral/Desktop/test/2025-03-04_15-45-11_td7_hole1.csv')
+hole2 = pd.read_csv('/Users/cochral/Desktop/test/2025-03-04_15-45-11_td7_hole2.csv')
+hole3 = pd.read_csv('/Users/cochral/Desktop/test/2025-03-04_15-45-11_td7_hole3.csv')
+hole4 = pd.read_csv('/Users/cochral/Desktop/test/2025-03-04_15-45-11_td7_hole4.csv')
+
+cap = cv2.VideoCapture(video)
+if not cap.isOpened():
+    raise RuntimeError(f"Cannot open {video}")
+
+w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h  = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+out_path = os.path.splitext(video)[0] + "_with_holes.mp4"
+out = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
+
+# Convert to numpy int arrays (x,y). Adjust column names if you used header=None above.
+def to_pts(df):
+    if {'x','y'}.issubset(df.columns):
+        arr = df[['x','y']].to_numpy(dtype=float)
+    else:
+        arr = df.iloc[:, :2].to_numpy(dtype=float)
+    return arr.astype(int)
+
+holes = [to_pts(hole1), to_pts(hole2), to_pts(hole3), to_pts(hole4)]
+colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]  # BGR per hole
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    for pts, color in zip(holes, colors):
+        for x, y in pts:
+            cv2.circle(frame, (int(x), int(y)), 2, color, -1)  # point only
+
+    out.write(frame)
+
+cap.release()
+out.release()
+print("Saved:", out_path)
+
+
+
+
+# %%

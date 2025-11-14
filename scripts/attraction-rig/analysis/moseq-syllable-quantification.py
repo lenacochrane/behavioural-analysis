@@ -93,7 +93,7 @@ for syllable in sorted(df_moseq['syllable'].unique()):
     # ——— plotting ———
     fig, axs = plt.subplots(3,1,figsize=(10,8),sharex=True)
 
-# Heading
+    # Heading
     axs[0].plot(means['heading'], label='mean trace')
     axs[0].axvline(mean_d, linestyle='--')
     axs[0].axvline(low95,   linestyle=':')

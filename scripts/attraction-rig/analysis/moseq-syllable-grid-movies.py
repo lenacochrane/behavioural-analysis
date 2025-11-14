@@ -11,9 +11,9 @@ from statistics import mode
 
 
 # ---- load data ---- #
-videos_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/videos-for-model'
-output_dir = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/grid-videos/keypoint-100'
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/moseq/grid-videos/keypoint-100/moseq_df.csv')
+videos_dir = '/Users/cochral/Desktop/MOSEQ/videos'
+output_dir = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA3600/testing/grid'
+df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA3600/moseq_df.csv')
 
 # ---- parse video_base / track_id from name ---- #
 extracted = df['name'].str.extract(r'^(?P<file>.+?)(?:_track(?P<track>\d+))?(?:\.\w+)?$')
