@@ -887,7 +887,77 @@ class HoleAnalysis:
 
         angle_over_time.to_csv(os.path.join(self.directory, filename), index=False)
 
-        return angle_over_time   
+        return angle_over_time  
+
+    
+    # METHOD MOVEMENT_DIRECTION: CALCULATES THE DIRECTION OF MOVEMENT BASED ON BODY NODES OVER TIME 
+    def movement_direction(self):
+
+        def angle_calculator(vector_A, vector_B):
+
+            # convert to an array for mathmatical ease 
+            A = np.array(vector_A, dtype=np.float64)
+            B = np.array(vector_B, dtype=np.float64)
+            
+            # Ensure there are no NaN values in the vectors and check for zero-length vectors
+            if not np.isnan(A).any() and not np.isnan(B).any():
+                # calculate magnitude of the vector
+                magnitude_A = np.linalg.norm(A)
+                magnitude_B = np.linalg.norm(B)
+                
+                # ensure magnitude =! 0
+                if magnitude_A != 0 and magnitude_B != 0:
+                    # Calculate the dot product
+                    dot_product = np.dot(A, B)
+                    
+                    # cosθ
+                    cos_theta = dot_product / (magnitude_A * magnitude_B)
+                    cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure valid range for arccos
+        
+                    # θ in radians
+                    theta_radians = np.arccos(cos_theta)
+                    # θ in degrees
+                    theta_degrees = np.degrees(theta_radians)
+                    return theta_degrees
+            
+            return np.nan
+        
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+            df = df.sort_values(['track_id', 'frame'])
+
+            for track_id, group in df.groupby('track_id'):
+                group = group.sort_values(by='frame')
+
+                body_positions = group[['x_body', 'y_body']].to_numpy(dtype=float)
+
+                vectors = body_positions[1:] - body_positions[:-1] # foo[:-1] (slice) give me everything up to, but not including, the last item
+                # makes two lists which are then subtracted to give vector between consecutive frames
+
+                angles = [angle_calculator(vectors[i], vectors[i+1]) for i in range(len(vectors)-1)]
+
+                # angle_frames = group['frame'].to_numpy()[2:]
+                angle_frames = group['frame'].to_numpy()[1:-1]
+
+
+                data.append(pd.DataFrame({
+                    'file': track_file,
+                    'track_id': track_id,
+                    'frame': angle_frames,
+                    'movement_angle': angles
+                }))
+        
+        angle_df = pd.concat(data, ignore_index=True)
+        angle_df.to_csv(os.path.join(self.directory, "movement_direction.csv"), index=False)
+        return angle_df
+
+
+
+
+
     
  
     
@@ -2566,6 +2636,113 @@ class HoleAnalysis:
 
 
         interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
+
+
+
+############################################  ---- HEAD-HEAD ----  ############################################   
+
+    def head_head_interaction_type(self, proximity_threshold=1):
+        """
+        Frame-level closest-contact detection (no bouts).
+        For each larval pair per frame:
+        - compute all 9 node-node distances
+        - keep only the minimum distance + its node-node type
+        - only log frames where min distance < threshold
+        Output: one row per (file, frame, pair) contact frame
+        """
+
+        data = []
+        no_contacts = []
+
+        parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(parts, parts))
+
+        def unify_interaction_type(part1, part2):
+            return '_'.join(sorted([part1, part2]))
+
+        def process_track_pair(track_a, track_b, df, track_file):
+            results = []
+            track_a_data = df[df['track_id'] == track_a]
+            track_b_data = df[df['track_id'] == track_b]
+
+            common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+            if not common_frames:
+                return results
+
+            for frame in common_frames:
+                row_a = track_a_data[track_a_data['frame'] == frame]
+                row_b = track_b_data[track_b_data['frame'] == frame]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                # build coords
+                coords_a = {p: row_a[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+                coords_b = {p: row_b[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+
+                # compute all 9 distances, keep minimum
+                min_dist = float('inf')
+                min_type = None
+                for part1, part2 in interaction_pairs:
+                    dist = np.linalg.norm(coords_a[part1] - coords_b[part2])
+                    if dist < min_dist:
+                        min_dist = dist
+                        min_type = unify_interaction_type(part1, part2)
+
+                if min_dist < proximity_threshold:
+                    results.append({
+                        'file': track_file,
+                        'frame': frame,
+                        'Interaction Pair': tuple(sorted((track_a, track_b))),
+                        'Distance': min_dist,
+                        'Closest Interaction Type': min_type
+                    })
+
+            return results
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].sort_values(by='frame')
+
+            track_ids = df['track_id'].unique()
+            track_combinations = list(combinations(track_ids, 2))
+
+            all_results = Parallel(n_jobs=-1)(
+                delayed(process_track_pair)(track_a, track_b, df, track_file)
+                for track_a, track_b in track_combinations
+            )
+
+            flattened_results = [item for sublist in all_results for item in sublist]
+            if not flattened_results:
+                print(f"No closest-contact frames for {track_file}")
+                no_contacts.append(track_file)
+                continue
+
+            data.append(pd.DataFrame(flattened_results))
+
+        # placeholders for files with none
+        for file in no_contacts:
+            data.append(pd.DataFrame([{
+                'file': file,
+                'frame': np.nan,
+                'Interaction Pair': None,
+                'Distance': np.nan,
+                'Closest Interaction Type': None
+            }]))
+
+        closest_df = pd.concat(data, ignore_index=True)
+
+        if self.shorten and self.shorten_duration is not None:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"closest_contacts_{proximity_threshold}mm{suffix}.csv"
+        closest_df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        return closest_df
+    
+
+
 
 
 

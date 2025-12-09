@@ -253,10 +253,281 @@ def genes_ontology_heatmap(df, output_directory):
     plt.close()  
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/target_genes.csv')
-output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/plots'
+# df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/target_genes.csv')
+# output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/plots'
 
-weighted_ortholog_score(df, output_directory)
-scatter_similarity_identitiy_disease(df, output_directory)
+
+
+
+def weighted_ortholog_score_diff(df, output_directory):
+
+    top = (df.sort_values('weighted_score', ascending=False)
+        .drop_duplicates(subset="gene_symbol", keep="first") # genes appear multiple times - remove
+        .loc[:, ["gene_symbol", 'weighted_score', "similarity_percent"]] # keep these columns
+        .dropna(subset=['weighted_score'])) # drop rows with missing y values
+    
+    gene_order = top.sort_values('weighted_score', ascending=False)["gene_symbol"].tolist()
+    print(gene_order)
+    top = top.set_index("gene_symbol").loc[gene_order].reset_index() # access data using gene if gene is index : )
+
+
+    # Convert stringified lists to actual lists if needed
+    df["all_diseases"] = df["all_diseases"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith("[") else x) 
+
+    expanded = df.explode("all_diseases").dropna(subset=["all_diseases"]) 
+    expanded = expanded.drop_duplicates(subset=["gene_symbol", "all_diseases"])
+
+
+
+    # DISEASE X GENE MEMBERSHIP MATRIX
+    mat = (expanded.assign(flag=1)
+            .pivot_table(index="all_diseases", columns="gene_symbol", values="flag", aggfunc="max", fill_value=0).reindex(columns=gene_order))
+    
+    print(mat)
+
+    
+    # FIGURE SIZE / LAYOUT 
+    diseases = mat.index.tolist()
+    n_genes  = len(gene_order)
+    n_dis    = len(diseases)
+
+    fig_w = max(10, 0.4 * n_genes)
+    fig_h = 6 + min(2.5, 0.22 * n_dis)
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    gs  = GridSpec(nrows=2, ncols=1, height_ratios=[3, 0.8], hspace=0.02) # 2 subplot- above and below
+    
+    # FIRST SUBPLOT: BARPLOT
+    ax_top = fig.add_subplot(gs[0, 0])
+
+    bar_arguments = {
+        "data":top, "x":"gene_symbol", "y":'weighted_score',
+        "edgecolor":"black", "dodge":False, "ax":ax_top, "alpha":0.8, "color":'steelblue', 'linewidth':1.2, 'edgecolor':'black'}
+
+    sns.barplot(**bar_arguments)
+
+    # sm = plt.cm.ScalarMappable(cmap=cm.YlGnBu, norm=norm)
+    # sm.set_array([])
+    # plt.colorbar(sm).set_label('Sequence Similarity (%)')
+
+    ax_top.set_ylabel("Weighted Score", fontsize=14, fontweight='bold')
+    ax_top.set_xlabel("")
+    ax_top.tick_params(axis="x", labelbottom=False)  # hide x labels on top (shown below)
+    ax_top.set_title('Ortholog Score x Gene Panel', fontsize=16, fontweight='bold')
+
+    for p in ax_top.patches: # add numeric value on bar
+        h = p.get_height()
+        if np.isfinite(h):
+            ax_top.text(p.get_x() + p.get_width()/2, h,
+                        f"{int(h)}", ha="center", va="bottom", fontsize=7)
+            
+    
+    # SECOND SUBPLOT: DISEASE (striped, per-disease colors; aligned to gene_order)
+    ax_bot = fig.add_subplot(gs[1, 0], sharex=ax_top)
+
+    # Build binary membership matrix (rows=diseases, cols=genes), already aligned to gene_order
+    M = mat.values.astype(bool)          # shape: (n_dis, n_genes)
+    n_dis, n_genes = M.shape
+
+    # Start with a white RGB image (no grey background)
+    img = np.ones((n_dis, n_genes, 3), dtype=float)  # values in [0,1]
+
+    # One distinct color per disease (row)
+    row_palette = sns.color_palette("Set2", n_dis)
+
+    # Color each disease row where membership == 1
+    for i, color in enumerate(row_palette):
+        img[i, M[i, :], :] = color  # fill cells (i, j) with that disease’s color
+
+    # Draw the stripes image
+    ax_bot.imshow(img, interpolation='nearest', origin='upper', aspect='auto') # aspect=0.7
+
+    # --- tidy labels ---
+    def _clean_disease_label(s):
+        s = str(s)
+        s = re.sub(r'\s*\([^)]*\)', '', s)  # remove parenthetical
+        return s.strip()
+
+    clean_diseases = [_clean_disease_label(d) for d in mat.index.tolist()]
+
+    # Y: diseases on the right, one tick per row
+    ax_bot.set_yticks(np.arange(n_dis))
+    ax_bot.set_yticklabels(clean_diseases, fontsize=10)
+    # ax_bot.yaxis.tick_right()
+
+    # X: genes (same order as the top plot)
+    ax_bot.set_xticks(np.arange(n_genes))
+    ax_bot.set_xticklabels(gene_order, rotation=90, fontsize=8)
+
+    ax_bot.set_xlabel("Gene")
+    # ax_bot.set_ylabel("Disease")
+
+    # Clean frame
+    for sp in ax_bot.spines.values():
+        sp.set_visible(False)
+
+    plt.tight_layout()
+
+    save_path = f"{output_directory}/weighted_score_check.png"
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.tight_layout()
+    plt.close()
+
+
+
+# ------------------------------------------------------------------------------
+# GENES_ONTOLOGY_HEATMAP: gene ontology heatmap 
+# ------------------------------------------------------------------------------
+def genes_ontology_heatmap(df, output_directory):
+
+    all_genes = sorted(df["gene_symbol"].unique())   # all 65
+    tmp = df.copy()
+    tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
+    tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
+
+    mat = (
+        tmp.assign(flag=1)
+          .pivot_table(index="GO_BP", columns="gene_symbol", values="flag",
+                       aggfunc="max", fill_value=0)
+          .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
+    )
+
+    plt.figure(figsize=(6, 12))
+    sns.heatmap(mat, cmap="Greens", cbar=False)
+    plt.xlabel("")
+    plt.ylabel("")
+    plt.title('Gene Ontology', fontweight='bold', fontsize=16)
+    plt.tight_layout()
+    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+
+def genes_ontology_heatmap(df, output_directory):
+
+
+    # GO term -> snappy category
+    go_to_cat = {
+        # DNA & Chromosomes
+        "DNA Integrity": "DNA & Chromosomes",
+        "chromatin organization": "DNA & Chromosomes",
+        "chromosome segregation": "DNA & Chromosomes",
+
+        # RNA & Gene Control
+        "RNA Regulation": "RNA & Gene Control",
+        "regulation of DNA-templated transcription": "RNA & Gene Control",
+
+        # Protein Factory
+        "Ribosome Biogenesis": "Protein Factory",
+        "cytoplasmic translation": "Protein Factory",
+        "protein-containing complex assembly": "Protein Factory",
+
+        # Protein Cleanup & Processing
+        "Protein Housekeeping": "Protein Cleanup",
+        "protein catabolic process": "Protein Cleanup",
+        "autophagy": "Protein Cleanup",
+        "lysosome organization": "Protein Cleanup",
+
+        # Cell Architecture
+        "Cytoskeleton Organization": "Cell Architecture",
+        "membrane organization": "Cell Architecture",
+        "cell junction organization": "Cell Architecture",
+        "establishment or maintenance of cell polarity": "Cell Architecture",
+
+        # Cell Stickiness / ECM
+        "Cell Adhesion": "Cell Stickiness / ECM",
+        "extracellular matrix organization": "Cell Stickiness / ECM",
+
+        # Trafficking & Transport
+        "Intracellular Trafficking": "Trafficking & Transport",
+        "vesicle-mediated transport": "Trafficking & Transport",
+        "transmembrane transport": "Trafficking & Transport",
+
+        # Signals & Communication
+        "Signaling": "Signaling",
+
+        # Metabolism & Energy
+        "Metabolic Process": "Metabolism & Energy",
+        "generation of precursor metabolites and energy": "Metabolism & Energy",
+
+        # Development & Differentiation
+        "Cell Development": "Development",
+        "anatomical structure development": "Development",
+        "nervous system process": "Development",
+        "reproductive process": "Development",
+
+        # Immunity & Defense
+        "Immunity & Defense": "Immunity & Defense",
+        "defense response to other organism": "Immunity & Defense",
+
+        # Cell Death
+        "Cell Death": "Cell Death",
+    }
+
+    # order categories nicely in the heatmap
+    cat_order = [
+        "DNA & Chromosomes",
+        "RNA Regulation",
+        "Protein Factory",
+        "Protein Housekeeping",
+        "Cell Architecture",
+        "Cell Adhesion",
+        "Trafficking & Transport",
+        "Signaling",
+        "Metabolic Process",
+        "Cell Development",
+        "Immunity & Defense",
+        "Cell Death",
+    ]
+
+    all_genes = sorted(df["gene_symbol"].unique())   # all genes
+
+    tmp = df.copy()
+
+    # GO_Slim_BP is a list (or stringified list) → normalize to Python list
+    tmp["GO_BP"] = tmp["GO_Slim_BP"].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or [])
+    )
+
+    # explode so each GO term in the list becomes its own row
+    tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
+
+    tmp["category"] = tmp["GO_BP"].map(go_to_cat)
+
+    # build matrix: rows = GO terms, columns = genes, 1 if gene has that GO term
+    mat = (
+        tmp.assign(flag=1)
+           .pivot_table(index="category",
+                        columns="gene_symbol",
+                        values="flag",
+                        aggfunc="max",
+                        fill_value=0)
+           .reindex(columns=all_genes, fill_value=0)  # ensure all genes present
+           .sort_index()                               # optional: sort GO terms
+    )
+
+    plt.figure(figsize=(8, 8))
+    # sns.heatmap(mat, cmap="GnBu", cbar=False)
+    sns.heatmap(mat.T, cmap="PuBu", cbar=False)
+    plt.xlabel("")
+    plt.ylabel("")
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Gene Ontology', fontweight='bold', fontsize=16)
+    plt.tight_layout()
+
+    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/target_genes.csv')
+output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/plots'
 genes_ontology_heatmap(df, output_directory)
-disease_ontology_heatmap(df, output_directory)
+
+
+# weighted_ortholog_score_diff(df, output_directory)
+# scatter_similarity_identitiy_disease(df, output_directory)
+# genes_ontology_heatmap(df, output_directory)
+# disease_ontology_heatmap(df, output_directory)

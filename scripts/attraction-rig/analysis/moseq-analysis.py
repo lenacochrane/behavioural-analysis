@@ -7,108 +7,12 @@ import matplotlib.pyplot as plt
 import pyarrow.feather as feather
 import matplotlib.patches as mpatches
 import cv2
-
-# df_moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT/2025_05_21-13_29_37/moseq_df.csv')
-# df_stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT/2025_05_21-13_29_37/stats_df.csv')
-
-################################ SYLLABLE STATS 
-
-# velocity_px_s_mean 
-# duration
-# angular_velocity_mean
-# heading_mean
-
-# sns.barplot(data=df_stat, x='syllable', y='heading_mean', hue='group', ci='sd')
-
-# plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/moseq/heading.png', dpi=300, bbox_inches='tight')
-
-# plt.show()
-
-
-################################ TRACK ETHOGRAM
-
-# print(df_moseq.columns)
-
-
-# # Filter only the animals you want (e.g., 'N10-GH')
-# df_filtered = df_moseq[df_moseq['name'].str.startswith('N10-GH')].copy()
-
-# tracks = df_filtered['name'].unique()
-
-# # Make a syllable-to-color map using viridis
-# syllables = sorted(df_filtered['syllable'].unique())
-# palette = sns.color_palette('viridis', n_colors=len(syllables))
-# syl2color = {s: palette[i] for i, s in enumerate(syllables)}
-
-# # Start plot
-# fig, ax = plt.subplots(figsize=(12, len(tracks) * 0.4))
-
-# for i, name in enumerate(tracks):
-#     sub = df_filtered[df_filtered['name'] == name].sort_values('frame_index')
-
-#     for _, row in sub.iterrows():
-#         x = row['frame_index']
-#         y = i  # vertical stack by animal
-#         color = syl2color[row['syllable']]
-#         ax.add_patch(plt.Rectangle((x, y), 1, 1, color=color, linewidth=0))
-
-# # Formatting
-# ax.set_yticks(np.arange(len(tracks)) + 0.5)
-# ax.set_yticklabels(tracks)
-# ax.set_xlabel("Time")
-# ax.set_ylabel("Track")
-# ax.set_title("Syllable Ethogram N10-GH")
-# ax.set_xlim(df_filtered['frame_index'].min(), df_filtered['frame_index'].max())
-# ax.set_ylim(0, len(tracks))
-
-# handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
-# plt.legend(handles=handles, title="Syllables", bbox_to_anchor=(1.01, 1), loc='upper left')
-
-# plt.tight_layout()
-# plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/moseq/ethorgram-gh-n10.png', dpi=300, bbox_inches='tight')
-# plt.show()
-
-
-################################ TRACK ETHOGRAM
-
-# # Filter only the animals you want (e.g., 'N10-GH')
-# df_filtered = df_moseq[df_moseq['name'] == 'N1-GH_2025-02-24_15-16-50_td7'].copy()
-
-# tracks = df_filtered['name'].unique()
-
-# # Make a syllable-to-color map using viridis
-# syllables = sorted(df_filtered['syllable'].unique())
-# palette = sns.color_palette('viridis', n_colors=len(syllables))
-# syl2color = {s: palette[i] for i, s in enumerate(syllables)}
-
-# # Start plot
-# fig, ax = plt.subplots(figsize=(12, len(tracks) * 0.4))
-
-# for i, name in enumerate(tracks):
-#     sub = df_filtered[df_filtered['name'] == name].sort_values('frame_index')
-
-#     for _, row in sub.iterrows():
-#         x = row['frame_index']
-#         y = i  # vertical stack by animal
-#         color = syl2color[row['syllable']]
-#         ax.add_patch(plt.Rectangle((x, y), 1, 1, color=color, linewidth=0))
-
-# # Formatting
-# ax.set_yticks(np.arange(len(tracks)) + 0.5)
-# ax.set_yticklabels(tracks)
-# ax.set_xlabel("Time")
-# ax.set_ylabel("Track")
-# ax.set_title("Syllable Ethogram N10-GH")
-# ax.set_xlim(df_filtered['frame_index'].min(), df_filtered['frame_index'].max())
-# ax.set_ylim(0, len(tracks))
-
-# handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
-# plt.legend(handles=handles, title="Syllables", bbox_to_anchor=(1.01, 1), loc='upper left')
-
-# plt.tight_layout()
-# plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/moseq/ethorgram-example.png', dpi=300, bbox_inches='tight')
-# plt.show()
-
+from joblib import Parallel, delayed
+from matplotlib.colors import ListedColormap
+import re 
+import math
+import ast 
+from sklearn.decomposition import PCA
 
 
 """ ANALYSIS PIPELINE FOR MOSEQ DATA IN ATTRACTION RIG """
@@ -431,6 +335,9 @@ def comparing_models(directory):
             continue 
         kappa = folder.split("KAPPA")[-1]
         path = os.path.join(directory, folder, 'moseq_df.csv')
+        if not os.path.exists(path):
+            print(f"Skipping {folder}: no moseq_df.csv found")
+            continue
         df = pd.read_csv(path)
         df['kappa'] = int(kappa)
         dfs.append(df)
@@ -447,6 +354,9 @@ def comparing_models(directory):
             continue 
         kappa = folder.split("KAPPA")[-1]
         path = os.path.join(directory, folder, 'stats_df.csv')
+        if not os.path.exists(path):
+            print(f"Skipping {folder}: no stats_df.csv found")
+            continue
         df_stat = pd.read_csv(path)
         df_stat['kappa'] = int(kappa)
         dfs_stats.append(df_stat)
@@ -482,7 +392,23 @@ def comparing_models(directory):
     df = df.sort_values(['kappa', "name", "frame_index"]).reset_index(drop=True)
     durations = durations_by_onset(df)
     print(durations)
+
+    for model in durations['kappa'].unique():
+        sub = durations[durations['kappa'] == model]
+        plt.figure(figsize=(8,6))
+        sns.boxplot(data=sub, x='syllable', y='duration_frames')
+        plt.title(f'{model} Syllable Duration Distribution')
+        plt.xlabel('Syllable')
+        plt.ylabel('Duration (frames)')
+        plt.xticks(rotation=70)
+        out = os.path.join(output, 'syllable_duration_distributions')
+        if not os.path.exists(out):
+            os.makedirs(out)
+        plt.savefig(os.path.join(out, f'kappa_{model}.png'), dpi=300, bbox_inches='tight')
+        plt.close()
     
+
+
     ## per video 
     grouped_1_frame = durations[durations['duration_frames'] < 2].groupby(['kappa', 'name'])['duration_frames'].sum().reset_index(name='count_1_frame') # sum of frames 
     video_totals = durations.groupby(['kappa', 'name'])['duration_frames'].sum().reset_index(name='video_frame_count_total') # total frames per video
@@ -583,7 +509,7 @@ def comparing_models(directory):
     plt.title('Percentage of Syllables Under Threshold')
     plt.ylim(0, None)
     plt.xlabel('Kappa')
-    plt.ylabel('Percentage of Syllables Under Threshold (%)')
+    plt.ylabel('Percentage of Syllables Under Threshold (%)- good')
     plt.savefig(os.path.join(output, 'percentage_underthreshold_syllables.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -595,6 +521,23 @@ def comparing_models(directory):
     plt.xlabel('Kappa')
     plt.ylabel('Percentage of Frames Under Threshold (%)')
     plt.savefig(os.path.join(output, 'percentage_underthreshold_syllables_frames.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # plot raw number of syllables under threshold and total
+    long = underthreshold_syllables_df.melt(
+    id_vars='kappa',
+    value_vars=['total_syllables', 'no_underthreshold_syllables'],
+    var_name='syllable_type',
+    value_name='count')
+
+    plt.figure(figsize=(8,6))
+    sns.barplot(data=long, x='kappa', y='count', hue='syllable_type')
+    plt.title('Number of Irrelevant vs Total Syllables')
+    plt.ylim(0, None)
+    plt.xlabel('Kappa')
+    plt.ylabel('Number of Syllables')
+    plt.legend(title='Syllable Type', labels=['Total', 'Irrelevant'])
+    plt.savefig(os.path.join(output, 'number_underthreshold_vs_total_syllables.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -610,9 +553,27 @@ def comparing_models(directory):
     
     durations_with_quantiles = durations.merge(quantiles, on=['kappa', 'syllable'], how='left')
 
-    durations_with_quantiles['inside_quantiles_bool'] = ((durations_with_quantiles['duration_frames'] >= durations_with_quantiles['q10']) & (durations_with_quantiles['duration_frames'] <= durations_with_quantiles['q90']))
-    durations_with_quantiles['frames_outside'] = np.where(durations_with_quantiles['inside_quantiles_bool'], 0, durations_with_quantiles['duration_frames'])
-    durations_with_quantiles['frames_inside'] = np.where(durations_with_quantiles['inside_quantiles_bool'],durations_with_quantiles['duration_frames'],0)
+    # durations_with_quantiles['inside_quantiles_bool'] = ((durations_with_quantiles['duration_frames'] >= durations_with_quantiles['q10']) & (durations_with_quantiles['duration_frames'] <= durations_with_quantiles['q90']))
+    # durations_with_quantiles['frames_outside'] = np.where(durations_with_quantiles['inside_quantiles_bool'], 0, durations_with_quantiles['duration_frames'])
+    # durations_with_quantiles['frames_inside'] = np.where(durations_with_quantiles['inside_quantiles_bool'], durations_with_quantiles['duration_frames'],0)
+
+    dur = durations_with_quantiles['duration_frames']
+    q10 = durations_with_quantiles['q10']
+    q90 = durations_with_quantiles['q90']
+
+    # Replace these two lines ONLY:
+    # durations_with_quantiles['frames_outside'] = np.where(...)
+    # durations_with_quantiles['frames_inside'] = np.where(...)
+
+    # New logic:
+    durations_with_quantiles['frames_outside'] = np.where(
+        dur < q10,                                   # below q10 → whole duration outside
+        dur,
+        np.where(dur > q90, dur - q90, 0)            # above q90 → only excess outside
+    )
+
+    durations_with_quantiles['frames_inside'] = dur - durations_with_quantiles['frames_outside']
+
 
     summary_quantiles = (
     durations_with_quantiles.groupby(['kappa', 'syllable'], as_index=False)
@@ -620,6 +581,7 @@ def comparing_models(directory):
         frames_inside=('frames_inside', 'sum'),
         frames_outside=('frames_outside', 'sum')))
     
+
     summary_quantiles['fraction_outside_quantiles'] = summary_quantiles['frames_outside'] / (summary_quantiles['frames_inside'] + summary_quantiles['frames_outside']) * 100
     summary_quantiles.to_csv(os.path.join(output, 'frames_outside_10-90th_percentile_per_syllable.csv'), index=False)
 
@@ -641,42 +603,1774 @@ def comparing_models(directory):
     plt.savefig(os.path.join(output, 'number_frames_outside_10-90th_percentile.png'), dpi=300, bbox_inches='tight')
     plt.close() 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # 4. QUANTIFICATION OF WELL USED SYLLABLES -- FRAMES
+      # 1) syllables that pass the MoSeq ‘relevance’ threshold'; 
+      # 2) have durations that are inside a reasonable band for that syllable?:
+      # 3) are not dominated by 1-frame occurrences
 
     
+    # Identify relevant syllables from stats_df
+    relevant = (df_stat[['kappa', 'syllable']]
+        .drop_duplicates()
+        .assign(is_relevant=True)) # boolean column
+    
+    # Merge with durations_with_quantiles
+    durations_with_quantiles = durations_with_quantiles.merge(
+        relevant,
+        on=['kappa', 'syllable'],
+        how='left')
+    durations_with_quantiles['is_relevant'] = durations_with_quantiles['is_relevant'].fillna(False)
+
+    # Exclude syllables dominated by 1-frame occurrences
+    durations_with_quantiles['is_good_syllable'] = (durations_with_quantiles['is_relevant'] & (durations_with_quantiles['duration_frames'] >= 2)) # boolean column
+
+    durations_with_quantiles['total_frames'] = (durations_with_quantiles['frames_inside'] + durations_with_quantiles['frames_outside']) # total frames per syllable occurrence
+
+    data = []
+
+    for kappa in sorted(durations_with_quantiles['kappa'].unique()):
+        sub = durations_with_quantiles[durations_with_quantiles['kappa'] == kappa]
+
+        # frames in relevant syllables AND within 10–90% band
+        good_frames = sub.loc[sub['is_good_syllable'], 'frames_inside'].sum()
+
+        # total frames across ALL syllables
+        total_frames_all = sub['total_frames'].sum()
+
+       # total frames in GOOD syllables (relevant & duration >= 2), inside + outside
+        total_frames_relevant = sub.loc[sub['is_good_syllable'], 'total_frames'].sum()
+
+        data.append({
+            'kappa': int(kappa),
+            'total_frames': int(total_frames_all),
+            'frames_in_relevant_syllables': int(total_frames_relevant),
+            'good_frames': int(good_frames),
+            'percent_good_frames': 100 * (good_frames / total_frames_all if total_frames_all > 0 else 0.0),
+            'percent_good_frames_of_relevant_syllables': 100 * (good_frames / total_frames_relevant if total_frames_relevant > 0 else 0.0)
+        })
+
+    good_frames_df = pd.DataFrame(data)
+    good_frames_df.to_csv(os.path.join(output, 'good_frames_in_relevant_syllables.csv'), index=False)
+
+
+    plt.figure(figsize=(8,6))
+    sns.barplot(data=good_frames_df, x='kappa', y='percent_good_frames')
+    plt.title('Percentage of Good Frames (Relevant Syllables, within 10-90th Percentile, >1 frame)')
+    plt.ylim(0, None)
+    plt.xlabel('Kappa')
+    plt.ylabel('Percentage of Good Frames (%)')
+    plt.savefig(os.path.join(output, 'percentage_good_frames_in_relevant_syllables.png'), dpi=300, bbox_inches='tight')
+    plt.close() 
+
+
+
+def translate_rotate_syllables(df):
+
+    df = df.sort_values(['name', 'frame_index']).reset_index(drop=True) # kappa shd be included if multiple models
+
+    def translate_bout(bout):
+        # first frame of this bout
+        first = bout.iloc[0]
+        x = first['centroid_x']
+        y = first['centroid_y']
+
+        # subtract from all frames in this bout
+        bout['rel_centroid_x'] = bout['centroid_x'] - x
+        bout['rel_centroid_y'] = bout['centroid_y'] - y
+        return bout
+
+    df = df.groupby('bout_id', group_keys=False).apply(translate_bout)
+
+    ## ROTATION: USE HEADING TO ROTATE ALL COORDINATES SO THAT THE ANIMAL IS FACING 'UP' (Y AXIS POSITIVE) 
+    # +1.57 radians is up so want the first frame heading to be this
+
+    def rotate_bout(bout):
+        # first frame of this bout
+        first = bout.iloc[0]
+        h0 = first['heading']          # starting heading
+        target = np.pi / 2             # you want all bouts to start "up" (≈ 1.57) # +1.57 radians
+
+        delta = target - h0            # how much to rotate this bout by
+        cos_d = np.cos(delta)
+        sin_d = np.sin(delta)
+
+        x = bout['rel_centroid_x'].to_numpy()
+        y = bout['rel_centroid_y'].to_numpy()
+
+        # rotate all points in this bout
+        # cos θ = horizontal part of a direction
+        # sin θ = vertical part of a direction
+#         cos θ = “how much stays in its original direction”
+
+        # sin θ = “how much is rotated into the perpendicular direction”
+
+        # x' =  x*cosθ   -  y*sinθ
+        # y' =  x*sinθ   +  y*cosθ
+
+        x_rot = x * cos_d - y * sin_d
+        y_rot = x * sin_d + y * cos_d
+
+        bout['rotated_centroid_x'] = x_rot
+        bout['rotated_centroid_y'] = y_rot
+
+        # optional: rotated heading, so they all start near +pi/2
+        bout['heading_rotated'] = bout['heading'] + delta
+
+        return bout
+
+    df = df.groupby('bout_id', group_keys=False).apply(rotate_bout)
+
+    return df
+
+
+
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA100000/moseq_df.csv')
+# output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA100000/syllable_trajectories'
+# translate_rotate_syllables(df, output, plot=True)
     
 
 
+def mean_syllable_trajectories_per_kappa(directory):
+
+    dfs = []
+    for folder in os.listdir(directory):
+        if not folder.startswith('KEYPOINT'):
+            continue 
+        kappa = folder.split("KAPPA")[-1]
+        path = os.path.join(directory, folder, 'moseq_df.csv')
+        if not os.path.exists(path):
+            print(f"Skipping {folder}: no moseq_df.csv found")
+            continue
+        df = pd.read_csv(path)
+        df['kappa'] = int(kappa)
+        dfs.append(df)
+
+    output = os.path.join(directory, 'model_comparisons', 'syllable_mean_trajectories')
+    if not os.path.exists(output):
+        os.makedirs(output)
+
+    df = pd.concat(dfs, ignore_index=True)
+    df['bout_id'] = df['onset'].astype(int).cumsum()
+
+    ## work through each kappa model separately
+    for kappa, g_kappa in df.groupby('kappa'):
+
+        translated_df = translate_rotate_syllables(g_kappa)
+
+        syllable_output = os.path.join(output, f'kappa_{kappa}')
+        if not os.path.exists(syllable_output):
+            os.makedirs(syllable_output)
+
+        # 1) add relative frame index within each bout
+        translated_df = translated_df.sort_values(['bout_id', 'frame_index'])
+        translated_df['rel_frame'] = (
+            translated_df.groupby('bout_id').cumcount()
+        )
+
+        # 3) per syllable, compute median / mean rotated trajectory
+        for syll, g_syl in translated_df.groupby('syllable'):
+
+            # group by relative frame index and summarise across bouts
+            summary = (g_syl.groupby('rel_frame').agg(
+                    median_x=('rotated_centroid_x', 'median'),
+                    median_y=('rotated_centroid_y', 'median'),
+
+                    mean_x=('rotated_centroid_x', 'mean'),
+                    mean_y=('rotated_centroid_y', 'mean'),
+
+                    sd_x=('rotated_centroid_x', 'std'),
+                    sd_y=('rotated_centroid_y', 'std'),
+
+                    p10_x=('rotated_centroid_x', lambda x: np.percentile(x, 10)),
+                    p90_x=('rotated_centroid_x', lambda x: np.percentile(x, 90)),
+                    p25_x=('rotated_centroid_x', lambda x: np.percentile(x, 25)),
+                    p75_x=('rotated_centroid_x', lambda x: np.percentile(x, 75)),
+
+                    p10_y=('rotated_centroid_y', lambda y: np.percentile(y, 10)),
+                    p90_y=('rotated_centroid_y', lambda y: np.percentile(y, 90)),
+                    p25_y=('rotated_centroid_y', lambda y: np.percentile(y, 25)),
+                    p75_y=('rotated_centroid_y', lambda y: np.percentile(y, 75)),
+
+                    n=('bout_id', 'nunique')
+                ).reset_index())
+
+
+            # save canonical trajectory for this syllable
+            out_csv = os.path.join(
+                syllable_output, 
+                f'syllable_{syll}_canonical_trajectory.csv'
+            )
+            summary.to_csv(out_csv, index=False)
+
+               # ---------- MEDIAN PLOT ----------
+            # ---------- MEDIAN PLOT WITH PERCENTILE RIBBON ----------
+            plt.figure(figsize=(4, 4))
+
+            # shaded percentile region
+            plt.fill_between(
+                summary['median_x'],   # X-path is the median_x path
+                summary['p10_y'],      # lower percentile
+                summary['p90_y'],      # upper percentile
+                alpha=0.2,
+                color="gray"
+            )
+
+            # median trajectory
+            sns.lineplot(
+                x=summary['median_x'],
+                y=summary['median_y'],
+                linewidth=2,
+                color='black'
+            )
+
+            plt.scatter([0], [0], s=20, zorder=10) 
+            plt.gca().set_aspect('equal', 'box')
+            plt.title(f"Kappa {kappa} – Syllable {syll}\nMedian Trajectory + 10–90% band")
+            plt.xlabel("X (rotated)")
+            plt.ylabel("Y (rotated)")
+            out_png = os.path.join(syllable_output, f"syllable_{syll}_median.png")
+            plt.savefig(out_png, dpi=300, bbox_inches='tight')
+            plt.close()
+
+
+            # ---------- MEAN PLOT ----------
+            # ---------- MEAN PLOT WITH STANDARD DEVIATION RIBBON ----------
+            plt.figure(figsize=(4, 4))
+
+            plt.fill_between(
+                summary['mean_x'],
+                summary['mean_y'] - summary['sd_y'],
+                summary['mean_y'] + summary['sd_y'],
+                alpha=0.2,
+                color='gray'
+            )
+
+            sns.lineplot(
+                x=summary['mean_x'],
+                y=summary['mean_y'],
+                linewidth=2,
+                color='blue'
+            )
+
+            plt.scatter([0], [0], s=20, zorder=10)
+            plt.gca().set_aspect('equal', 'box')
+            plt.title(f"Kappa {kappa} – Syllable {syll}\nMean Trajectory ± 1 SD")
+            plt.xlabel("X (rotated)")
+            plt.ylabel("Y (rotated)")
+            out_png = os.path.join(syllable_output, f"syllable_{syll}_mean.png")
+            plt.savefig(out_png, dpi=300, bbox_inches='tight')
+            plt.close()
+
+            # ---------- MEAN PLOT WITH RAW TRAJECTORIES ----------
+            plt.figure(figsize=(4, 4))
+
+            # 1) draw all individual bouts in light grey
+            for bout_id, g_bout in g_syl.groupby('bout_id'):
+                plt.plot(
+                    g_bout['rotated_centroid_x'],
+                    g_bout['rotated_centroid_y'],
+                    color='gray',
+                    alpha=0.15,
+                    linewidth=0.7
+                )
+
+            # 2) overlay the mean trajectory in a dark line
+            plt.plot(
+                summary['mean_x'],
+                summary['mean_y'],
+                color='blue',
+                linewidth=2.0,
+                label='mean trajectory'
+            )
+
+            # 3) mark start
+            plt.scatter([0], [0], s=20, zorder=10, color='black')
+
+            plt.gca().set_aspect('equal', 'box')
+            plt.title(f"Kappa {kappa} – Syllable {syll}\nRaw bouts + mean trajectory")
+            plt.xlabel("X (rotated)")
+            plt.ylabel("Y (rotated)")
+            # plt.legend()  # optional
+
+            out_png = os.path.join(syllable_output, f"syllable_{syll}_mean_with_raw.png")
+            plt.savefig(out_png, dpi=300, bbox_inches='tight')
+            plt.close()
+        # --------------------------------------------------------
+
+
+# directory = '/Users/cochral/Desktop/MOSEQ'
+# mean_syllable_trajectories_per_kappa(directory)
+    
+
+def syllable_feature_quantifications(df, directory):
+
+    # df = translate_rotate_syllables(df, output=None, plot=False)
+
+    df['bout_id'] = df['onset'].astype(int).cumsum()
+
+    dfs = Parallel(n_jobs=-1)(delayed(translate_rotate_syllables)(g.copy())for _, g in df.groupby('name'))
+    df = pd.concat(dfs, ignore_index=True)
+    print("Translated and rotated syllables")
+
+    syllable_output = os.path.join(directory, 'syllable_feature_quantifications')
+    if not os.path.exists(syllable_output):
+        os.makedirs(syllable_output)
+
+    df = df.sort_values(['bout_id', 'frame_index'])
+    df['relative_frame'] = (df.groupby('bout_id').cumcount())
+
+    bout_lengths = df.groupby('bout_id').size()
+    good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
+    df = df[df['bout_id'].isin(good_bouts)].copy()
+
+    df['normalised_frame'] = df.groupby('bout_id')['relative_frame'].transform(lambda x: x / (x.max())) #check 
+
+
+     # 3) per syllable, compute median / mean rotated trajectory
+    for syll, grouped in df.groupby('syllable'):
+
+        # group by relative frame index and summarise across bouts
+        summary = (grouped.groupby('relative_frame').agg(
+                median_x=('rotated_centroid_x', 'median'),
+                median_y=('rotated_centroid_y', 'median'),
+
+                mean_x=('rotated_centroid_x', 'mean'),
+                mean_y=('rotated_centroid_y', 'mean'),
+
+                sd_x=('rotated_centroid_x', 'std'),
+                sd_y=('rotated_centroid_y', 'std'),
+
+                p10_x=('rotated_centroid_x', lambda x: np.percentile(x, 10)),
+                p90_x=('rotated_centroid_x', lambda x: np.percentile(x, 90)),
+                p25_x=('rotated_centroid_x', lambda x: np.percentile(x, 25)),
+                p75_x=('rotated_centroid_x', lambda x: np.percentile(x, 75)),
+
+                p10_y=('rotated_centroid_y', lambda y: np.percentile(y, 10)),
+                p90_y=('rotated_centroid_y', lambda y: np.percentile(y, 90)),
+                p25_y=('rotated_centroid_y', lambda y: np.percentile(y, 25)),
+                p75_y=('rotated_centroid_y', lambda y: np.percentile(y, 75)),
+
+                n=('bout_id', 'nunique') # per frame number of unique bouts
+            ).reset_index())
+        
+        # ---------- MEAN PLOT WITH RAW TRAJECTORIES ----------
+        plt.figure(figsize=(4, 4))
+
+        # 1) draw all individual bouts in light grey
+        for bout_id, g_bout in grouped.groupby('bout_id'):
+            plt.plot(
+                g_bout['rotated_centroid_x'],
+                g_bout['rotated_centroid_y'],
+                color='gray',
+                alpha=0.15,
+                linewidth=0.7
+            )
+        
+        total_bouts = grouped['bout_id'].nunique()
+        threshold_bouts = 0.05 * total_bouts
+        mean_trace = summary[summary['n'] >= threshold_bouts]
+
+        # 2) overlay the mean trajectory in a dark line
+        plt.plot(
+            mean_trace['mean_x'],
+            mean_trace['mean_y'],
+            color='blue',
+            linewidth=2.0,
+            label='mean trajectory')
+
+        # 3) mark start
+        plt.scatter([0], [0], s=20, zorder=10, color='black')
+
+        plt.gca().set_aspect('equal', 'box')
+        plt.title(f"{syll}\nRaw bouts + mean trajectory")
+        plt.xlabel("X (rotated)")
+        plt.ylabel("Y (rotated)")
+        # plt.legend()  # optional
+
+        out_png = os.path.join(syllable_output, f"syllable_{syll}.png")
+        plt.savefig(out_png, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # ---------- MEAN PLOT WITH 1 SD PLOTTED ----------
+        plt.figure(figsize=(4, 4))
+
+        plt.plot(
+            mean_trace['mean_x'],
+            mean_trace['mean_y'],
+            color='blue',
+            linewidth=2.0,
+            label='mean trajectory')
+        
+        plt.fill_between(
+            mean_trace['mean_x'],
+            mean_trace['mean_y'] - mean_trace['sd_y'],
+            mean_trace['mean_y'] + mean_trace['sd_y'],
+            alpha=0.2,
+            color='blue'
+        )
+        
+
+        ax = plt.gca()               # <-- define it
+        ax.set_aspect('equal', 'box')
+        plt.title(f"{syll}\nMean trajectory ± 1 SD")
+        plt.xlabel("X (rotated)")
+        plt.ylabel("Y (rotated)")
+        plt.xlim(-50,50)
+        # plt.legend()  # optional
+
+        out_png = os.path.join(syllable_output, f"syllable_{syll}_mean.png")
+        plt.savefig(out_png, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # ---------- RAW TRACES WITHIN 1 SD ----------
+
+
+        # 1) attach mean / sd per relative_frame back to each frame
+        stats_for_merge = summary[['relative_frame', 'mean_x', 'sd_x', 'mean_y', 'sd_y']]
+        grouped = grouped.merge(stats_for_merge, on='relative_frame', how='left')
+
+        # 2) per-frame: is this point within 1 SD of the mean (in both x and y)?
+        grouped['within_1sd'] = (
+            grouped['rotated_centroid_x'].between(
+                grouped['mean_x'] - grouped['sd_x'],
+                grouped['mean_x'] + grouped['sd_x']
+            )
+            &
+            grouped['rotated_centroid_y'].between(
+                grouped['mean_y'] - grouped['sd_y'],
+                grouped['mean_y'] + grouped['sd_y']
+            )
+        )
+
+        # 3) keep only bouts where *all* frames are within 1 SD
+        #    (change .all() to .mean() >= 0.9 etc if you want a tolerance)
+        good_bouts_mask = grouped.groupby('bout_id')['within_1sd'].transform('all')
+        grouped_good = grouped[good_bouts_mask].copy()
+
+        # 4) now plot ONLY these "good" raw traces
+        plt.figure(figsize=(4, 4))
+
+        for bout_id, g_bout in grouped_good.groupby('bout_id'):
+            plt.plot(
+                g_bout['rotated_centroid_x'],
+                g_bout['rotated_centroid_y'],
+                color='gray',
+                alpha=0.15,
+                linewidth=0.7
+            )
+
+        # overlay mean as before
+        total_bouts = grouped['bout_id'].nunique()
+        threshold_bouts = 0.05 * total_bouts
+        mean_trace = summary[summary['n'] >= threshold_bouts]
+
+        plt.plot(
+            mean_trace['mean_x'],
+            mean_trace['mean_y'],
+            color='blue',
+            linewidth=2.0,
+            label='mean trajectory'
+        )
+
+        plt.scatter([0], [0], s=20, zorder=10, color='black')
+        plt.gca().set_aspect('equal', 'box')
+        plt.title(f"{syll}\nRaw bouts within 1 SD + mean")
+        plt.xlabel("X (rotated)")
+        plt.ylabel("Y (rotated)")
+
+        out_png = os.path.join(syllable_output, f"syllable_{syll}_within_1sd.png")
+        plt.savefig(out_png, dpi=300, bbox_inches='tight')
+        plt.close()
 
 
 
+
+
+
+
+        # ---------- VELOCITY AND HEADING QUANTIFICATION ----------
+        total_bouts = grouped['bout_id'].nunique()
+        threshold_bouts = 0.05 * total_bouts
+        grouped['n'] = grouped.groupby(['syllable', 'relative_frame'])['bout_id'].transform('nunique')
+        mean_trace = grouped[grouped['n'] >= threshold_bouts]
+ 
+
+        fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
+
+        hmin, hmax   = -2, 2    # heading range (radians)
+        avmin, avmax = -5, 5          # angular velocity
+        vmin, vmax   = 0, 450          # speed (px/s)
+
+        sns.lineplot(
+            data=mean_trace,
+            x='relative_frame',
+            y='velocity_px_s',
+            ax=axes[0],
+            color='green')
+
+        axes[0].set_title(f"Velocity")
+        axes[0].set_ylabel("Velocity")
+        axes[0].set_ylabel("")
+        axes[0].set_ylim(vmin,vmax)
+
+        sns.lineplot(
+            data=mean_trace,
+            x='relative_frame',
+            y='heading_rotated',
+            ax=axes[1],
+            color='orange')     
+        axes[1].set_title(f"Headingxw")
+        axes[1].set_ylabel("Heading")
+        axes[1].set_xlabel("")
+        axes[1].set_ylim(hmin,hmax)
+
+        sns.lineplot(
+            data=mean_trace,
+            x='relative_frame',
+            y='angular_velocity',
+            ax=axes[2],
+            color='red')
+
+        axes[2].set_title("Angular Velocity")
+        axes[2].set_xlabel("Relative Frame")
+        axes[2].set_ylabel("Angular Velocity")
+        axes[2].set_ylim(avmin,avmax)
+
+        plt.tight_layout()
+        out_png = os.path.join(syllable_output, f"quantification_{syll}.png")
+        plt.savefig(out_png, dpi=300, bbox_inches='tight')
+        plt.close()
+
+
+        # ---------- VELOCITY AND HEADING QUANTIFICATION, NORMALISED FRAME----------
+        n_bins = 20
+        grouped['norm_bin'] = (grouped['normalised_frame'] * (n_bins - 1)).round().astype(int)
+        grouped['n_norm'] = grouped.groupby('norm_bin')['bout_id'].transform('nunique')
+        mean_trace_norm = grouped[grouped['n_norm'] >= threshold_bouts].copy()
+
+        # turn bins back into 0–1 for plotting
+        mean_trace_norm['norm_t'] = mean_trace_norm['norm_bin'] / (n_bins - 1)
+
+        
+
+        fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
+
+        hmin, hmax   = -3, 3    # heading range (radians)
+        avmin, avmax = -5, 5          # angular velocity
+        vmin, vmax   = 0, 800         # speed (px/s)
+
+        sns.lineplot(
+            data=mean_trace_norm,
+            x='norm_t',
+            y='velocity_px_s',
+            ax=axes[0],
+            color='green')
+
+        axes[0].set_title(f"Velocity")
+        axes[0].set_ylabel("Velocity")
+        axes[0].set_xlabel("")
+        axes[0].set_ylim(vmin,vmax)
+
+        sns.lineplot(
+            data=mean_trace_norm,
+            x='norm_t',
+            y='heading_rotated',
+            ax=axes[1],
+            color='orange')     
+        axes[1].set_title(f"Headingxw")
+        axes[1].set_ylabel("Heading")
+        axes[1].set_xlabel("")
+        axes[1].set_ylim(hmin,hmax)
+
+        sns.lineplot(
+            data=mean_trace_norm,
+            x='norm_t',
+            y='angular_velocity',
+            ax=axes[2],
+            color='red')
+
+        axes[2].set_title("Angular Velocity")
+        axes[2].set_xlabel("Normalised Frame")
+        axes[2].set_ylabel("Angular Velocity")
+        axes[2].set_ylim(avmin,avmax)
+
+        plt.tight_layout()
+        out_png = os.path.join(syllable_output, f"quantification_normalised_{syll}.png")
+        plt.savefig(out_png, dpi=300, bbox_inches='tight')
+        plt.close()
+
+
+
+def ethogram_plotting(df,  video, directory):
+
+        # Filter only the animals you want (e.g., 'N10-GH')
+    df_filtered = df[df['name'] == video].copy()
+
+    tracks = df_filtered['name'].unique()
+
+    # Make a syllable-to-color map using viridis
+    syllables = sorted(df_filtered['syllable'].unique())
+    palette = sns.color_palette('viridis', n_colors=len(syllables))
+    syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+    # Start plot
+    fig, ax = plt.subplots(figsize=(12, len(tracks) * 0.4))
+
+    for i, name in enumerate(tracks):
+        sub = df_filtered[df_filtered['name'] == name].sort_values('frame_index')
+
+        for _, row in sub.iterrows():
+            x = row['frame_index']
+            y = i  # vertical stack by animal
+            color = syl2color[row['syllable']]
+            ax.add_patch(plt.Rectangle((x, y), 1, 1, color=color, linewidth=0))
+
+    # Formatting
+    ax.set_yticks(np.arange(len(tracks)) + 0.5)
+    ax.set_yticklabels(tracks)
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Track")
+    ax.set_title("Syllable Ethogram N10-GH")
+    ax.set_xlim(df_filtered['frame_index'].min(), df_filtered['frame_index'].max())
+    ax.set_ylim(0, len(tracks))
+
+    handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+    plt.legend(handles=handles, title="Syllables", bbox_to_anchor=(1.01, 1), loc='upper left')
+
+    plt.tight_layout()
+    output = os.path.join(directory, f'ethorgram-{video}.png')
+    plt.savefig(output, dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+
+## OEIGINAL WAY TO PLOT- CHATGPT SUGGESTED A FASTER WAY BELOW
+# def analysis_main(df, output, ethogram=True):
+
+#     df['group'] = df['name'].str.split('_').str[0]
+
+#     if ethogram:
+
+#         groups = sorted(df['group'].unique())
+
+#         for group in groups:
+#             df_filtered = df[df['group'] == group].copy()
+
+#             tracks = df_filtered['name'].unique()
+
+#             # Make a syllable-to-color map using viridis
+#             syllables = sorted(df_filtered['syllable'].unique())
+#             palette = sns.color_palette('viridis', n_colors=len(syllables))
+#             syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+#             # Start plot
+#             fig, ax = plt.subplots(figsize=(12, len(tracks) * 0.4))
+
+#             for i, name in enumerate(tracks):
+#                 sub = df_filtered[df_filtered['name'] == name].sort_values('frame_index')
+
+#                 for _, row in sub.iterrows():
+#                     x = row['frame_index']
+#                     y = i  # vertical stack by animal
+#                     color = syl2color[row['syllable']]
+#                     ax.add_patch(plt.Rectangle((x, y), 1, 1, color=color, linewidth=0))
+
+#             # Formatting
+#             ax.set_yticks(np.arange(len(tracks)) + 0.5)
+#             ax.set_yticklabels(tracks)
+#             ax.set_xlabel("Time (frame index)")
+#             ax.set_ylabel("Track")
+#             ax.set_title(f"Syllable Ethogram {group}")
+
+#             ax.set_xlim(df_filtered['frame_index'].min(), df_filtered['frame_index'].max())
+#             ax.set_ylim(0, len(tracks))
+
+#             handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+#             plt.legend(handles=handles, title="Syllables", bbox_to_anchor=(1.01, 1), loc='upper left')
+
+#             plt.tight_layout()
+#             outfile = os.path.join(output, f"ethogram-{group.lower()}.png")
+#             plt.savefig(outfile, dpi=300, bbox_inches='tight')
+#             plt.close(fig)
+    
+        
+
+
+
+
+def analysis_main(df, stats_df, output, ethogram=True):
+
+    def plot_ethogram_fast(df_group, group_name):
+        # Convert track names to row indices
+        tracks = sorted(df_group['name'].unique())
+        track_to_row = {t: i for i, t in enumerate(tracks)}
+
+        # Frame range
+        min_f = df_group['frame_index'].min()
+        max_f = df_group['frame_index'].max()
+
+        width = max_f - min_f + 1
+
+        # Create matrix: rows = tracks, columns = frames
+        mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+
+        for _, row in df_group.iterrows():
+            r = track_to_row[row['name']]
+            c = row['frame_index'] - min_f
+            mat[r, c] = row['syllable']
+
+        # Get syllables and colors
+    # --- Make your exact color mapping ---
+        syllables = sorted(df_group['syllable'].unique())
+        palette = sns.color_palette('viridis', n_colors=len(syllables))
+        syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+        # convert syllables → integer index image
+        idx_map = {s: i for i, s in enumerate(syllables)}
+        mat_idx = np.full_like(mat, -1)
+        for s, idx in idx_map.items():
+            mat_idx[mat == s] = idx
+
+        # colormap = your palette + white for missing
+        cmap = ListedColormap(palette + [(1,1,1)])
+        mat_idx[mat_idx == -1] = len(palette)
+
+        # ---- PLOT ----
+        plt.figure(figsize=(12, len(tracks)*0.4))
+        plt.imshow(mat_idx, aspect='auto', cmap=cmap, interpolation='nearest')
+
+
+        plt.yticks(np.arange(len(tracks)), tracks)
+        plt.xlabel("Frame index")
+        plt.ylabel("Track")
+        plt.title(f"Syllable Ethogram {group_name}")
+
+   
+        handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+        plt.legend(handles=handles, title="Syllables",
+                bbox_to_anchor=(1.01, 1), loc='upper left')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(output, f'{group_name}-ethogram.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    ## unique bouts
+    df['bout_id'] = df['onset'].astype(int).cumsum()
+
+    ## filter to only good bouts
+    bout_lengths = df.groupby('bout_id').size()
+    good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
+    df = df[df['bout_id'].isin(good_bouts)].copy()
+
+    ## filter for good syllables
+    good_syllables = stats_df['syllable'].unique()
+    df = df[df['syllable'].isin(good_syllables)]
+
+    # unique groups
+    df['group'] = df['name'].str.split('_').str[0]
+    df = df[df['frame_index'] <= 3600 ]  # ensure no negative frame indices
+
+
+    syllable_frequencies = (df.groupby(['group', 'syllable'])
+                            .size()
+                            .unstack(fill_value=0)
+                            .stack()
+                            .reset_index(name='frequency'))
+    
+
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(
+        data=syllable_frequencies[syllable_frequencies['group'].str.startswith('N10')],
+        x='syllable',
+        y='frequency',
+        hue='group'
+    )
+
+    plt.title('Syllable Frequencies by Group')
+    plt.xlabel('Syllable')
+    plt.ylabel('Frequency')
+    plt.legend(title='Group')
+    plt.savefig(os.path.join(output, 'syllable_frequencies_n10.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(
+        data=syllable_frequencies[syllable_frequencies['group'].str.startswith('N2')],
+        x='syllable',
+        y='frequency',
+        hue='group'
+    )
+
+    plt.title('Syllable Frequencies by Group')
+    plt.xlabel('Syllable')
+    plt.ylabel('Frequency')
+    plt.legend(title='Group')
+    plt.savefig(os.path.join(output, 'syllable_frequencies_n2.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(
+        data=syllable_frequencies[syllable_frequencies['group'].str.match(r'^N1-')],
+        x='syllable',
+        y='frequency',
+        hue='group'
+    )
+
+    plt.title('Syllable Frequencies by Group')
+    plt.xlabel('Syllable')
+    plt.ylabel('Frequency')
+    plt.legend(title='Group')
+    plt.savefig(os.path.join(output, 'syllable_frequencies_n1.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(
+        data=syllable_frequencies[syllable_frequencies['group'].str.contains('GH')],
+        x='syllable',
+        y='frequency',
+        hue='group'
+    )
+
+    plt.title('Syllable Frequencies by Group')
+    plt.xlabel('Syllable')
+    plt.ylabel('Frequency')
+    plt.legend(title='Group')
+    plt.savefig(os.path.join(output, 'syllable_frequencies_gh.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(
+        data=syllable_frequencies[syllable_frequencies['group'].str.contains('SI')],
+        x='syllable',
+        y='frequency',
+        hue='group'
+    )
+
+    plt.title('Syllable Frequencies by Group')
+    plt.xlabel('Syllable')
+    plt.ylabel('Frequency')
+    plt.legend(title='Group')
+    plt.savefig(os.path.join(output, 'syllable_frequencies_si.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    if ethogram:
+        groups = sorted(df['group'].unique())
+        for g in groups:
+            df_group = df[df['group'] == g].copy()
+            plot_ethogram_fast(df_group, g)
+
+
+    ## proximity to other larvae
+
+    def extract_track(name):
+        match = re.search(r'track(\d+)', name)
+        if match:
+            return int(match.group(1))
+        else:
+            return 0
+    
+
+    def extract_video_id(name):
+        match = re.search(r'_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_td\d+)', name)
+        if match:
+            return match.group(1)
+        else:
+            return None  # or "" if you prefer
+
+    df['video_id'] = df['name'].apply(extract_video_id)
+    df['track'] = df['name'].apply(extract_track)
+
+
+    proximity_list = []
+
+        # 1) loop over videos
+    for video_id, df_v in df.groupby('video_id'):
+        df_v = df_v.sort_values('frame_index')
+
+        # 2) all onset events in this video
+        df_onsets = df_v[df_v['onset']]
+
+        for onset_row in df_onsets.itertuples():
+            group = onset_row.group
+            frame = onset_row.frame_index
+            track = onset_row.track
+            syll = onset_row.syllable
+            x = onset_row.centroid_x
+            y = onset_row.centroid_y
+
+            # 4) other larvae in the SAME frame, different track
+            others = df_v[(df_v['frame_index'] == frame) & (df_v['track'] != track)]
+
+            # loop over others with itertuples as well
+            for other in others.itertuples():
+                d = np.hypot(other.centroid_x - x, other.centroid_y - y)
+
+                proximity_list.append({
+                    'video_id': video_id,
+                    'group': group,
+                    'frame_index': frame,
+                    'track': track,
+                    'syllable': syll,
+                    'track_other': other.track,
+                    'syllable_other': other.syllable,
+                    'distance': d,
+                })
+
+
+    proximal_df = pd.DataFrame(proximity_list)
+    proximal_df.to_csv(os.path.join(output, 'syllable_proximity_analysis.csv'), index=False)
+
+    onset_summary = (proximal_df
+    .groupby(['group', 'video_id', 'frame_index', 'track'])
+    .agg(
+        syllable=('syllable', 'first'),     # same for all rows in the onset
+        mean_distance=('distance', 'mean'),
+        min_distance=('distance', 'min')
+    )
+    .reset_index())
+
+    onset_summary.to_csv(os.path.join(output, 'syllable_proximity_onset_summary.csv'), index=False)
+
+
+    onset_summary = onset_summary[onset_summary['group'].str.contains('N10')]
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(data=onset_summary, x='syllable', y='mean_distance')
+    plt.title('Mean Distance to Other Larvae at Syllable Onset')
+    plt.xlabel('Syllable')
+    plt.ylabel('Mean Distance (pixels)')
+    plt.savefig(os.path.join(output, 'syllable_mean_proximity.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(data=onset_summary, x='syllable', y='min_distance')
+    plt.title('Min Distance to Other Larvae at Syllable Onset')
+    plt.xlabel('Syllable')
+    plt.ylabel('Min Distance (pixels)')
+    plt.savefig(os.path.join(output, 'syllable_min_proximity.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(data=onset_summary, x='syllable', y='mean_distance', hue='group')
+    plt.title('Mean Distance to Other Larvae at Syllable Onset')
+    plt.xlabel('Syllable')
+    plt.ylabel('Mean Distance (pixels)')
+    plt.savefig(os.path.join(output, 'syllable_mean_proximity_per_group.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10,6))
+    sns.pointplot(data=onset_summary, x='syllable', y='min_distance', hue='group')
+    plt.title('Min Distance to Other Larvae at Syllable Onset')
+    plt.xlabel('Syllable')
+    plt.ylabel('Min Distance (pixels)')
+    plt.savefig(os.path.join(output, 'syllable_min_proximity_per_group.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+    onsets = df[df['onset']]
+    for id, syllable in onsets.groupby('syllable'):
+        plt.figure(figsize=(10,6))
+        sns.scatterplot(data=syllable, x='centroid_x', y='centroid_y', alpha=0.3)
+        plt.title(f'Syllable {id} Onset Times')
+        plt.xlabel('Centroid X')
+        plt.ylabel('Centroid Y')
+        plt.savefig(os.path.join(output, f'spatial_plot_{id}.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+    
+
+
+    syllable_ids = sorted(onsets['syllable'].unique())
+    n = len(syllable_ids)
+
+    ncols = 10
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sid in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = onsets[onsets['syllable'] == sid]
+        ax.scatter(sub['centroid_x'], sub['centroid_y'], s=2, alpha=0.3)
+        ax.set_title(f"Syll {sid}", fontsize=8)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # turn off any empty panels at the end
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "all_syllables_spatial_grid.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+
+
+
+
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+# stats_df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/stats_df.csv')
+# output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/ethograms'
+# if not os.path.exists(output):
+#     os.makedirs(output)
+# analysis_main(df, stats_df, output)
+
+
+
+
+def interaction_syllable(interactions, cluster, moseq, stat, output):
+
+    interactions = pd.merge(
+            interactions, 
+            cluster[['interaction_id', 'Yhat.idt.pca']], 
+            on='interaction_id', 
+            how='inner')
+     
+    print("Merged interactions with cluster data")
+
+    interactions['video_id'] = interactions['file'].str.replace('.mp4', '', regex=False)
+
+    # quick dirty method- just keep video, frame and track involved in interaction 
+
+    keep = ['file', 'video_id', 'Frame', 'Interaction Number', 'Normalized Frame', 'Interaction Pair', 'Yhat.idt.pca']
+
+    interactions['Interaction Pair'] = interactions['Interaction Pair'].apply(
+    lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+
+
+    interaction_tracks = (
+        interactions[keep]
+        .assign(track=interactions['Interaction Pair'])
+        .explode('track')
+        .drop(columns='Interaction Pair')
+        .reset_index(drop=True))
+    
+    print("Extracted interaction tracks")
+
+
+
+    moseq['bout_id'] = moseq['onset'].astype(int).cumsum()
+    bout_lengths = moseq.groupby('bout_id').size()
+    good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
+    moseq = moseq[moseq['bout_id'].isin(good_bouts)].copy()
+
+
+    good_syllables = stat['syllable'].unique()
+    moseq = moseq[moseq['syllable'].isin(good_syllables)]
+
+
+    moseq['group'] = moseq['name'].str.split('_').str[0]
+    moseq = moseq[moseq['frame_index'] <= 3600 ]  # ensure no negative frame indices
+
+    def extract_track(name):
+        match = re.search(r'track(\d+)', name)
+        if match:
+            return int(match.group(1))
+        else:
+            return 0
+    
+
+    def extract_video_id(name):
+        match = re.search(r'_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_td\d+)', name)
+        if match:
+            return match.group(1)
+        else:
+            return None  # or "" if you prefer
+
+    moseq['video_id'] = moseq['name'].apply(extract_video_id)
+    moseq['track'] = moseq['name'].apply(extract_track)
+    moseq = moseq.rename(columns={'frame_index': 'Frame'})
+
+
+    interactions_with_syllables = interaction_tracks.merge(moseq[['video_id', 'Frame', 'track', 'syllable', 'onset']], on=['video_id', 'Frame', 'track'], how='left')
+    interactions_with_syllables['syllable'] = interactions_with_syllables['syllable'].astype('Int64')  # capital I
+    interactions_with_syllables = interactions_with_syllables.rename(columns={'Yhat.idt.pca': 'cluster'})
+    interactions_with_syllables['Normalized Frame'] = interactions_with_syllables['Normalized Frame'].astype(int)
+    interactions_with_syllables['unique_track_id'] = interactions_with_syllables['video_id'] + '_track' + interactions_with_syllables['track'].astype(str)
+    interactions_with_syllables['period'] = np.where(interactions_with_syllables['Normalized Frame'] < 0, 'pre', 'post')
+
+
+    print("Merged interactions with MOSEQ syllable data")
+    interactions_with_syllables.to_csv(os.path.join(output, 'interactions_with_syllables.csv'), index=False)
+    print(interactions_with_syllables.head())
+
+
+
+    def plot_ethogram_fast(group, group_name):
+
+        # Convert track names to row indices
+        tracks = sorted(group['unique_track_id'].unique())
+        track_to_row = {t: i for i, t in enumerate(tracks)}
+
+        # Frame range
+        min_f = group['Normalized Frame'].min()
+        max_f = group['Normalized Frame'].max()
+
+        width = max_f - min_f + 1
+
+        # Create matrix: rows = tracks, columns = frames
+        mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+
+        for _, row in group.iterrows():
+            r = track_to_row[row['unique_track_id']]
+            c = row['Normalized Frame'] - min_f
+            mat[r, c] = row['syllable']
+
+        # Get syllables and colors
+    # --- Make your exact color mapping ---
+        syllables = sorted(group['syllable'].unique())
+        palette = sns.color_palette('viridis', n_colors=len(syllables))
+        syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+        # convert syllables → integer index image
+        idx_map = {s: i for i, s in enumerate(syllables)}
+        mat_idx = np.full_like(mat, -1)
+        for s, idx in idx_map.items():
+            mat_idx[mat == s] = idx
+
+        # colormap = your palette + white for missing
+        cmap = ListedColormap(palette + [(1,1,1)])
+        mat_idx[mat_idx == -1] = len(palette)
+
+        # ---- PLOT ----
+        plt.figure(figsize=(12, len(tracks)*0.4))
+        plt.imshow(mat_idx, aspect='auto', cmap=cmap, interpolation='nearest')
+
+
+        plt.yticks(np.arange(len(tracks)), tracks)
+        plt.xlabel("Frame index")
+        plt.ylabel("Track")
+        plt.title(f"Syllable Ethogram {group_name}")
+
+   
+        handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+        plt.legend(handles=handles, title="Syllables",
+                bbox_to_anchor=(1.01, 1), loc='upper left')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(output, f'{group_name}-ethogram.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+    
+
+    groups = sorted(interactions_with_syllables['cluster'].unique())
+    for group_id in groups:
+        df_group = interactions_with_syllables[interactions_with_syllables['cluster'] == group_id].copy()
+        df_group = df_group.dropna(subset=['syllable'])  # after merge certain rows dont have syllables
+        plot_ethogram_fast(df_group, group_id)
+
+
+    onsets = interactions_with_syllables[interactions_with_syllables['onset'] == True]
+
+    freq = (
+    onsets
+    .groupby(['syllable', 'cluster'])
+    .size()
+    .reset_index(name='frequency'))
+
+    cluster_totals = (
+    onsets
+    .groupby('cluster')
+    .size()
+    .reset_index(name='total')
+)
+    freq = freq.merge(cluster_totals, on='cluster')
+    freq['relative_frequency'] = freq['frequency'] / freq['total']   # fraction
+    # or percent:
+    freq['relative_frequency_percent'] = freq['relative_frequency'] * 100
+
+
+    syllable_ids = sorted(onsets['syllable'].unique())
+    n = len(syllable_ids)
+
+    ncols = 10
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sid in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = freq[freq['syllable'] == sid]
+        ax.bar(sub['cluster'], sub['relative_frequency'])
+        ax.set_title(f"Syll {sid}", fontsize=8)
+        # ax.set_xticks([])
+        # ax.set_yticks([])
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Frequency")
+
+    # turn off any empty panels at the end
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "syllable_relative_frequency.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    freq = (
+        onsets
+        .groupby(['syllable', 'cluster', 'period'])
+        .size()
+        .reset_index(name='count')
+    )
+
+    # 4) relative frequency "within each syllable + period"
+    #    (so for a given syllable, pre bars across clusters sum to 1; same for post)
+    totals = (
+        freq
+        .groupby(['syllable', 'period'])['count']
+        .sum()
+        .reset_index(name='total')
+    )
+
+    freq = freq.merge(totals, on=['syllable', 'period'])
+    freq['rel_freq'] = freq['count'] / freq['total']
+
+
+    # ---------- PLOT: one subplot per syllable, pre vs post bars per cluster ----------
+    syllable_ids = sorted(freq['syllable'].dropna().unique())
+    clusters_sorted = sorted(freq['cluster'].dropna().unique())
+
+    n = len(syllable_ids)
+    ncols = 10
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sid in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = freq[freq['syllable'] == sid]
+
+        pre = sub[sub['period'] == 'pre'].set_index('cluster').reindex(clusters_sorted, fill_value=0)
+        post = sub[sub['period'] == 'post'].set_index('cluster').reindex(clusters_sorted, fill_value=0)
+
+        x = np.arange(len(clusters_sorted))
+        w = 0.4
+
+        ax.bar(x - w/2, pre['rel_freq'], width=w, label='pre')
+        ax.bar(x + w/2, post['rel_freq'], width=w, label='post')
+
+        ax.set_title(f"Syll {sid}", fontsize=8)
+        ax.set_xticks(x)
+        ax.set_xticklabels(clusters_sorted, rotation=90, fontsize=6)
+        ax.set_yticks([])
+        ax.set_ylim(0, max(pre['rel_freq'].max(), post['rel_freq'].max(), 1e-6) * 1.1)
+
+    # turn off empty panels
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    # one legend for whole figure
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "syllable_pre_post_per_cluster.png"),
+                dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+
+
+
+
+
+def anchor_partner(df):
+
+
+        # make sure Interaction Pair is a real tuple
+    df['Interaction Pair'] = df['Interaction Pair'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+    )
+
+    # because (left,right) = (Track_1_id, Track_2_id)
+    df['track1_id'] = df['Interaction Pair'].str[0]
+    df['track2_id'] = df['Interaction Pair'].str[1]
+
+    # prep columns
+    df['anchor_track_id'] = np.nan
+    df['partner_track_id'] = np.nan
+
+    ## Returns a straightness score 
+    def compute_pca_axis(points):
+        pca = PCA(n_components=2).fit(points)
+        axis = pca.components_[0]
+        score = pca.explained_variance_ratio_[0]
+        # ensure the axis points upward
+        return (axis if axis[1] >= 0 else -axis), score
+    
+    ## == Align the tracks (anchor 0,0) and rotate partner accordingly (on the right)
+    def align_and_flip(track, anchor_axis, anchor_start):
+        X = track - anchor_start
+        phi = np.arctan2(anchor_axis[1], anchor_axis[0])  # angle of axis
+        alpha = np.pi/2 - phi                            # rotate to +y
+        R = np.array([[np.cos(alpha), -np.sin(alpha)],
+                    [np.sin(alpha),  np.cos(alpha)]])
+        X_rot = X.dot(R.T)
+        return X_rot
+    
+    df['anchor x_body'] = np.nan
+    df['anchor y_body'] = np.nan
+    df['partner x_body'] = np.nan
+    df['partner y_body'] = np.nan
+
+    ## == Generate the anchor and partner x,y coordinates for future
+
+    for interaction_id, group in df.groupby('interaction_id'):
+        group = group.sort_values('Frame')
+        coords1 = group[['Track_1 x_body','Track_1 y_body']].values
+        coords2 = group[['Track_2 x_body','Track_2 y_body']].values
+        if len(coords1) < 2 or len(coords2) < 2:
+            continue
+        # Compute PCA axes & scores
+        axis1, s1 = compute_pca_axis(coords1)
+        axis2, s2 = compute_pca_axis(coords2)
+        # Choose anchor and partner
+        if s1 >= s2:
+            winner = 1
+            anchor_pts, partner_pts, anchor_axis = coords1, coords2, axis1
+        else:
+            winner = 2
+            anchor_pts, partner_pts, anchor_axis = coords2, coords1, axis2
+
+        # Align both
+        start = anchor_pts[0]
+        A_al = align_and_flip(anchor_pts, anchor_axis, start)
+        B_al = align_and_flip(partner_pts, anchor_axis, start)
+
+        # --- NEW: align head/tail using the SAME reference (before flips) ---
+        h1 = group[['Track_1 x_head','Track_1 y_head']].dropna().values
+        t1 = group[['Track_1 x_tail','Track_1 y_tail']].dropna().values
+        h2 = group[['Track_2 x_head','Track_2 y_head']].dropna().values
+        t2 = group[['Track_2 x_tail','Track_2 y_tail']].dropna().values
+
+        A_head = align_and_flip(h1 if winner == 1 else h2, anchor_axis, start) if (len(h1) or len(h2)) else np.empty((0,2))
+        A_tail = align_and_flip(t1 if winner == 1 else t2, anchor_axis, start) if (len(t1) or len(t2)) else np.empty((0,2))
+        B_head = align_and_flip(h2 if winner == 1 else h1, anchor_axis, start) if (len(h1) or len(h2)) else np.empty((0,2))
+        B_tail = align_and_flip(t2 if winner == 1 else t1, anchor_axis, start) if (len(t1) or len(t2)) else np.empty((0,2))
+    # --------------------------------------------------------------------
+
+        # Horizontal flip if partner is left
+        # if np.median(B_al[:,0]) < 0:
+        #     A_al[:,0] *= -1
+        #     B_al[:,0] *= -1
+
+        # Horizontal flip if partner starts on the left
+        if B_al[0, 0] < 0:
+            A_al[:, 0] *= -1
+            B_al[:, 0] *= -1
+            # --- NEW: apply same horizontal flip to head/tail
+            if A_head.size: A_head[:, 0] *= -1
+            if A_tail.size: A_tail[:, 0] *= -1
+            if B_head.size: B_head[:, 0] *= -1
+            if B_tail.size: B_tail[:, 0] *= -1
+
+        # Vertical flip if anchor is predominantly down
+        if np.mean(A_al[:,1]) < 0:
+            A_al[:,1] *= -1
+            B_al[:,1] *= -1
+                # --- NEW: apply same vertical flip to head/tail
+            if A_head.size: A_head[:, 1] *= -1
+            if A_tail.size: A_tail[:, 1] *= -1
+            if B_head.size: B_head[:, 1] *= -1
+            if B_tail.size: B_tail[:, 1] *= -1
+
+
+        # Assign back to DataFrame
+        # idx = group.index[:len(A_al)]
+
+        idx = group.index  # safer- why 
+
+
+        df.loc[idx, ['anchor x_body','anchor y_body']]  = A_al
+        df.loc[idx, ['partner x_body','partner y_body']] = B_al# Initialize aligned columns
+
+        # --- NEW: write aligned head/tail back (each uses its own length) ---
+        if A_head.size:
+            df.loc[group.index[:len(A_head)], ['anchor x_head','anchor y_head']] = A_head
+        if A_tail.size:
+            df.loc[group.index[:len(A_tail)], ['anchor x_tail','anchor y_tail']] = A_tail
+        if B_head.size:
+            df.loc[group.index[:len(B_head)], ['partner x_head','partner y_head']] = B_head
+        if B_tail.size:
+            df.loc[group.index[:len(B_tail)], ['partner x_tail','partner y_tail']] = B_tail
+        # --------------------------------------------------------------------
+
+        # → tag which original track was anchor (1 or 2)
+        df.loc[idx, 'anchor_track']  = winner
+        df.loc[idx, 'partner_track'] = 3 - winner
+
+        # --- THIS is where the anchor/partner REAL ids go ---
+        anchor_id  = group['track1_id'].iloc[0] if winner == 1 else group['track2_id'].iloc[0]
+        partner_id = group['track2_id'].iloc[0] if winner == 1 else group['track1_id'].iloc[0]
+
+        df.loc[idx, 'anchor_track_id']  = anchor_id
+        df.loc[idx, 'partner_track_id'] = partner_id
+
+
+
+
+
+
+    # === HEADING ANGLE CHANGE ===
+    df['track1_heading_angle_change'] = df.groupby("interaction_id")["track1_angle"].diff().abs()
+    df['track2_heading_angle_change'] = df.groupby("interaction_id")["track2_angle"].diff().abs()
+
+    # === APPROACH ANGLE CHANGE ===
+    df['track1_approach_angle_change'] = df.groupby("interaction_id")["track1_approach_angle"].diff().abs()
+    df['track2_approach_angle_change'] = df.groupby("interaction_id")["track2_approach_angle"].diff().abs()
+
+    metrics = [
+    'speed',
+    'acceleration',
+    'angle',
+    'approach_angle']
+
+    for m in metrics:
+        t1 = df[f'track1_{m}']
+        t2 = df[f'track2_{m}']
+        df[f'anchor_{m}']  = np.where(df['anchor_track']==1, t1, t2)
+        df[f'partner_{m}'] = np.where(df['anchor_track']==1, t2, t1)
+
+        # === Assign anchor/partner versions
+        df['anchor_heading_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_heading_angle_change'], df['track2_heading_angle_change'])
+        df['partner_heading_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_heading_angle_change'], df['track1_heading_angle_change'])
+
+        df['anchor_approach_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_approach_angle_change'], df['track2_approach_angle_change'])
+        df['partner_approach_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_approach_angle_change'], df['track1_approach_angle_change'])
+
+    
+    return df
+
+
+
+
+
+def interaction_syllable_partner(interactions, cluster, moseq, stat, output):
+
+    interactions = pd.merge(
+            interactions, 
+            cluster[['interaction_id', 'Yhat.idt.pca']], 
+            on='interaction_id', 
+            how='inner')
+     
+    print("Merged interactions with cluster data")
+
+    interactions = anchor_partner(interactions)
+    print("Computed anchor and partner tracks")
+    interactions.to_csv(os.path.join(output, 'interactions_with_anchor_partner.csv'), index=False)
+
+
+    interactions['video_id'] = interactions['file'].str.replace('.mp4', '', regex=False)
+
+    # quick dirty method- just keep video, frame and track involved in interaction 
+
+    # keep = ['file', 'video_id', 'Frame', 'Interaction Number', 'Normalized Frame', 'Interaction Pair', 'Yhat.idt.pca']
+
+    # interactions['Interaction Pair'] = interactions['Interaction Pair'].apply(
+    # lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+
+
+    # interaction_tracks = (
+    #     interactions[keep]
+    #     .assign(track=interactions['Interaction Pair'])
+    #     .explode('track')
+    #     .drop(columns='Interaction Pair')
+    #     .reset_index(drop=True))
+    
+
+    # print("Extracted interaction tracks")
+
+    # columns you want to keep the same for both roles
+# 1) columns you want to keep the same for both
+    base_cols = ['file', 'video_id', 'Frame', 'Interaction Number',
+                'Normalized Frame', 'Yhat.idt.pca']
+
+    # 2) make ANCHOR df
+    anchor_df = interactions[base_cols].copy()
+    anchor_df['role'] = 'anchor'
+    anchor_df['track'] = interactions['anchor_track_id'].values
+
+    # add anchor features, but strip the prefix
+    for c in [c for c in interactions.columns if c.startswith('anchor_')
+            and c not in ['anchor_track','anchor_track_id']]:
+        anchor_df[c.replace('anchor_', '')] = interactions[c].values
+
+
+    # 3) make PARTNER df
+    partner_df = interactions[base_cols].copy()
+    partner_df['role'] = 'partner'
+    partner_df['track'] = interactions['partner_track_id'].values
+
+    for c in [c for c in interactions.columns if c.startswith('partner_')
+            and c not in ['partner_track','partner_track_id']]:
+        partner_df[c.replace('partner_', '')] = interactions[c].values
+
+
+    # 4) stack them
+    interaction_tracks = pd.concat([anchor_df, partner_df], ignore_index=True)
+    interaction_tracks = interaction_tracks.sort_values(['file', 'Interaction Number', 'Normalized Frame', 'role']).reset_index(drop=True)
+
+    print(interaction_tracks['role'].unique())
+    interaction_tracks['track'] = interaction_tracks['track'].astype('Int64')
+
+
+    print("Extracted interaction tracks (anchor/partner).")
+    interaction_tracks.to_csv(os.path.join(output, 'interaction_tracks_anchor_partner.csv'), index=False)
+  
+
+
+    moseq['bout_id'] = moseq['onset'].astype(int).cumsum()
+    bout_lengths = moseq.groupby('bout_id').size()
+    good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
+    moseq = moseq[moseq['bout_id'].isin(good_bouts)].copy()
+
+
+    good_syllables = stat['syllable'].unique()
+    moseq = moseq[moseq['syllable'].isin(good_syllables)]
+
+
+    moseq['group'] = moseq['name'].str.split('_').str[0]
+    moseq = moseq[moseq['frame_index'] <= 3600 ]  # ensure no negative frame indices
+
+    def extract_track(name):
+        match = re.search(r'track(\d+)', name)
+        if match:
+            return int(match.group(1))
+        else:
+            return 0
+    
+
+    def extract_video_id(name):
+        match = re.search(r'_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_td\d+)', name)
+        if match:
+            return match.group(1)
+        else:
+            return None  # or "" if you prefer
+
+    moseq['video_id'] = moseq['name'].apply(extract_video_id)
+    moseq['track'] = moseq['name'].apply(extract_track)
+    moseq = moseq.rename(columns={'frame_index': 'Frame'})
+    moseq['track'] = moseq['track'].astype('Int64')
+
+
+    interactions_with_syllables = interaction_tracks.merge(moseq[['video_id', 'Frame', 'track', 'syllable', 'onset']], on=['video_id', 'Frame', 'track'], how='left')
+    interactions_with_syllables['syllable'] = interactions_with_syllables['syllable'].astype('Int64')  # capital I
+    interactions_with_syllables = interactions_with_syllables.rename(columns={'Yhat.idt.pca': 'cluster'})
+    interactions_with_syllables['Normalized Frame'] = interactions_with_syllables['Normalized Frame'].astype(int)
+    interactions_with_syllables['unique_track_id'] = interactions_with_syllables['video_id'] + '_track' + interactions_with_syllables['track'].astype(str)
+    interactions_with_syllables['period'] = np.where(interactions_with_syllables['Normalized Frame'] < 0, 'pre', 'post')
+    interactions_with_syllables['track'] = interactions_with_syllables['track'].astype('Int64')
+
+
+    print("Merged interactions with MOSEQ syllable data")
+    interactions_with_syllables.to_csv(os.path.join(output, 'interactions_with_syllables.csv'), index=False)
+    print(interactions_with_syllables.head())
+
+
+
+
+
+
+
+    def plot_ethogram_fast(group, group_name):
+
+        # Convert track names to row indices
+        tracks = sorted(group['unique_track_id'].unique())
+        track_to_row = {t: i for i, t in enumerate(tracks)}
+
+        # Frame range
+        min_f = group['Normalized Frame'].min()
+        max_f = group['Normalized Frame'].max()
+
+        width = max_f - min_f + 1
+
+        # Create matrix: rows = tracks, columns = frames
+        mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+
+        for _, row in group.iterrows():
+            r = track_to_row[row['unique_track_id']]
+            c = row['Normalized Frame'] - min_f
+            mat[r, c] = row['syllable']
+
+        # Get syllables and colors
+    # --- Make your exact color mapping ---
+        syllables = sorted(group['syllable'].unique())
+        palette = sns.color_palette('viridis', n_colors=len(syllables))
+        syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+        # convert syllables → integer index image
+        idx_map = {s: i for i, s in enumerate(syllables)}
+        mat_idx = np.full_like(mat, -1)
+        for s, idx in idx_map.items():
+            mat_idx[mat == s] = idx
+
+        # colormap = your palette + white for missing
+        cmap = ListedColormap(palette + [(1,1,1)])
+        mat_idx[mat_idx == -1] = len(palette)
+
+        # ---- PLOT ----
+        plt.figure(figsize=(12, len(tracks)*0.4))
+        plt.imshow(mat_idx, aspect='auto', cmap=cmap, interpolation='nearest')
+
+
+        plt.yticks(np.arange(len(tracks)), tracks)
+        plt.xlabel("Frame index")
+        plt.ylabel("Track")
+        plt.title(f"Syllable Ethogram {group_name}")
+
+   
+        handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+        plt.legend(handles=handles, title="Syllables",
+                bbox_to_anchor=(1.01, 1), loc='upper left')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(output, f'{group_name}-ethogram.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    partners_only = interactions_with_syllables[interactions_with_syllables['role'] == 'partner'].copy()
+
+
+    groups = sorted(partners_only['cluster'].unique())
+    for group_id in groups:
+        df_group = partners_only[partners_only['cluster'] == group_id].copy()
+        df_group = df_group.dropna(subset=['syllable'])  # after merge certain rows dont have syllables
+        plot_ethogram_fast(df_group, group_id)
+
+
+
+    onsets = partners_only[partners_only['onset'] == True]
+
+    freq = (
+    onsets
+    .groupby(['syllable', 'cluster'])
+    .size()
+    .reset_index(name='frequency'))
+
+    cluster_totals = (
+    onsets
+    .groupby('cluster')
+    .size()
+    .reset_index(name='total')
+)
+    freq = freq.merge(cluster_totals, on='cluster')
+    freq['relative_frequency'] = freq['frequency'] / freq['total']   # fraction
+    # or percent:
+    freq['relative_frequency_percent'] = freq['relative_frequency'] * 100
+
+
+    syllable_ids = sorted(onsets['syllable'].unique())
+    n = len(syllable_ids)
+
+    ncols = 10
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sid in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = freq[freq['syllable'] == sid]
+        ax.bar(sub['cluster'], sub['relative_frequency'])
+        ax.set_title(f"Syll {sid}", fontsize=8)
+        # ax.set_xticks([])
+        # ax.set_yticks([])
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Frequency")
+
+    # turn off any empty panels at the end
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "syllable_relative_frequency.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    freq = (
+        onsets
+        .groupby(['syllable', 'cluster', 'period'])
+        .size()
+        .reset_index(name='count')
+    )
+
+    # 4) relative frequency "within each syllable + period"
+    #    (so for a given syllable, pre bars across clusters sum to 1; same for post)
+    totals = (
+        freq
+        .groupby(['syllable', 'period'])['count']
+        .sum()
+        .reset_index(name='total')
+    )
+
+    freq = freq.merge(totals, on=['syllable', 'period'])
+    freq['rel_freq'] = freq['count'] / freq['total']
+
+
+    # ---------- PLOT: one subplot per syllable, pre vs post bars per cluster ----------
+    syllable_ids = sorted(freq['syllable'].dropna().unique())
+    clusters_sorted = sorted(freq['cluster'].dropna().unique())
+
+    n = len(syllable_ids)
+    ncols = 10
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sid in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = freq[freq['syllable'] == sid]
+
+        pre = sub[sub['period'] == 'pre'].set_index('cluster').reindex(clusters_sorted, fill_value=0)
+        post = sub[sub['period'] == 'post'].set_index('cluster').reindex(clusters_sorted, fill_value=0)
+
+        x = np.arange(len(clusters_sorted))
+        w = 0.4
+
+        ax.bar(x - w/2, pre['rel_freq'], width=w, label='pre')
+        ax.bar(x + w/2, post['rel_freq'], width=w, label='post')
+
+        ax.set_title(f"Syll {sid}", fontsize=8)
+        ax.set_xticks(x)
+        ax.set_xticklabels(clusters_sorted, rotation=90, fontsize=6)
+        ax.set_yticks([])
+        ax.set_ylim(0, max(pre['rel_freq'].max(), post['rel_freq'].max(), 1e-6) * 1.1)
+
+    # turn off empty panels
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    # one legend for whole figure
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "syllable_pre_post_per_cluster.png"),
+                dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+interactions = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/cropped_interactions.csv')
+cluster = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/pca-data2-F18.csv')
+moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/stats_df.csv')
+output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/partner'
+
+
+interaction_syllable_partner(interactions, cluster, moseq, stat, output)
+
+
+
+# df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+# directory = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots'
+# syllable_overlay(df, directory, 'N1-GH_2025-02-24_15-16-50_td7') #video_track_name = 'N1-GH_2025-02-24_15-16-50_td7'
+# syllable_feature_quantifications(df, directory)
 
 
 
@@ -687,13 +2381,13 @@ def comparing_models(directory):
 
 
 
-directory = '/Users/cochral/Desktop/MOSEQ'
-comparing_models(directory)
+# directory = '/Users/cochral/Desktop/MOSEQ'
+# comparing_models(directory)
 
     
 
 
-## plot syllables over time - and also mean line but idk yes 
+## plot syllables over time - and also mean line but idk yes frequency 
 
 ## can i add in the testing 1 video overlay yes
 
@@ -711,3 +2405,6 @@ comparing_models(directory)
 # durations(df_moseq, output)
 # syllable_overlay(df_moseq, output, 'N1-GH_2025-02-24_15-16-50_td7') #video_track_name = 'N1-GH_2025-02-24_15-16-50_td7'  
 # syllable_features(df_moseq, output)
+
+
+
