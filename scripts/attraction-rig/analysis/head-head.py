@@ -20,6 +20,9 @@ df3['condition'] = 'starved-starved'
 
 plt.figure(figsize=(8,8))
 
+### interaction type - cant include the videos which didnt have contacts - or do i add in a 0 per file for those missing types?
+### im not sure --- shd check at one point 
+
 
 df = pd.concat([df1, df2, df3], ignore_index=True)
 
@@ -29,6 +32,7 @@ grouped = (
     .sum()
     .reset_index()
 )
+
 
 sns.barplot(data=grouped, x='interaction_type', y='count', hue='condition', edgecolor='black', linewidth=2, errorbar='sd', alpha=0.8)
 

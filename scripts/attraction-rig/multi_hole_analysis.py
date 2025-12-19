@@ -724,8 +724,83 @@ class MultiHoleAnalysis:
         return hole_entry_time
 
 
+    # METHOD HOLE_DEPARTURES: CALCULATES THE NUMBER OF LARVAE LEAVING THE HOLE
 
-######
+    def hole_departures(self):
+
+        data = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file]
+
+            for track in df['track_id'].unique():
+                track_df = (
+                    df[df['track_id'] == track]
+                    .sort_values(by='frame')
+                    .reset_index(drop=True)
+                )
+
+                states = track_df['within_hole'].astype(bool).values
+                frames = track_df['frame'].values
+                holes  = track_df['which_hole'].values  # may include None
+
+                i = 1
+                departure_index = 0
+
+                while i < len(states):
+                    # Detect True → False transition (exit)
+                    if states[i - 1] and not states[i]:
+                        departure_frame = frames[i]
+
+                        # Find the last non-null which_hole during the inside-run
+                        j = i - 1
+                        hole_label = None
+                        while j >= 0 and states[j]:
+                            if pd.notna(holes[j]) and holes[j] is not None:
+                                hole_label = holes[j]
+                                break
+                            j -= 1
+
+                        if hole_label is None:
+                            hole_label = "unknown"  # e.g. only digging_near_hole
+
+                        if hole_label != "unknown":
+                            n_in_hole = int(
+                                df[
+                                    (df['frame'] == departure_frame) &
+                                    (df['within_hole']) &
+                                    (df['which_hole'] == hole_label)
+                                ].shape[0]
+                            ) + 1 # include departing larva
+                        else:
+
+
+                            n_in_hole = np.nan
+
+                        data.append({
+                            'file': track_file,
+                            'track': track,
+                            'departure_index': departure_index,
+                            'departure_frame': departure_frame,
+                            'hole_left': hole_label,
+                            'n_in_hole_at_departure': n_in_hole
+                        })
+                        departure_index += 1
+
+                    i += 1
+
+        departures_df = pd.DataFrame(data).sort_values(
+            by=['file', 'track', 'departure_frame']
+        )
+
+        departures_df.to_csv(
+            os.path.join(self.directory, 'departures_events.csv'),
+            index=False
+        )
+
+        return departures_df
+
 
 
 
@@ -740,8 +815,10 @@ class MultiHoleAnalysis:
 
             for track in df['track_id'].unique():
                 track_df = df[df['track_id'] == track].sort_values(by='frame').reset_index(drop=True)
+
                 states = track_df['within_hole'].astype(bool).values
                 frames = track_df['frame'].values
+                holes  = track_df['which_hole'].values  # may have None
 
                 i = 1
                 while i < len(states):
@@ -749,16 +826,42 @@ class MultiHoleAnalysis:
                     if states[i - 1] and not states[i]:
                         exit_frame = frames[i]
 
+                        # --- find exit hole (last real which_hole during inside-run) ---
+                        j_back = i - 1
+                        exit_hole = None
+                        while j_back >= 0 and states[j_back]:
+                            if pd.notna(holes[j_back]) and holes[j_back] is not None:
+                                exit_hole = holes[j_back]
+                                break
+                            j_back -= 1
+
                         # Now search for the next False → True (re-entry)
                         j = i + 1
                         while j < len(states):
                             if not states[j - 1] and states[j]:
                                 return_frame = frames[j]
                                 return_time = return_frame - exit_frame
-    
+
                                 return_distance = track_df.loc[
-                                        (track_df['frame'] > exit_frame) & (track_df['frame'] <= return_frame),
-                                        'displacement'].sum() #displacement was calculated in the compute_hole 
+                                    (track_df['frame'] > exit_frame) &
+                                    (track_df['frame'] <= return_frame),
+                                    'displacement'
+                                ].sum()
+
+                                # --- find return hole (first real which_hole in new inside-run) ---
+                                k_fwd = j
+                                return_hole = None
+                                while k_fwd < len(states) and states[k_fwd]:
+                                    if pd.notna(holes[k_fwd]) and holes[k_fwd] is not None:
+                                        return_hole = holes[k_fwd]
+                                        break
+                                    k_fwd += 1
+
+                                returned_same_hole = (
+                                    exit_hole is not None and
+                                    return_hole is not None and
+                                    exit_hole == return_hole
+                                )
 
                                 data.append({
                                     'file': track_file,
@@ -766,8 +869,10 @@ class MultiHoleAnalysis:
                                     'exit frame': exit_frame,
                                     'return frame': return_frame,
                                     'return_time': return_time,
-                                    'distance_covered': return_distance
-
+                                    'distance_covered': return_distance,
+                                    'exit_hole': exit_hole,
+                                    'return_hole': return_hole,
+                                    'returned_same_hole': returned_same_hole
                                 })
 
                                 i = j  # move outer loop forward after return
@@ -779,40 +884,9 @@ class MultiHoleAnalysis:
         df_returns = df_returns.sort_values(by=['file', 'track', 'exit frame'])
         df_returns.to_csv(os.path.join(self.directory, 'returns.csv'), index=False)
         return df_returns
+
     
 
-    # METHOD HOLE_DEPARTURES: CALCULATES THE NUMBER OF LARVAE LEAVING THE HOLE
-
-    def hole_departures(self):
-
-        data = []
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            df = self.track_data[track_file]
-
-            for track in df['track_id'].unique():
-                track_df = df[df['track_id'] == track].sort_values(by='frame').reset_index(drop=True)
-                states = track_df['within_hole'].astype(bool).values
-                frames = track_df['frame'].values
-
-                count = 0
-
-                i = 1
-                while i < len(states):
-                    # Detect True → False transition (exit)
-                    if states[i - 1] and not states[i]:
-                        count += 1
-                    i += 1
-
-                data.append({'file': track_file, 'track': track, 'departures': count})
-
-        hole_departures = pd.DataFrame(data)
-        hole_departures = hole_departures.sort_values(by=['track'], ascending=True)
-        hole_departures.to_csv(os.path.join(self.directory, 'hole_departures.csv'), index=False)
-
-        return hole_departures
-    
     # METHOD HOLE_ENTRY-DEPARTURE_LATENCY:
 
     def hole_entry_departure_latency(self):
@@ -823,53 +897,88 @@ class MultiHoleAnalysis:
             track_file = match['track_file']
             df = self.track_data[track_file].sort_values(by='frame')
 
-            # Get list of unique frames
             all_frames = df['frame'].unique()
             all_frames.sort()
 
-            # Track previous inside state
             prev_inside_ids = set()
 
             for i, frame in enumerate(all_frames):
                 current_df = df[df['frame'] == frame]
-                current_inside_ids = set(current_df[current_df['within_hole']]['track_id'])
+                current_inside_df = current_df[current_df['within_hole']]
+                current_inside_ids = set(current_inside_df['track_id'])
 
-                # Detect new entries: tracks that were not inside before but are now
+                # new entries into ANY hole this frame
                 new_entries = current_inside_ids - prev_inside_ids
 
                 for entrant in new_entries:
-                    # Count how many are in hole including this new one
-                    count_at_entry = len(current_inside_ids)
 
-                    # Now search forward for first time a larva leaves
+                    # figure out which hole they entered
+                    entry_hole_arr = current_df.loc[
+                        current_df['track_id'] == entrant, 'which_hole'
+                    ].values
+                    entry_hole = entry_hole_arr[0] if len(entry_hole_arr) else None
+
+                    # if we can’t identify a hole, skip (can’t do per-hole latency)
+                    if entry_hole is None or pd.isna(entry_hole):
+                        continue
+
+                    # how many are in THAT hole at entry (including entrant)
+                    n_in_entry_hole_at_entry = int(
+                        (current_inside_df['which_hole'] == entry_hole).sum()
+                    )
+
+                    # now scan forward for the first departure FROM THAT SAME HOLE
                     latency = None
+                    next_departure_frame = None
                     departure_happened = False
+
+                    # IDs currently in this hole at entry
+                    ids_in_entry_hole = set(
+                        current_inside_df.loc[
+                            current_inside_df['which_hole'] == entry_hole, 'track_id'
+                        ]
+                    )
 
                     for j in range(i + 1, len(all_frames)):
                         next_frame = all_frames[j]
                         next_df = df[df['frame'] == next_frame]
-                        next_inside_ids = set(next_df[next_df['within_hole']]['track_id'])
+                        next_inside_df = next_df[next_df['within_hole']]
 
-                        if len(next_inside_ids) < len(current_inside_ids):
-                            latency = next_frame - frame
+                        next_ids_in_entry_hole = set(
+                            next_inside_df.loc[
+                                next_inside_df['which_hole'] == entry_hole, 'track_id'
+                            ]
+                        )
+
+                        # a departure from this hole happened if count drops
+                        if len(next_ids_in_entry_hole) < len(ids_in_entry_hole):
+                            next_departure_frame = next_frame
+                            latency = next_departure_frame - frame
                             departure_happened = True
                             break
 
+                        # update for next comparison step
+                        ids_in_entry_hole = next_ids_in_entry_hole
+
                     data.append({
                         'file': track_file,
+                        'entrant': entrant,
+                        'entry_hole': entry_hole,
                         'entry_frame': frame,
-                        'number_in_hole_at_entry': count_at_entry,
-                        'latency_to_next_departure': latency,
+                        'n_in_entry_hole_at_entry': n_in_entry_hole_at_entry,
+                        'next_departure_frame': next_departure_frame,
+                        'latency_to_next_departure_same_hole': latency,
                         'departure_happened': departure_happened
                     })
 
-                # Update previous state
                 prev_inside_ids = current_inside_ids
 
-        # Convert to DataFrame
-        result = pd.DataFrame(data)
-        result = result.sort_values(by=['file', 'entry_frame'])
-        result.to_csv(os.path.join(self.directory, 'hole_entry_departure_latency.csv'), index=False)
+        result = pd.DataFrame(data).sort_values(by=['file', 'entry_frame'])
+        result.to_csv(os.path.join(self.directory, 'entry_departure_latency.csv'), index=False)
+        return result
+
+
+
 
 
 
@@ -891,14 +1000,6 @@ class MultiHoleAnalysis:
                     continue  # skip if never entered
 
                 first_entry = hole_frames.iloc[0]
-
-                # # Speeds before entering the hole
-                # before_mask = (group['frame'] < first_entry)
-                # speeds_before = group.loc[before_mask, 'speed']
-
-                # # Speeds after entering (but not in hole)
-                # after_mask = (group['frame'] > first_entry) & (~group['within_hole'])
-                # speeds_after = group.loc[after_mask, 'speed']
 
                 before_mask = (
                     (group['frame'] < first_entry) &
@@ -927,43 +1028,62 @@ class MultiHoleAnalysis:
                 })
         
         speed_comparison = pd.DataFrame(summary)
-        speed_comparison.to_csv(os.path.join(self.directory, 'hole_speed.csv'), index=False)
+        speed_comparison.to_csv(os.path.join(self.directory, 'speed.csv'), index=False)
 
 
 
     # METHOD DISTANCE_FROM_HOLE: CALCULATES DISTANCES FROM HOLE CENTROID  
 
-    def distance_from_hole(self): 
+    def distance_from_hole(self):
 
         data = []
 
-        for match in self.matching_pairs:  
-            track_file = match['track_file']
-            hole_boundary = match['hole_boundary']
-            
-            if hole_boundary is None:
-                print(f"No hole boundary for track file: {track_file}")
+        for match in self.matching_pairs:
+            track_file = match["track_file"]
+            hole_boundaries = match.get("hole_boundaries", {})  # dict: hole1->poly, hole2->poly, ...
+
+            if not hole_boundaries:
+                print(f"No hole boundaries for track file: {track_file}")
                 continue
 
             df = self.track_data[track_file]
 
-            centroid = hole_boundary.centroid
+            # Precompute centroids once per file
+            centroids = {label: poly.centroid for label, poly in hole_boundaries.items()}
 
-            for index, row in df.iterrows():
-                x, y = row['x_body'], row['y_body']
-                distance = np.sqrt((centroid.x - x)**2 + (centroid.y - y)**2)
-                data.append({'time': row.frame, 'distance_from_hole': distance, 'speed': row.speed, 'file': track_file})
-    
+            for row in df.itertuples():
+                x, y = row.x_body, row.y_body
+
+                # distance to each hole centroid
+                dists = {
+                    label: np.hypot(c.x - x, c.y - y)
+                    for label, c in centroids.items()
+                }
+
+                closest_hole = min(dists, key=dists.get)
+                min_dist = dists[closest_hole]
+
+                data.append({
+                    "time": row.frame,
+                    "track_id": row.track_id,
+                    "closest_hole": closest_hole,          # optional but useful
+                    "distance_to_closest_hole": min_dist,
+                    "speed": row.speed,
+                    "file": track_file
+                })
+
         if not data:
             print("No distances calculated, check data")
-        else:
+            return None
 
-            distance_hole_over_time = pd.DataFrame(data)
-            distance_hole_over_time = distance_hole_over_time.sort_values(by=['time'], ascending=True)
-            distance_hole_over_time.to_csv(os.path.join(self.directory, 'hole_distance.csv'), index=False)
+        distance_hole_over_time = pd.DataFrame(data)
+        distance_hole_over_time = distance_hole_over_time.sort_values(by=["file", "time"])
+        distance_hole_over_time.to_csv(
+            os.path.join(self.directory, "closest_distance.csv"),
+            index=False
+        )
 
-
-   
+        return distance_hole_over_time
 
 
 
@@ -975,488 +1095,86 @@ class MultiHoleAnalysis:
     def hole_entry_probability(self):
         data = []
         min_near_frames = 15
+        lookahead = 30
 
         for match in self.matching_pairs:
             track_file = match['track_file']
+            hole_boundaries = match.get("hole_boundaries", {})  # dict: hole1->poly, hole2->poly...
+
             df = self.track_data[track_file].sort_values(['track_id', 'frame'])
 
+            # If no holes for this file, skip cleanly
+            if not hole_boundaries:
+                print(f"No holes for {track_file}")
+                continue
+
             for track_id, track_df in df.groupby('track_id'):
-                near = track_df['within_10mm'].values.astype(bool)
-                hole = track_df['within_hole'].values.astype(bool)
+                near = track_df['within_10mm'].values.astype(bool)     # near ANY hole (as before)
+                hole = track_df['within_hole'].values.astype(bool)    # inside ANY hole (as before)
                 frames = track_df['frame'].values
 
                 i = 0
-                while i <= len(near) - min_near_frames -1:
+                while i <= len(near) - min_near_frames - 1:
                     if all(near[i:i + min_near_frames]):
 
                         decision_frame = frames[i + min_near_frames]
 
-                        # Look ahead to see if they enter the hole
-                        entered = any(hole[i + min_near_frames : i + min_near_frames + 30])
+                        # --- NEW 1) which hole are they near at decision_frame? ---
+                        decision_row = track_df.iloc[i + min_near_frames]
+                        p = Point(decision_row['x_body'], decision_row['y_body'])
 
+                        # choose closest hole by distance to boundary (not centroid)
+                        decision_hole = min(
+                            hole_boundaries.keys(),
+                            key=lambda h: hole_boundaries[h].exterior.distance(p)
+                        )
+
+                        # --- NEW 2) did they enter THAT SAME hole soon after? ---
+                        # look ahead in this larva's own track
+                        future = track_df.iloc[i + min_near_frames : i + min_near_frames + lookahead]
+
+                        entered = any(
+                            (future['within_hole']) &
+                            (future['which_hole'] == decision_hole)
+                        )
+
+                        # others inside ANY hole at decision frame (unchanged)
                         others_inside = df[
-                            (df['frame'] == decision_frame) &     # Only consider rows for the current decision frame
-                            (df['track_id'] != track_id) &        # Exclude the current larva (we want others only)
-                            (df['within_hole'])                   # Only count those larvae currently inside the hole
-                        ].shape[0]                                # Get the number of such rows = number of others in hole
+                            (df['frame'] == decision_frame) &
+                            (df['track_id'] != track_id) &
+                            (df['within_hole'])
+                        ].shape[0]
 
                         data.append({
                             'file': track_file,
                             'track': track_id,
                             'decision_frame': decision_frame,
-                            'entry': entered,
+                            'decision_hole': decision_hole,   # <-- only new column
+                            'entry': entered,                 # now = entered that same hole
                             'number_inside_hole': others_inside
                         })
-                        
+
                         if entered:
-                            # Skip until they leave both the hole AND the 10mm vicinity
-                            j = i + min_near_frames + 30
+                            j = i + min_near_frames + lookahead
                             while j < len(hole) and (hole[j] or near[j]):
                                 j += 1
                             i = j
                         else:
-                            # They didn't enter — skip ahead until they leave the 10mm vicinity
                             j = i + min_near_frames
                             while j < len(near) and near[j]:
                                 j += 1
                             i = j
-                    
                     else:
                         i += 1
 
-        pd.DataFrame(data).to_csv(os.path.join(self.directory, 'hole_probability.csv'), index=False)
+        pd.DataFrame(data).to_csv(os.path.join(self.directory, 'probability-entry.csv'), index=False)
+
 
     
-    # METHOD HOLE_STATUS: STATUS OF LARVAE REGARDING HOLE: NIAVE OR 
-
-    def hole_status(self):
-
-        for match in self.matching_pairs:
-            track_file = match['track_file']
-            df = self.track_data[track_file].sort_values(['track_id', 'frame']).copy()
-
-            entry_frame_map = (
-                df[df['within_hole']]
-                .groupby('track_id')['frame']
-                .min()
-                .to_dict()
-            )
-
-            df['entry_frame'] = df['track_id'].map(entry_frame_map)
-            
-
-            df['hole_status'] = np.where(
-                df['entry_frame'].isna(), 'naive',               # never entered
-                np.where(df['frame'] < df['entry_frame'], 'naive', 'exposed')
-            )
-
-            df = df.drop(columns=['entry_frame'])
-    
-            self.track_data[track_file] = df
-    
-
-    # HOLE_STATUS_INTERACTION: TYPE OF INTERACTION OCCURING BETWEEN LARVAE 
-
-    def hole_status_interactions(self, threshold=1): # modified interaction_type_bout method
-
-        max_gap = 4
-
-        def unify_interaction_type(part1, part2):
-            return '_'.join(sorted([part1, part2]))
-        
-        def get_closest_part_pair(coords, id1, id2):
-            min_dist = float('inf')
-            closest = None
-            for p1 in coords:
-                for p2 in coords:
-                    coord1 = coords[p1].get(id1)
-                    coord2 = coords[p2].get(id2)
-                    if coord1 is None or coord2 is None:
-                        continue
-                    dist = np.linalg.norm(coord1 - coord2)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest = unify_interaction_type(p1, p2)
-            return closest
-
-        body_parts = ['head', 'body', 'tail']
-        interaction_pairs = list(itertools.product(body_parts, body_parts))
-        unified_types = sorted(set(unify_interaction_type(p1, p2) for p1, p2 in interaction_pairs))
-
-        bouts = []
-
-        for track_file in self.track_files:
-            df = self.track_data[track_file].copy()
-            df.sort_values(by='frame', inplace=True)
-
-            active_bouts = {}
-            bout_counter = 0
-
-            for frame in df['frame'].unique():
-                frame_data = df[df['frame'] == frame]
-                track_ids = frame_data['track_id'].unique()
-
-                # Coordinates lookup
-                coords = {
-                    part: {
-                        row['track_id']: np.array([row[f'x_{part}'], row[f'y_{part}']])
-                        for _, row in frame_data.iterrows()
-                    }
-                    for part in body_parts
-                }
-
-                interacting_pairs = {}
-
-                for id1, id2 in itertools.combinations(track_ids, 2):
-                    interactions = []
-
-                    for part1, part2 in interaction_pairs:
-                        coord1 = coords[part1].get(id1)
-                        coord2 = coords[part2].get(id2)
-                        if coord1 is None or coord2 is None:
-                            continue
-                        dist = np.linalg.norm(coord1 - coord2)
-                        if dist < threshold:
-                            interactions.append(unify_interaction_type(part1, part2))
-
-                    if interactions:
-                        # interacting_pairs[(id1, id2)] = interactions
-                        pair_key = tuple(sorted((id1, id2)))
-                        interacting_pairs[pair_key] = interactions
-
-                current_pairs = set(interacting_pairs)
-
-                # Process ended or gap-extending bouts
-                for pair in list(active_bouts):
-                    if pair not in current_pairs:
-                        active_bouts[pair]['gap_count'] += 1
-                        if active_bouts[pair]['gap_count'] <= max_gap:
-                            id1, id2 = pair
-                            closest_type = None
-                            min_dist = float('inf')
-                            for part1, part2 in interaction_pairs:
-                                coord1 = coords[part1].get(id1)
-                                coord2 = coords[part2].get(id2)
-                                if coord1 is None or coord2 is None:
-                                    continue
-                                dist = np.linalg.norm(coord1 - coord2)
-                                if dist < min_dist:
-                                    min_dist = dist
-                                    closest_type = unify_interaction_type(part1, part2)
-                            if closest_type:
-                                active_bouts[pair]['interactions'].append(closest_type)
-                                active_bouts[pair]['end_frame'] = frame
-                        else:
-                            # End bout
-                            bout = active_bouts.pop(pair)
-                            start, end = bout['start_frame'], bout['end_frame']
-                            duration = end - start + 1
-                            interactions = bout['interactions']
-                            interaction_counts = Counter(interactions)
-                            initial_type = interactions[0]
-                            predominant_type = interaction_counts.most_common(1)[0][0]
-                            status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
-                            status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
-                            hole_status_pair = '-'.join(sorted([status1, status2]))
-                            bout_data = {
-                                'file': track_file,
-                                'bout_id': bout['bout_id'],
-                                'track_1': pair[0],
-                                'track_2': pair[1],
-                                'start_frame': start,
-                                'end_frame': end,
-                                'interaction_duration': duration,
-                                'initial_type': initial_type,
-                                'predominant_type': predominant_type,
-                                'hole_status_pair': hole_status_pair,
-                            }
-                            for t in unified_types:
-                                bout_data[t] = interaction_counts.get(t, 0)
-                            bouts.append(bout_data)
-
-                # Update or start new bouts
-                for pair, interactions in interacting_pairs.items():
-                    if pair in active_bouts:
-                        active_bouts[pair]['end_frame'] = frame
-                        active_bouts[pair]['interactions'].extend(interactions)
-                        active_bouts[pair]['gap_count'] = 0
-                    else:
-                        active_bouts[pair] = {
-                            'bout_id': bout_counter,
-                            'start_frame': frame,
-                            'end_frame': frame,
-                            'interactions': interactions.copy(),
-                            'gap_count': 0
-                        }
-                        bout_counter += 1
-
-            # Finalize remaining bouts
-            for pair, bout in active_bouts.items():
-                start, end = bout['start_frame'], bout['end_frame']
-                duration = end - start + 1
-                interactions = bout['interactions']
-                interaction_counts = Counter(interactions)
-                initial_type = interactions[0]
-                predominant_type = interaction_counts.most_common(1)[0][0]
-                status1 = df[(df['track_id'] == pair[0]) & (df['frame'] == start)]['hole_status'].values[0]
-                status2 = df[(df['track_id'] == pair[1]) & (df['frame'] == start)]['hole_status'].values[0]
-                hole_status_pair = '-'.join(sorted([status1, status2]))
-                bout_data = {
-                    'file': track_file,
-                    'bout_id': bout['bout_id'],
-                    'track_1': pair[0],
-                    'track_2': pair[1],
-                    'start_frame': start,
-                    'end_frame': end,
-                    'interaction_duration': duration,
-                    'initial_type': initial_type,
-                    'predominant_type': predominant_type,
-                    'hole_status_pair': hole_status_pair,
-                }
-                for t in unified_types:
-                    bout_data[t] = interaction_counts.get(t, 0)
-                bouts.append(bout_data)
-
-        bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
-        bout_df.to_csv(os.path.join(self.directory, 'interaction_status_type.csv'), index=False)
-        return bout_df
-    
-
-
-
-    def interactions_return(self, threshold=1):
-
-        max_gap = 4
-
-        def unify_interaction_type(p1, p2):
-            return '_'.join(sorted([p1, p2]))
-        
-        def get_closest_part_pair(coords, id1, id2):
-            min_dist = float('inf')
-            closest = None
-            for p1 in coords:
-                for p2 in coords:
-                    coord1 = coords[p1].get(id1)
-                    coord2 = coords[p2].get(id2)
-                    if coord1 is None or coord2 is None:
-                        continue
-                    dist = np.linalg.norm(coord1 - coord2)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest = unify_interaction_type(p1, p2)
-            return closest
-
-        body_parts = ['head', 'body', 'tail']
-        interaction_pairs = list(itertools.product(body_parts, body_parts))
-        unified_types = sorted(set(unify_interaction_type(p1, p2) for p1, p2 in interaction_pairs))
-
-        bouts = []
-
-        for track_file in self.track_files:
-            df = self.track_data[track_file].copy()
-            df.sort_values(by='frame', inplace=True)
-
-            # Get exposed larvae (they have an entry_frame)
-            entry_frames = df[df['within_hole']].groupby('track_id')['frame'].min()
-            exposed_ids = entry_frames.index.tolist()
-
-            for larva_id in exposed_ids: #filter for larvae which entered the hole
-                sub = df[df['track_id'] == larva_id].copy()
-                sub = sub.sort_values(by='frame')
-
-                # Find all exit (True→False) and return (False→True) transitions
-                sub['prev'] = sub['within_hole'].shift()
-                exits = sub[(sub['within_hole'] == False) & (sub['prev'] == True)]
-                returns = sub[(sub['within_hole'] == True) & (sub['prev'] == False)]
-
-                exit_frames = exits['frame'].values
-                return_frames = returns['frame'].values
-
-                # Handle matching exits to returns
-                for i, exit_frame in enumerate(exit_frames):
-                    later_returns = return_frames[return_frames > exit_frame]
-                    if len(later_returns) > 0:
-                        reentry_frame = later_returns[0]
-                        returned = True
-                        return_duration = reentry_frame - exit_frame + 1
-                    else:
-                        reentry_frame = sub['frame'].max()
-                        returned = False
-                        return_duration = False
-                        
-                    # Get all frames between exit and reentry
-                    window = df[
-                        (df['frame'] >= exit_frame) & 
-                        (df['frame'] <= reentry_frame)
-                    ]
-
-                    # Get interaction bouts in this window involving the exiting larva
-                    active_bouts = {}
-                    bout_counter = 0
-                    bouts_this_exit = []
-
-                    for frame in window['frame'].unique():
-                        frame_data = window[window['frame'] == frame]
-                        track_ids = frame_data['track_id'].unique()
-
-                        coords = {
-                            part: {
-                                row['track_id']: np.array([row[f'x_{part}'], row[f'y_{part}']])
-                                for _, row in frame_data.iterrows()
-                            }
-                            for part in body_parts
-                        }
-
-                        interacting_pairs = {}
-                        for id1, id2 in itertools.combinations(track_ids, 2):
-                            if larva_id not in (id1, id2):
-                                continue  # Only care about interactions involving this larva
-
-                            partner_id = id2 if id1 == larva_id else id1  # Get the other larva
-                            partner_row = frame_data[frame_data['track_id'] == partner_id]
-
-                            if partner_row.empty or partner_row['within_hole'].values[0]:
-                                continue  # Skip if partner is in hole
-
-                            interactions = []
-                            for part1, part2 in interaction_pairs:
-                                coord1 = coords[part1].get(id1)
-                                coord2 = coords[part2].get(id2)
-                                if coord1 is None or coord2 is None:
-                                    continue
-                                if np.linalg.norm(coord1 - coord2) < threshold:
-                                    interactions.append(unify_interaction_type(part1, part2))
-
-                            if interactions:
-                                # interacting_pairs[(id1, id2)] = interactions
-                                pair_key = tuple(sorted((id1, id2)))
-                                interacting_pairs[pair_key] = interactions
-
-
-                        current_pairs = set(interacting_pairs)
-                        
-
-                        # Process ended or extended gaps
-                        for pair in list(active_bouts):
-                            if pair not in current_pairs:
-                                active_bouts[pair]['gap_count'] += 1
-                                if active_bouts[pair]['gap_count'] <= max_gap:
-                                    id1, id2 = pair
-                                    fallback = get_closest_part_pair(coords, id1, id2)
-                                    if fallback:
-                                        active_bouts[pair]['interactions'].append(fallback)
-                                    active_bouts[pair]['end_frame'] = frame
-                                else:
-                                    # End bout
-                                    bout = active_bouts.pop(pair)
-                                    start, end = bout['start_frame'], bout['end_frame']
-                                    interactions = bout['interactions']
-                                    interaction_counts = Counter(interactions)
-                                    initial_type = interactions[0]
-                                    predominant_type = interaction_counts.most_common(1)[0][0]
-                                    partner = [x for x in pair if x != larva_id][0]
-                                    partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0]
-
-                                    bout_data = {
-                                        'file': track_file,
-                                        'exiting_larva': larva_id,
-                                        'exit_index': i,
-                                        'returned_to_hole': returned,
-                                        'start_frame': start,
-                                        'end_frame': end,
-                                        'return_time': return_duration,
-                                        'interacted': True,
-                                        'partner': partner,
-                                        'partner_status': partner_status,
-                                        'duration': end - start + 1,
-                                        'initial_type': initial_type,
-                                        'predominant_type': predominant_type,
-                                    }
-                                    for t in unified_types:
-                                        bout_data[t] = interaction_counts.get(t, 0)
-                                    bouts_this_exit.append(bout_data)
-
-                        # Extend or start bouts
-                        for pair, interactions in interacting_pairs.items():
-                            if pair in active_bouts:
-                                active_bouts[pair]['end_frame'] = frame
-                                active_bouts[pair]['interactions'].extend(interactions)
-                                active_bouts[pair]['gap_count'] = 0
-                            else:
-                                active_bouts[pair] = {
-                                    'bout_id': bout_counter,
-                                    'start_frame': frame,
-                                    'end_frame': frame,
-                                    'interactions': interactions.copy(),
-                                    'gap_count': 0
-                                }
-                                bout_counter += 1
-
-                    # Close remaining bouts
-                    for pair, bout in active_bouts.items():
-                        start, end = bout['start_frame'], bout['end_frame']
-                        interactions = bout['interactions']
-                        interaction_counts = Counter(interactions)
-                        initial_type = interactions[0]
-                        predominant_type = interaction_counts.most_common(1)[0][0]
-                        partner = [x for x in pair if x != larva_id][0]
-                        partner_status = df[(df['track_id'] == partner) & (df['frame'] == start)]['hole_status'].values[0]
-
-                        bout_data = {
-                            'file': track_file,
-                            'exiting_larva': larva_id,
-                            'exit_index': i,
-                            'returned_to_hole': returned,
-                            'start_frame': start,
-                            'end_frame': end,
-                            'return_time': return_duration,
-                            'interacted': True,
-                            'partner': partner,
-                            'partner_status': partner_status,
-    
-                            'duration': end - start + 1,
-                            'initial_type': initial_type,
-                            'predominant_type': predominant_type,
-                        }
-                        for t in unified_types:
-                            bout_data[t] = interaction_counts.get(t, 0)
-                        bouts_this_exit.append(bout_data)
-
-                    if not bouts_this_exit:
-                        fallback = {
-                            'file': track_file,
-                            'exiting_larva': larva_id,
-                            'exit_index': i,
-                            'returned_to_hole': returned,
-                            'start_frame': exit_frame,
-                            'end_frame': reentry_frame,
-                            'return_time': return_duration,
-                            'interacted': False,
-                            'partner': None,
-                            'partner_status': None,
-                            'duration': None,
-                            'initial_type': None,
-                            'predominant_type': None,
-                        }
-                        for t in unified_types:
-                            fallback[t] = None
-                        bouts_this_exit.append(fallback)
-
-                    bouts.extend(bouts_this_exit)
-
-        bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'exiting_larva', 'exit_index', 'start_frame'])
-        bout_df.to_csv(os.path.join(self.directory, 'interactions_return.csv'), index=False)
-        return bout_df
-
 
 
                         
                             
-
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -1465,12 +1183,24 @@ if __name__ == "__main__":
     mha.compute_hole()
     mha.hole_counter()
     mha.time_to_enter()
+    mha.hole_departures()
+    mha.returns()
+    mha.hole_entry_departure_latency()
+    mha.speed_hole()
+    mha.distance_from_hole()
+    mha.hole_entry_probability()
 
     directory = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-4-HOLE/GROUP-HOUSED"
     mha = MultiHoleAnalysis(directory)
     mha.compute_hole()
     mha.hole_counter()
     mha.time_to_enter()
+    mha.hole_departures()
+    mha.returns()
+    mha.hole_entry_departure_latency()
+    mha.speed_hole()
+    mha.distance_from_hole()
+    mha.hole_entry_probability()
 
 
 

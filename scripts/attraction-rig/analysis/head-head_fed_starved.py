@@ -222,3 +222,214 @@ plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/angle_within_5mm.png', dpi=300, bbox_inches='tight')
 plt.close()
+
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/head_head_approach_angles.csv')
+df['role'] = df['track_id'].map({0: 'fed', 1: 'starved'})
+
+# df = df[df['body_body_distance'] < 5]
+# df = df[df['closest_other_node'] == 'tail']
+
+bins = np.arange(0, 91, 1)   # edges: 0,1,2,...,90 (1mm bins)
+df['bin'] = pd.cut(df['body_body_distance'], bins=bins, include_lowest=True)
+df['bin_center'] = df['bin'].apply(lambda x: x.mid)
+
+
+plt.figure(figsize=(8,8))
+sns.lineplot(
+    data=df,
+    x='bin_center',
+    y='approach_angle',
+    hue='role',
+    errorbar=('sd'),   # standard error bar, very clean
+    marker='o'
+)
+
+plt.xlabel("Body–Body Distance (mm)")
+plt.ylabel("Approach Angle (degrees)")
+plt.title("Approach Angle vs Distance (Fed vs Starved)")
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_approach_angle.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/head_head_approach_angles.csv')
+df['role'] = df['track_id'].map({0: 'fed', 1: 'starved'})
+
+## identify tailing events
+
+tailing = df[
+    (df['closest_other_node'] == 'tail') &
+    (df['closest_other_node_distance'] < 2) &  
+    (df['approach_angle'] < 30)
+]
+
+
+print(tailing['role'].value_counts())
+
+total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
+
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+
+plt.xlabel('Role', fontsize=12, fontweight='bold')
+plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
+plt.ylim(0, None)
+
+plt.title('Tailing Events within 2mm and <30° Approach Angle', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[1, 1, 1, 1])
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/head_head_approach_angles.csv')
+df['role'] = df['track_id'].map({0: 'fed', 1: 'starved'})
+
+## identify tailing events
+
+tailing = df[
+    (df['closest_other_node'] == 'tail') & 
+    (df['approach_angle'] < 30)
+]
+
+
+print(tailing['role'].value_counts())
+
+total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
+
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+
+plt.xlabel('Role', fontsize=12, fontweight='bold')
+plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
+plt.ylim(0, None)
+
+plt.title('Tailing Events <30° Approach Angle (any distance)', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[1, 1, 1, 1])
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_any distance.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/head_head_approach_angles.csv')
+df['role'] = df['track_id'].map({0: 'fed', 1: 'starved'})
+
+## identify tailing events
+
+tailing = df[
+    (df['closest_other_node'] == 'tail') &
+    (df['closest_other_node_distance'] < 10) &  
+    (df['approach_angle'] < 30)
+]
+
+
+print(tailing['role'].value_counts())
+
+total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
+
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+
+plt.xlabel('Role', fontsize=12, fontweight='bold')
+plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
+plt.ylim(0, None)
+
+plt.title('Tailing Events within 10mm and <30° Approach Angle', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[1, 1, 1, 1])
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_10mm.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/head_head_approach_angles.csv')
+df['role'] = df['track_id'].map({0: 'fed', 1: 'starved'})
+
+## identify tailing events
+
+tailing = df[
+    (df['closest_other_node'] == 'tail') &
+    (df['closest_other_node_distance'] < 5) &  
+    (df['approach_angle'] < 30)
+]
+
+
+print(tailing['role'].value_counts())
+
+total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
+
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+
+plt.xlabel('Role', fontsize=12, fontweight='bold')
+plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
+plt.ylim(0, None)
+
+plt.title('Tailing Events within 5mm and <30° Approach Angle', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[1, 1, 1, 1])
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_5mm.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+
+tailing = df[
+    (df['closest_other_node'] == 'tail') &
+    (df['closest_other_node_distance'] < 1) &  
+    (df['approach_angle'] < 30)
+]
+
+
+print(tailing['role'].value_counts())
+
+total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
+
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+
+plt.xlabel('Role', fontsize=12, fontweight='bold')
+plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
+plt.ylim(0, None)
+
+plt.title('Tailing Events within 1mm and <30° Approach Angle', fontsize=16, fontweight='bold')
+plt.tight_layout(rect=[1, 1, 1, 1])
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_1mm.png', dpi=300, bbox_inches='tight')
+plt.show()
+
+
+
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/closest_contacts_1mm.csv')
+
+df = df[df['Closest Interaction Type'] == 'head_tail']
+
+long = df.melt(
+    id_vars=['file'],
+    value_vars=['track_0_node', 'track_1_node'],
+    var_name='track',
+    value_name='node'
+)
+
+counts = (
+    long.groupby(['file', 'track', 'node'])
+        .size()
+        .reset_index(name='n_frames')
+)
+counts['track'] = counts['track'].map({
+    'track_0_node': 'Fed',
+    'track_1_node': 'Starved'
+})
+
+
+plt.figure(figsize=(10,4))
+sns.barplot(
+    data=counts,
+    x='track',
+    y='n_frames',
+    hue='node', legend={'0: fed', '1: starved'}
+)
+
+plt.xticks(rotation=90)
+plt.xlabel('Track')
+plt.ylabel('Number of frames')
+plt.tight_layout()
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/1mm_contact_headvtail.png', dpi=300, bbox_inches='tight')
+plt.show()

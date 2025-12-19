@@ -592,71 +592,232 @@ class PseudoAnalysis:
         interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
-    def nearest_neighbour(self):
+    # def nearest_neighbour(self):
 
-            dfs = []
+    #         dfs = []
 
-            for file in self.pseudo_files:
-                df = self.pseudo_data[file]
-                df = df.sort_values(by='frame', ascending=True)
-                df['filename'] = file
+    #         for file in self.pseudo_files:
+    #             df = self.pseudo_data[file]
+    #             df = df.sort_values(by='frame', ascending=True)
+    #             df['filename'] = file
             
 
-                def speed(group, x, y):
-                    dx = group[x].diff()
-                    dy = group[y].diff()
-                    distance = np.sqrt(dx**2 + dy**2)
-                    dt = group['frame'].diff()
-                    speed = distance / dt.replace(0, np.nan) # Avoid division by zero
-                    return speed
+    #             def speed(group, x, y):
+    #                 dx = group[x].diff()
+    #                 dy = group[y].diff()
+    #                 distance = np.sqrt(dx**2 + dy**2)
+    #                 dt = group['frame'].diff()
+    #                 speed = distance / dt.replace(0, np.nan) # Avoid division by zero
+    #                 return speed
 
-                df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
-                df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
+    #             df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
+    #             df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
         
 
-                def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
-                    dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
-                    magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
-                    magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
+    #             def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
+    #                 dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
+    #                 magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
+    #                 magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
 
-                    # Avoid division by zero
-                    cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
-                    cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
+    #                 # Avoid division by zero
+    #                 cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+    #                 cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
                     
-                    return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
+    #                 return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
                 
-                df['v1_x'] = df['x_head'] - df['x_body']
-                df['v1_y'] = df['y_head'] - df['y_body']
-                df['v2_x'] = df['x_tail'] - df['x_body']
-                df['v2_y'] = df['y_tail'] - df['y_body']
+    #             df['v1_x'] = df['x_head'] - df['x_body']
+    #             df['v1_y'] = df['y_head'] - df['y_body']
+    #             df['v2_x'] = df['x_tail'] - df['x_body']
+    #             df['v2_y'] = df['y_tail'] - df['y_body']
 
-                # Apply function correctly
-                df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
+    #             # Apply function correctly
+    #             df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
 
-                for frame in df['frame'].unique():
-                    unique_frame =  df[df['frame'] == frame]
-                    if len(unique_frame) < 2:
+    #             for frame in df['frame'].unique():
+    #                 unique_frame =  df[df['frame'] == frame]
+    #                 if len(unique_frame) < 2:
+    #                     continue
+
+    #                 body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
+    #                 distance = cdist(body_coordinates, body_coordinates, 'euclidean')
+    #                 np.fill_diagonal(distance, np.nan)
+
+    #                 # unique_frame['body-body'] = np.nanmin(distance, axis=1)
+    #                 df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
+
+    #             dfs.append(df)
+    #                 # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
+            
+    #         data = pd.concat(dfs, ignore_index=True)
+
+    #         if self.shorten and self.shorten_duration is not None:
+    #             suffix = f"_{self.shorten_duration}"
+    #         else:
+    #             suffix = ""
+
+    #         filename = f"nearest_neighbour{suffix}.csv"
+    #         data.to_csv(os.path.join(self.directory, filename), index=False)
+
+
+    def nearest_neighbour(self):
+
+        dfs = []
+
+        parts = ['head', 'body', 'tail']
+
+        def unify_interaction_type(p1, p2):
+            return '-'.join(sorted([p1, p2]))
+        
+
+        for file in self.pseudo_files:
+            df = self.pseudo_data[file]
+            df = df.sort_values(by='frame', ascending=True)
+            df['filename'] = file
+
+            # --------------------------------------------------
+            # SPEED + ACCELERATION
+            # --------------------------------------------------
+            def speed(group, x, y):
+                dx = group[x].diff()
+                dy = group[y].diff()
+                dist = np.sqrt(dx**2 + dy**2)
+                dt = group['frame'].diff()
+                return dist / dt.replace(0, np.nan)
+
+            df['speed'] = (
+                df.groupby('track_id')
+                .apply(lambda g: speed(g, 'x_body', 'y_body'))
+                .reset_index(level=0, drop=True)
+            )
+
+            df['acceleration'] = (
+                df.groupby('track_id')['speed'].diff()
+                / df.groupby('track_id')['frame'].diff()
+            )
+
+            # --------------------------------------------------
+            # BODY ANGLE (UNCHANGED)
+            # --------------------------------------------------
+            df['v1_x'] = df['x_head'] - df['x_body']
+            df['v1_y'] = df['y_head'] - df['y_body']
+            df['v2_x'] = df['x_tail'] - df['x_body']
+            df['v2_y'] = df['y_tail'] - df['y_body']
+
+            def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
+                dot = df[v1_x] * df[v2_x] + df[v1_y] * df[v2_y]
+                mag1 = np.hypot(df[v1_x], df[v1_y])
+                mag2 = np.hypot(df[v2_x], df[v2_y])
+                cos = np.clip(dot / (mag1 * mag2), -1, 1)
+                return np.degrees(np.arccos(cos))
+
+            df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
+
+            # --------------------------------------------------
+            # OUTPUT COLUMNS
+            # --------------------------------------------------
+            df['body-body'] = np.nan
+
+            df['other_id'] = np.nan
+            df['closest_node_interaction'] = np.nan
+            df['closest_node_distance'] = np.nan
+            df['approach_angle'] = np.nan
+
+            # --------------------------------------------------
+            # PER-FRAME COMPUTATION
+            # --------------------------------------------------
+            for frame, frame_df in df.groupby('frame'):
+                if frame_df['track_id'].nunique() < 2:
+                    continue
+
+                # ==========================
+                # BODY–BODY NEAREST
+                # ==========================
+                body_coords = frame_df[['x_body', 'y_body']].to_numpy(float)
+                D_body = cdist(body_coords, body_coords)
+                np.fill_diagonal(D_body, np.nan)
+
+                df.loc[
+                    frame_df.index,
+                    'body-body'
+                ] = np.nanmin(D_body, axis=1)
+
+                # ==========================
+                # NODE–NODE NEAREST
+                # ==========================
+                node_rows = []
+                for idx, row in frame_df.iterrows():
+                    for part in parts:
+                        node_rows.append({
+                            'index': idx,
+                            'track_id': row['track_id'],
+                            'part': part,
+                            'x': row[f'x_{part}'],
+                            'y': row[f'y_{part}'],
+                        })
+
+                nodes = pd.DataFrame(node_rows)
+                coords = nodes[['x', 'y']].to_numpy(float)
+                D = cdist(coords, coords)
+
+                # group node table by focal larva row (df index)
+                for focal_idx, focal_nodes in nodes.groupby('index'):
+                    focal_track = focal_nodes['track_id'].iloc[0]
+
+                    other_nodes = nodes[nodes['track_id'] != focal_track]
+                    if other_nodes.empty:
                         continue
 
-                    body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-                    distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-                    np.fill_diagonal(distance, np.nan)
+                    A = focal_nodes[['x', 'y']].to_numpy(float)      # 3x2 (head/body/tail)
+                    B = other_nodes[['x', 'y']].to_numpy(float)      # (3*(n-1))x2
 
-                    # unique_frame['body-body'] = np.nanmin(distance, axis=1)
-                    df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
+                    D = cdist(A, B)
 
-                dfs.append(df)
-                    # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
-            
-            data = pd.concat(dfs, ignore_index=True)
+                    if np.isnan(D).all():
+                        continue
 
-            if self.shorten and self.shorten_duration is not None:
-                suffix = f"_{self.shorten_duration}"
-            else:
-                suffix = ""
+                    a, b = np.unravel_index(np.nanargmin(D), D.shape)
 
-            filename = f"nearest_neighbour{suffix}.csv"
-            data.to_csv(os.path.join(self.directory, filename), index=False)
+                    focal_part = focal_nodes.iloc[a]['part']
+                    nearest = other_nodes.iloc[b]
+
+                    interaction = unify_interaction_type(focal_part, nearest['part'])
+
+                    df.at[focal_idx, 'other_id'] = nearest['track_id']
+                    df.at[focal_idx, 'closest_node_interaction'] = interaction
+                    df.at[focal_idx, 'closest_node_distance'] = D[a, b]
+
+                    # approach angle: body->head vs head->(nearest node)
+                    v_body_head = np.array([
+                        df.at[focal_idx, 'x_head'] - df.at[focal_idx, 'x_body'],
+                        df.at[focal_idx, 'y_head'] - df.at[focal_idx, 'y_body']
+                    ])
+
+                    v_head_other = np.array([
+                        nearest['x'] - df.at[focal_idx, 'x_head'],
+                        nearest['y'] - df.at[focal_idx, 'y_head']
+                    ])
+
+                    if np.linalg.norm(v_body_head) > 0 and np.linalg.norm(v_head_other) > 0:
+                        cos = np.dot(v_body_head, v_head_other) / (
+                            np.linalg.norm(v_body_head) * np.linalg.norm(v_head_other)
+                        )
+                        df.at[focal_idx, 'approach_angle'] = np.degrees(
+                            np.arccos(np.clip(cos, -1, 1))
+                        )
+
+
+            dfs.append(df)
+
+        data = pd.concat(dfs, ignore_index=True)
+
+        suffix = f"_{self.shorten_duration}" if self.shorten and self.shorten_duration else ""
+        filename = f"nearest_neighbour{suffix}.csv"
+        data.to_csv(os.path.join(self.directory, filename), index=False)
+
+
+
+
+
 
 
 
@@ -852,13 +1013,15 @@ def perform_analysis(directory):
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
-    # analysis.nearest_neighbour()
-    analysis.interaction_types()
+    analysis.nearest_neighbour()
+    # analysis.interaction_types()
 
     # analysis.total_digging(cleaned=True)
     # analysis.digging_behaviour()
 
     print(f"Analysis complete for {directory}")
+
+
 
 perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')

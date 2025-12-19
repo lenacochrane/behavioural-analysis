@@ -8,73 +8,32 @@ from scipy.stats import gaussian_kde
 import pyarrow.feather as feather
 import cv2
 import numpy as np
-from shapely.geometry import Point, Polygon
-from shapely import wkt
-import glob
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined/epi/Epi25_gene_results_top.csv')
-df['gda_x_weighted'] = df['gda_score'] * df['weighted_score']
+feather_foler = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n2/group-housed'
 
-output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined/epi/plots'
+files = [f for f in os.listdir(feather_foler) if f.endswith('tracks.feather')]
 
-sns.scatterplot(data=df, x="weighted_score",
-        y="gda_score")
+for file in files:
+    df = feather.read_feather(os.path.join(feather_foler, file))
 
-for _, row in df.iterrows():
-    plt.text(
-        row["weighted_score"] + 0.3,  # small x-offset so text doesn't overlap the dot
-        row["gda_score"],
-        row["gene_symbol"],
-        fontsize=7,
-        alpha=0.7)
+    print('Processing file:', file)
+    print(df['track_id'].unique())
 
+    track_gaps = {}
 
-plt.tight_layout()
-plt.legend()
+    for track_id in df['track_id'].unique():
+        track_df = df[df['track_id'] == track_id].sort_values(by='frame')
+        frames = track_df['frame'].tolist()
 
-# --- save static version before interactive part ---
-save_path = os.path.join(f"{output_directory}/weigh.png")
-plt.savefig(save_path, dpi=300, bbox_inches="tight")
-plt.tight_layout()
-plt.close()
+        missing_frames = [f for f in range(min(frames), max(frames) + 1) if f not in frames]
+        
+        if missing_frames:
+            track_gaps[track_id] = missing_frames
 
-
-sns.scatterplot(data=df, x="weighted_score",
-        y="gda_score")
-
-for _, row in df.iterrows():
-    plt.text(
-        row["weighted_score"] + 0.3,  # small x-offset so text doesn't overlap the dot
-        row["gda_score"],
-        row["gene_symbol"],
-        fontsize=7,
-        alpha=0.7)
-
-
-plt.tight_layout()
-plt.legend()
-
-# --- save static version before interactive part ---
-save_path = os.path.join(f"{output_directory}/weight.png")
-plt.savefig(save_path, dpi=300, bbox_inches="tight")
-plt.tight_layout()
-plt.close()
-
-
-
-
-df_sorted = df.sort_values('gda_x_weighted', ascending=False)
-
-sns.barplot(data=df_sorted, x='gene_symbol', y='gda_x_weighted')
-plt.xticks(rotation=90)
-
-save_path = os.path.join(f"{output_directory}/bar.png")
-plt.savefig(save_path, dpi=300, bbox_inches="tight")
-plt.tight_layout()
-plt.close()
-
-
+    if track_gaps:
+        print("Tracks with missing frames:")
+        for track, gaps in track_gaps.items():
+            print(f"Track {track} has missing frames: {gaps}")
+    else:
+        print("No missing frames detected in any track.")

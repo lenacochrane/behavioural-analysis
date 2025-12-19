@@ -15,6 +15,44 @@ import ast
 from sklearn.decomposition import PCA
 
 
+
+syllable_groups = {
+    "orange1": [33, 43], ##orange
+    "orange": [44, 45], ##orange
+    "orange2": [2, 19], ##orange
+    "orange3": [28, 37], ##orange
+    'orange4': [6, 11], ##orange
+    'blue': [1], ##blue
+    'green': [16], ##green
+    'green2': [39, 27, 40, 26, 25, 22, 30, 9, 23, 10, 24, 12, 17, 35, 29, 42], ##green
+    'green3': [5, 36, 13, 15, 4 ,21, ], ##green
+    'green4': [3, 32], ##green
+    'green5': [0, 14, 38, 18, 20], ##green
+    'green6': [34, 8, 41, 7, 31], ##green
+}
+
+group_colors = {
+    "orange4": 'chocolate',
+    "orange": 'yellow',
+    "orange1": 'darkorange',
+    "orange2": 'lightsalmon',
+    "orange3": 'orange',
+    "blue": 'dodgerblue',
+    "green2": 'mediumseagreen',
+    "green": 'forestgreen',
+    "green3": 'limegreen',
+    "green4": 'palegreen',
+    "green5": 'lightgreen',
+    "green6": 'olivedrab',
+}
+
+
+# map syllable id -> group name
+syll_to_group = {
+    s: g for g, syls in syllable_groups.items() for s in syls
+}
+
+
 """ ANALYSIS PIPELINE FOR MOSEQ DATA IN ATTRACTION RIG """
 # --------------------------------------------------------
 # BASIC_STATS: duration, frequency from stats_df
@@ -138,16 +176,17 @@ def durations(df, output):
 # --------------------------------------------------------
 # SYLLABLE_OVERLAY: overlay syllables on video 
 # --------------------------------------------------------
-def syllable_overlay(df, output, video_track_name):
+def syllable_overlay(df, output, video_track_name, video_path, output_name):
 
     f = df[df['name'] == video_track_name]
+    print(f)
     f = f.sort_values('frame_index')
     coord_columns = ['centroid_x', 'centroid_y']  # replace with your actual centroid column names
 
     image_size = 1400
-    original_video = cv2.VideoCapture('/Users/cochral/Desktop/MOSEQ/videos/N1-GH_2025-02-24_15-16-50_td7.mp4')
+    original_video = cv2.VideoCapture(video_path)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video_output = cv2.VideoWriter(os.path.join(output, 'N1-GH_2025-02-24_15-16-50_td7.mp4'), fourcc, 25.0, (image_size, image_size))
+    video_output = cv2.VideoWriter(os.path.join(output, output_name), fourcc, 25.0, (image_size, image_size))
 
     frame_number = 0
     while original_video.isOpened():
@@ -173,6 +212,18 @@ def syllable_overlay(df, output, video_track_name):
         frame_number += 1
     original_video.release()
     video_output.release()
+
+
+df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/testing_empty_syllables'
+video_track_name = "N10-SI-_2025-02-18_13-53-15_td12_track4"
+video_path = "/Users/cochral/Desktop/MOSEQ/videos/SI-N10_2025-02-18_13-53-15_td12.mp4"
+output_name = "SI-N10_2025-02-18_13-53-15_td12_track4.mp4"
+
+syllable_overlay(df, output, video_track_name, video_path, output_name)
+
+
+
 # --------------------------------------------------------
 # SYLLABLE_FEATURES: quantify syllable features 
 # --------------------------------------------------------
@@ -324,6 +375,7 @@ def syllable_features(df, output):
         plt.tight_layout()
         plt.savefig(os.path.join(output, f'{syllable}_normalised.png'), dpi=300, bbox_inches='tight')
         plt.close() 
+
 # --------------------------------------------------------
 # COMPARING_MODELS: model comparison plots
 # --------------------------------------------------------
@@ -1312,28 +1364,46 @@ def analysis_main(df, stats_df, output, ethogram=True):
         width = max_f - min_f + 1
 
         # Create matrix: rows = tracks, columns = frames
-        mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+        # mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+        mat = np.full((len(tracks), width), fill_value=None, dtype=object)
+
 
         for _, row in df_group.iterrows():
             r = track_to_row[row['name']]
             c = row['frame_index'] - min_f
-            mat[r, c] = row['syllable']
+            # mat[r, c] = row['syllable']
+            mat[r, c] = row['syllable_group']
+
 
         # Get syllables and colors
     # --- Make your exact color mapping ---
-        syllables = sorted(df_group['syllable'].unique())
-        palette = sns.color_palette('viridis', n_colors=len(syllables))
-        syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+        # syllables = sorted(df_group['syllable'].unique())
+        # palette = sns.color_palette('viridis', n_colors=len(syllables))
+        # syl2color = {s: palette[i] for i, s in enumerate(syllables)}
 
-        # convert syllables → integer index image
-        idx_map = {s: i for i, s in enumerate(syllables)}
-        mat_idx = np.full_like(mat, -1)
-        for s, idx in idx_map.items():
-            mat_idx[mat == s] = idx
+        # # convert syllables → integer index image
+        # idx_map = {s: i for i, s in enumerate(syllables)}
+        # mat_idx = np.full_like(mat, -1)
+        # for s, idx in idx_map.items():
+        #     mat_idx[mat == s] = idx
 
-        # colormap = your palette + white for missing
-        cmap = ListedColormap(palette + [(1,1,1)])
+        # # colormap = your palette + white for missing
+        # cmap = ListedColormap(palette + [(1,1,1)])
+        # mat_idx[mat_idx == -1] = len(palette)
+
+        group_names = list(syllable_groups.keys())
+        idx_map = {g: i for i, g in enumerate(group_names)}
+
+        mat_idx = np.full(mat.shape, -1, dtype=int)
+        for g, idx in idx_map.items():
+            mat_idx[mat == g] = idx
+
+        palette = [group_colors[g] for g in group_names]
+        cmap = ListedColormap(palette + [(1, 1, 1)])
         mat_idx[mat_idx == -1] = len(palette)
+
+        syl2color = {g: group_colors[g] for g in group_names}
+
 
         # ---- PLOT ----
         plt.figure(figsize=(12, len(tracks)*0.4))
@@ -1355,7 +1425,10 @@ def analysis_main(df, stats_df, output, ethogram=True):
         plt.close()
 
     ## unique bouts
-    df['bout_id'] = df['onset'].astype(int).cumsum()
+    df = df.sort_values(['name', 'frame_index'])
+    df['bout_num'] = df.groupby('name')['onset'].cumsum()
+    df['bout_id'] = df.groupby(['name', 'bout_num']).ngroup()
+    # df['bout_id'] = df['onset'].astype(int).cumsum()
 
     ## filter to only good bouts
     bout_lengths = df.groupby('bout_id').size()
@@ -1366,9 +1439,108 @@ def analysis_main(df, stats_df, output, ethogram=True):
     good_syllables = stats_df['syllable'].unique()
     df = df[df['syllable'].isin(good_syllables)]
 
-    # unique groups
+
+    df['syllable_group'] = df['syllable'].map(syll_to_group)
+    df = df.dropna(subset=['syllable_group']).copy()
+
+        # unique groups
     df['group'] = df['name'].str.split('_').str[0]
     df = df[df['frame_index'] <= 3600 ]  # ensure no negative frame indices
+
+
+    # ============================================================
+    # GROUPED SYLLABLE FREQUENCIES (IN PARALLEL TO RAW ONES)
+    # ============================================================
+
+    # build grouped frequency table
+    grouped_frequencies = (
+        df.groupby(['name', 'group', 'syllable_group'])
+        .size()
+        .reset_index(name='frequency')
+    )
+
+
+    # ensure consistent x-axis ordering
+    group_order = list(syllable_groups.keys())
+    grouped_frequencies['syllable_group'] = pd.Categorical(
+        grouped_frequencies['syllable_group'],
+        categories=group_order,
+        ordered=True
+    )
+
+    def plot_grouped_freq(filter_mask, outname, title):
+        sub = grouped_frequencies[filter_mask].copy()
+        if sub.empty:
+            print(f"[skip] {outname} (no data)")
+            return
+
+        plt.figure(figsize=(10, 6))
+        sns.pointplot(
+            data=sub,
+            x='syllable_group',
+            y='frequency',
+            hue='group',
+            order=group_order
+        )
+        plt.title(title)
+        plt.xlabel("Syllable group")
+        plt.ylabel("Frequency")
+        plt.legend(title="Group")
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output, outname), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    # ---- GH1 vs SI1 ----
+    # ---- GH1 vs SI1 (N1) ----
+    plot_grouped_freq(
+        grouped_frequencies['group'].str.match(r'^N1-(GH|SI)', na=False),
+        'grouped_syllable_frequencies_GH1_vs_SI1.png',
+        'Grouped syllable frequencies: GH1 vs SI1'
+    )
+
+    plot_grouped_freq(
+    grouped_frequencies['group'].str.match(r'^N2-(GH|SI)', na=False),
+    'grouped_syllable_frequencies_GH2_vs_SI2.png',
+    'Grouped syllable frequencies: GH2 vs SI2'
+)
+
+
+
+    plot_grouped_freq(
+        grouped_frequencies['group'].str.match(r'^N10-(GH|SI)', na=False),
+        'grouped_syllable_frequencies_GH10_vs_SI10.png',
+        'Grouped syllable frequencies: GH10 vs SI10'
+    )
+
+
+
+    # ---- ALL GH ----
+    plot_grouped_freq(
+        grouped_frequencies['group'].str.contains('GH', na=False),
+        'grouped_syllable_frequencies_all_GH.png',
+        'Grouped syllable frequencies: all GH'
+    )
+
+    # ---- ALL SI ----
+    plot_grouped_freq(
+        grouped_frequencies['group'].str.contains('SI', na=False),
+        'grouped_syllable_frequencies_all_SI.png',
+        'Grouped syllable frequencies: all SI'
+    )
+
+    # ============================================================
+
+
+
+
+
+
+
+
+
+
+
 
 
     syllable_frequencies = (df.groupby(['group', 'syllable'])
@@ -1455,6 +1627,9 @@ def analysis_main(df, stats_df, output, ethogram=True):
     plt.legend(title='Group')
     plt.savefig(os.path.join(output, 'syllable_frequencies_si.png'), dpi=300, bbox_inches='tight')
     plt.close()
+
+
+
 
     if ethogram:
         groups = sorted(df['group'].unique())
@@ -2122,13 +2297,21 @@ def interaction_syllable_partner(interactions, cluster, moseq, stat, output):
 
     print("Extracted interaction tracks (anchor/partner).")
     interaction_tracks.to_csv(os.path.join(output, 'interaction_tracks_anchor_partner.csv'), index=False)
-  
 
 
-    moseq['bout_id'] = moseq['onset'].astype(int).cumsum()
-    bout_lengths = moseq.groupby('bout_id').size()
-    good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
-    moseq = moseq[moseq['bout_id'].isin(good_bouts)].copy()
+    moseq = moseq.sort_values(['name','frame_index']).copy()
+    moseq['bout_id'] = moseq.groupby(['name'])['onset'].cumsum()
+
+    bout_lengths = moseq.groupby(['name','bout_id']).size()
+    good = bout_lengths[bout_lengths >= 2].reset_index()[['name','bout_id']]
+
+    moseq = moseq.merge(good, on=['name','bout_id'], how='inner')
+
+
+    # moseq['bout_id'] = moseq['onset'].astype(int).cumsum()
+    # bout_lengths = moseq.groupby('bout_id').size()
+    # good_bouts = bout_lengths[bout_lengths >= 2].index  # length ≥ 2 frames
+    # moseq = moseq[moseq['bout_id'].isin(good_bouts)].copy()
 
 
     good_syllables = stat['syllable'].unique()
@@ -2173,78 +2356,176 @@ def interaction_syllable_partner(interactions, cluster, moseq, stat, output):
     print(interactions_with_syllables.head())
 
 
+    # partner rows, RAW (keep everything)
+    partners_only_raw = interactions_with_syllables[interactions_with_syllables['role'] == 'partner'].copy()
+
+    # add grouped label (but do NOT drop anything here)
+    partners_only_raw['syllable_group'] = partners_only_raw['syllable'].map(syll_to_group)
+
+    # grouped-only df (only rows that map to a group)
+    partners_only_grouped = partners_only_raw.dropna(subset=['syllable_group']).copy()
+
+    # ordering for grouped plots only
+    group_order = list(syllable_groups.keys())
+    partners_only_grouped['syllable_group'] = pd.Categorical(
+        partners_only_grouped['syllable_group'],
+        categories=group_order,
+        ordered=True
+    )
 
 
 
+    # def plot_ethogram_fast(group, group_name):
+
+    #     # Convert track names to row indices
+    #     tracks = sorted(group['unique_track_id'].unique())
+    #     track_to_row = {t: i for i, t in enumerate(tracks)}
+
+    #     # Frame range
+    #     min_f = group['Normalized Frame'].min()
+    #     max_f = group['Normalized Frame'].max()
+
+    #     width = max_f - min_f + 1
+
+    #     # Create matrix: rows = tracks, columns = frames
+    #     mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+
+    #     for _, row in group.iterrows():
+    #         r = track_to_row[row['unique_track_id']]
+    #         c = row['Normalized Frame'] - min_f
+    #         mat[r, c] = row['syllable']
+
+    #     # Get syllables and colors
+    # # --- Make your exact color mapping ---
+    #     syllables = sorted(group['syllable'].unique())
+    #     palette = sns.color_palette('viridis', n_colors=len(syllables))
+    #     syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+
+    #     # convert syllables → integer index image
+    #     idx_map = {s: i for i, s in enumerate(syllables)}
+    #     mat_idx = np.full_like(mat, -1)
+    #     for s, idx in idx_map.items():
+    #         mat_idx[mat == s] = idx
+
+    #     # colormap = your palette + white for missing
+    #     cmap = ListedColormap(palette + [(1,1,1)])
+    #     mat_idx[mat_idx == -1] = len(palette)
+
+    #     # ---- PLOT ----
+    #     plt.figure(figsize=(12, len(tracks)*0.4))
+    #     plt.imshow(mat_idx, aspect='auto', cmap=cmap, interpolation='nearest')
+
+
+    #     plt.yticks(np.arange(len(tracks)), tracks)
+    #     plt.xlabel("Frame index")
+    #     plt.ylabel("Track")
+    #     plt.title(f"Syllable Ethogram {group_name}")
+
+   
+    #     handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
+    #     plt.legend(handles=handles, title="Syllables",
+    #             bbox_to_anchor=(1.01, 1), loc='upper left')
+
+    #     plt.tight_layout()
+    #     plt.savefig(os.path.join(output, f'{group_name}-ethogram.png'), dpi=300, bbox_inches='tight')
+    #     plt.close()
 
 
     def plot_ethogram_fast(group, group_name):
 
-        # Convert track names to row indices
         tracks = sorted(group['unique_track_id'].unique())
+
+        # ---- sort tracks by dominant PRE syllable_group (Normalized Frame < 0) ----
+        pre = group[group['Normalized Frame'] < 0].copy()
+
+        # dominant PRE group per track
+        dominant_pre = (
+            pre.groupby(['unique_track_id', 'syllable_group'])
+            .size()
+            .reset_index(name='n')
+            .sort_values(['unique_track_id', 'n'], ascending=[True, False])
+            .drop_duplicates('unique_track_id')
+            .set_index('unique_track_id')['syllable_group']
+        )
+
+        # ordering: dominant_pre (categorical order if you set it), then track id
+        tracks = (
+            group[['unique_track_id']]
+            .drop_duplicates()
+            .assign(dominant_pre=lambda d: d['unique_track_id'].map(dominant_pre))
+            .sort_values(['dominant_pre', 'unique_track_id'])
+            ['unique_track_id']
+            .tolist()
+        )
+
         track_to_row = {t: i for i, t in enumerate(tracks)}
 
-        # Frame range
+        # track_to_row = {t: i for i, t in enumerate(tracks)}
+
         min_f = group['Normalized Frame'].min()
         max_f = group['Normalized Frame'].max()
-
         width = max_f - min_f + 1
 
-        # Create matrix: rows = tracks, columns = frames
-        mat = np.full((len(tracks), width), fill_value=-1)   # -1 means "no syllable"
+        mat = np.full((len(tracks), width), fill_value=None, dtype=object)
 
         for _, row in group.iterrows():
             r = track_to_row[row['unique_track_id']]
             c = row['Normalized Frame'] - min_f
-            mat[r, c] = row['syllable']
+            mat[r, c] = row['syllable_group']
 
-        # Get syllables and colors
-    # --- Make your exact color mapping ---
-        syllables = sorted(group['syllable'].unique())
-        palette = sns.color_palette('viridis', n_colors=len(syllables))
-        syl2color = {s: palette[i] for i, s in enumerate(syllables)}
+        # map group labels -> integer image
+        group_names = list(syllable_groups.keys())
+        idx_map = {g: i for i, g in enumerate(group_names)}
 
-        # convert syllables → integer index image
-        idx_map = {s: i for i, s in enumerate(syllables)}
-        mat_idx = np.full_like(mat, -1)
-        for s, idx in idx_map.items():
-            mat_idx[mat == s] = idx
+        mat_idx = np.full(mat.shape, -1, dtype=int)
+        for g, idx in idx_map.items():
+            mat_idx[mat == g] = idx
 
-        # colormap = your palette + white for missing
-        cmap = ListedColormap(palette + [(1,1,1)])
+        palette = [group_colors[g] for g in group_names]
+        cmap = ListedColormap(palette + [(1, 1, 1)])   # white for missing
         mat_idx[mat_idx == -1] = len(palette)
 
-        # ---- PLOT ----
-        plt.figure(figsize=(12, len(tracks)*0.4))
+        plt.figure(figsize=(12, len(tracks) * 0.4))
         plt.imshow(mat_idx, aspect='auto', cmap=cmap, interpolation='nearest')
 
-
         plt.yticks(np.arange(len(tracks)), tracks)
-        plt.xlabel("Frame index")
+        plt.xlabel("Normalized Frame")
         plt.ylabel("Track")
-        plt.title(f"Syllable Ethogram {group_name}")
+        plt.title(f"Grouped Syllable Ethogram {group_name}")
 
-   
-        handles = [mpatches.Patch(color=c, label=s) for s, c in syl2color.items()]
-        plt.legend(handles=handles, title="Syllables",
+        handles = [mpatches.Patch(color=group_colors[g], label=g) for g in group_names]
+        plt.legend(handles=handles, title="Syllable groups",
                 bbox_to_anchor=(1.01, 1), loc='upper left')
 
         plt.tight_layout()
-        plt.savefig(os.path.join(output, f'{group_name}-ethogram.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(output, f'{group_name}-ethogram_grouped.png'), dpi=300, bbox_inches='tight')
         plt.close()
+
     
-    partners_only = interactions_with_syllables[interactions_with_syllables['role'] == 'partner'].copy()
 
 
-    groups = sorted(partners_only['cluster'].unique())
+    
+    # partners_only = interactions_with_syllables[interactions_with_syllables['role'] == 'partner'].copy()
+
+
+    # groups = sorted(partners_only['cluster'].unique())
+    # for group_id in groups:
+    #     df_group = partners_only[partners_only['cluster'] == group_id].copy()
+    #     df_group = df_group.dropna(subset=['syllable_group'])  # after merge certain rows dont have syllables
+    #     plot_ethogram_fast(df_group, group_id)
+
+    groups = sorted(partners_only_grouped['cluster'].unique())
     for group_id in groups:
-        df_group = partners_only[partners_only['cluster'] == group_id].copy()
-        df_group = df_group.dropna(subset=['syllable'])  # after merge certain rows dont have syllables
+        df_group = partners_only_grouped[partners_only_grouped['cluster'] == group_id].copy()
+        df_group = df_group.dropna(subset=['syllable_group'])
         plot_ethogram_fast(df_group, group_id)
 
 
 
-    onsets = partners_only[partners_only['onset'] == True]
+
+    # onsets = partners_only[partners_only['onset'] == True]
+    onsets = partners_only_raw[partners_only_raw['onset'] == True]
+
 
     freq = (
     onsets
@@ -2356,14 +2637,170 @@ def interaction_syllable_partner(interactions, cluster, moseq, stat, output):
     plt.close()
 
 
-interactions = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/cropped_interactions.csv')
-cluster = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/pca-data2-F18.csv')
-moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
-stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/stats_df.csv')
-output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/partner'
+    # ============================================================
+    # GROUPED SYLLABLE FREQUENCY PLOTS (ADDITIONAL, keep raw ones)
+    # ============================================================
+
+    # Use ONLY rows where we have a valid grouped label
+    onsets_g = onsets.dropna(subset=['syllable_group']).copy()
+
+    # --- 1) Grouped relative frequency per cluster ---
+    freq_g = (
+        onsets_g
+        .groupby(['syllable_group', 'cluster'])
+        .size()
+        .reset_index(name='frequency')
+    )
+
+    cluster_totals_g = (
+        onsets_g
+        .groupby('cluster')
+        .size()
+        .reset_index(name='total')
+    )
+
+    freq_g = freq_g.merge(cluster_totals_g, on='cluster', how='left')
+    freq_g['relative_frequency'] = freq_g['frequency'] / freq_g['total']
+    freq_g['relative_frequency_percent'] = freq_g['relative_frequency'] * 100
 
 
-interaction_syllable_partner(interactions, cluster, moseq, stat, output)
+    # Plot grid (one panel per grouped syllable)
+    syllable_groups_order = list(syllable_groups.keys())
+    clusters_sorted = sorted(freq_g['cluster'].dropna().unique())
+
+    n = len(syllable_groups_order)
+    ncols = 6
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sg in enumerate(syllable_groups_order):
+        ax = axes[i]
+        sub = (
+            freq_g[freq_g['syllable_group'] == sg]
+            .set_index('cluster')
+            .reindex(clusters_sorted, fill_value=0)
+            .reset_index()
+        )
+
+        ax.bar(sub['cluster'], sub['relative_frequency'])
+        ax.set_title(str(sg), fontsize=9)
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Rel freq")
+
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "grouped_syllable_relative_frequency.png"),
+                dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    # --- 2) Grouped PRE vs POST per cluster ---
+    freq_gp = (
+        onsets_g
+        .groupby(['syllable_group', 'cluster', 'period'])
+        .size()
+        .reset_index(name='count')
+    )
+
+    totals_gp = (
+        freq_gp
+        .groupby(['syllable_group', 'period'])['count']
+        .sum()
+        .reset_index(name='total')
+    )
+
+    freq_gp = freq_gp.merge(totals_gp, on=['syllable_group', 'period'], how='left')
+    freq_gp['rel_freq'] = freq_gp['count'] / freq_gp['total']
+
+
+    # Plot grid: one subplot per grouped syllable, pre/post bars per cluster
+    syllable_ids = syllable_groups_order
+    clusters_sorted = sorted(freq_gp['cluster'].dropna().unique())
+
+    n = len(syllable_ids)
+    ncols = 6
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*3, nrows*3))
+    axes = axes.flatten()
+
+    for i, sg in enumerate(syllable_ids):
+        ax = axes[i]
+        sub = freq_gp[freq_gp['syllable_group'] == sg]
+
+        pre = (sub[sub['period'] == 'pre']
+            .set_index('cluster')
+            .reindex(clusters_sorted, fill_value=0))
+        post = (sub[sub['period'] == 'post']
+                .set_index('cluster')
+                .reindex(clusters_sorted, fill_value=0))
+
+        x = np.arange(len(clusters_sorted))
+        w = 0.4
+        ax.bar(x - w/2, pre['rel_freq'], width=w, label='pre')
+        ax.bar(x + w/2, post['rel_freq'], width=w, label='post')
+
+        ax.set_title(str(sg), fontsize=9)
+        ax.set_xticks(x)
+        ax.set_xticklabels(clusters_sorted, rotation=90, fontsize=6)
+        ax.set_yticks([])
+        ax.set_ylim(0, max(pre['rel_freq'].max(), post['rel_freq'].max(), 1e-6) * 1.1)
+
+    for j in range(i+1, len(axes)):
+        axes[j].axis("off")
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output, "grouped_syllable_pre_post_per_cluster.png"),
+                dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""------------- INTERACTIONS ------------"""
+# interactions = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/cropped_interactions.csv')
+# cluster = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/interactions-n10/pca-data2-F18.csv')
+# moseq = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+# stat = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/stats_df.csv')
+# output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/grouped-dendrogram/interaction-partner'
+
+
+# interaction_syllable_partner(interactions, cluster, moseq, stat, output)
+
+
+
+
+
+
+
+# --------- ETHOGRAMS OVER TIME ------------- #
+df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/moseq_df.csv')
+stats_df = pd.read_csv('/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/stats_df.csv')
+output = '/Users/cochral/Desktop/MOSEQ/KEYPOINT-KAPPA1500/plots/grouped-dendrogram/ethograms'
+os.makedirs(output, exist_ok=True)
+
+analysis_main(df, stats_df, output, ethogram=True)
+
+
+
 
 
 
@@ -2405,6 +2842,10 @@ interaction_syllable_partner(interactions, cluster, moseq, stat, output)
 # durations(df_moseq, output)
 # syllable_overlay(df_moseq, output, 'N1-GH_2025-02-24_15-16-50_td7') #video_track_name = 'N1-GH_2025-02-24_15-16-50_td7'  
 # syllable_features(df_moseq, output)
+
+
+
+
 
 
 

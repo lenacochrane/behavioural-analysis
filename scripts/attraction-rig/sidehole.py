@@ -34,7 +34,7 @@ def perform_analysis(directory):
 
     ## REMOVE DIGGING FROM ANALYSIS 
 
-    # analysis.digging_mask()
+    analysis.digging_mask()
 
 
     ### PSEUDO POPULATION MODEL
@@ -66,6 +66,7 @@ def perform_analysis(directory):
 
     ## HEAD-HEAD ANALYSIS
     # analysis.head_head_interaction_type()
+    # analysis.head_head_interaction_type_over_time()
     # analysis.interaction_types()
     # analysis.euclidean_distance()
     # analysis.trajectory()
@@ -74,6 +75,9 @@ def perform_analysis(directory):
     # analysis.nearest_neighbour()
     # analysis.contacts()
     # analysis.movement_direction()
+    # analysis.head_head_approach_angle()
+    # analysis.head_head_first_contact_kinematics()
+    analysis.head_head_contacts_kinematics_over_time()
         
 
 
@@ -121,8 +125,8 @@ if __name__ == "__main__":
         run_gui()    
 
 
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/socially-isolated")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/group-housed")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
@@ -139,9 +143,9 @@ if __name__ == "__main__":
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video')
 
 
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed')
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/fed-fed')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed')
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/fed-fed')
 
 
 
