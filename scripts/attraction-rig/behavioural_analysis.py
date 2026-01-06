@@ -2249,6 +2249,10 @@ class HoleAnalysis:
             df['closest_node_distance'] = np.nan
             df['approach_angle'] = np.nan
 
+            df['head_other_id'] = np.nan
+            df['closest_node_to_head'] = np.nan
+            df['head_distance'] = np.nan
+
             # --------------------------------------------------
             # PER-FRAME COMPUTATION
             # --------------------------------------------------
@@ -2283,8 +2287,8 @@ class HoleAnalysis:
                         })
 
                 nodes = pd.DataFrame(node_rows)
-                coords = nodes[['x', 'y']].to_numpy(float)
-                D = cdist(coords, coords)
+                # coords = nodes[['x', 'y']].to_numpy(float) ##
+                # D = cdist(coords, coords) ##
 
                 # group node table by focal larva row (df index)
                 for focal_idx, focal_nodes in nodes.groupby('index'):
@@ -2312,6 +2316,20 @@ class HoleAnalysis:
                     df.at[focal_idx, 'other_id'] = nearest['track_id']
                     df.at[focal_idx, 'closest_node_interaction'] = interaction
                     df.at[focal_idx, 'closest_node_distance'] = D[a, b]
+
+                    # NEW: closest other node to the focal HEAD
+                    focal_head = focal_nodes[focal_nodes['part'] == 'head'][['x', 'y']].to_numpy(float)
+                    # if focal_head.size == 2: #one row with two values e.g. xy dont want nans 
+                    if focal_head.shape[0] != 0:
+        
+                        Dh = cdist(focal_head, B)  # 1 x (3*(n-1))
+                        if not np.isnan(Dh).all():
+                            b_h = int(np.nanargmin(Dh))
+                            nearest_h = other_nodes.iloc[b_h]
+                            df.at[focal_idx, 'head_other_id'] = nearest_h['track_id']
+                            df.at[focal_idx, 'closest_node_to_head'] = nearest_h['part']
+                            df.at[focal_idx, 'head_distance'] = float(Dh[0, b_h])
+
 
                     # approach angle: body->head vs head->(nearest node)
                     v_body_head = np.array([

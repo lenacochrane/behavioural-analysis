@@ -59,22 +59,97 @@ class PseudoAnalysis:
 
 
 
+    # def compute_digging(self, df):
+    #     df = df.sort_values(['track_id', 'frame']).reset_index(drop=True)
+
+    #     df['x'] = (
+    #         df.groupby('track_id', group_keys=False)['x_body']
+    #         .apply(lambda x: x.rolling(window=5, min_periods=1).mean()))
+    #     df['y'] = (
+    #         df.groupby('track_id', group_keys=False)['y_body']
+    #         .apply(lambda y: y.rolling(window=5, min_periods=1).mean()))
+
+    #     df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
+    #     df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
+
+    #     df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
+    #     df['is_moving'] = df['distance'] > 0.1
+
+    #     df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
+    #     df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(10) / 10).fillna(0)
+
+    #     df['x_std'] = df.groupby('track_id')['x'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
+    #     df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
+    #     df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
+
+    #     df['final_movement'] = (df['cumulative_displacement_rate'] > 0.1) | ((df['overall_std'] > 0.1) & (df['is_moving']))
+
+    #     window_size = 50
+    #     df['digging_status'] = (
+    #         df.groupby('track_id')['final_movement']
+    #         .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size / 2)).fillna(0).astype(bool)))
+        
+
+    #     ### backfilling TRUE for larvae that actually end up digging 
+
+    #     df['prev'] = (
+    #             df.groupby('track_id')['digging_status']
+    #             .shift(1)
+    #             .fillna(False)
+    #         )
+    #     df['false_true'] = df['digging_status'] & ~df['prev'] # digging status = True ; prev frame digging status = False
+
+
+    #     df['future_digging'] = (
+    #     df.groupby('track_id')['digging_status']
+    #     .rolling(window=50, min_periods=50)
+    #     .sum()
+    #     .shift(-49)
+    #     .reset_index(level=0, drop=True)
+    # )
+    #     df['long_digging'] = df['false_true'] & (df['future_digging'] >= 50)
+
+    #     # 1) Initialize backfill column
+    #     df['backfill'] = False
+
+    #     # 2) Loop per track
+    #     for track_id, group in df.groupby('track_id'):
+    #         idx   = group.index
+    #         starts = idx[group.loc[idx, 'long_digging']]
+    #         for s in starts:
+    #             pre = max(idx.min(), s - 30)
+    #             df.loc[pre:s-1, 'backfill'] = True  # back-fill up to the frame *before* 
+
+    #     df['digging_status'] = df['digging_status'] | df['backfill']
+
+    #     df.drop(columns=['backfill', 'long_digging', 'false_true', 'future_digging'], inplace=True)
+
+    #     return df
+    
+    ## COMPUTE DIGGING MATCHING THE BEHAVIOURAL ANALYSIS.PY CLASS (UNSURE WHEN CHANGED)
+
     def compute_digging(self, df):
         df = df.sort_values(['track_id', 'frame']).reset_index(drop=True)
 
+        # Smooth x and y
         df['x'] = (
             df.groupby('track_id', group_keys=False)['x_body']
-            .apply(lambda x: x.rolling(window=5, min_periods=1).mean()))
+            .apply(lambda x: x.rolling(window=5, min_periods=1).mean())
+        )
         df['y'] = (
             df.groupby('track_id', group_keys=False)['y_body']
-            .apply(lambda y: y.rolling(window=5, min_periods=1).mean()))
+            .apply(lambda y: y.rolling(window=5, min_periods=1).mean())
+        )
 
+        # Differences
         df['dx'] = df.groupby('track_id')['x'].diff().fillna(0)
         df['dy'] = df.groupby('track_id')['y'].diff().fillna(0)
 
+        # Distance and moving status
         df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
         df['is_moving'] = df['distance'] > 0.1
 
+        # Cumulative and std
         df['cumulative_displacement'] = df.groupby('track_id')['distance'].cumsum()
         df['cumulative_displacement_rate'] = df.groupby('track_id')['cumulative_displacement'].apply(lambda x: x.diff(10) / 10).fillna(0)
 
@@ -82,13 +157,16 @@ class PseudoAnalysis:
         df['y_std'] = df.groupby('track_id')['y'].transform(lambda x: x.rolling(window=10, min_periods=1).std())
         df['overall_std'] = np.sqrt(df['x_std']**2 + df['y_std']**2)
 
-        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.1) | ((df['overall_std'] > 0.1) & (df['is_moving']))
+        df['movement_score'] = df['cumulative_displacement_rate'] * df['overall_std']
 
+        df['final_movement'] = (df['cumulative_displacement_rate'] > 0.1) | (df['movement_score'] > 0.25)
+
+        ## smoothed final movement
         window_size = 50
         df['digging_status'] = (
             df.groupby('track_id')['final_movement']
-            .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size / 2)).fillna(0).astype(bool)))
-        
+            .transform(lambda x: (~x).rolling(window=window_size, center=False).apply(lambda r: r.sum() >= (window_size * 0.8)).fillna(0).astype(bool))
+        )
 
         ### backfilling TRUE for larvae that actually end up digging 
 
@@ -124,8 +202,12 @@ class PseudoAnalysis:
 
         df.drop(columns=['backfill', 'long_digging', 'false_true', 'future_digging'], inplace=True)
 
+        # df.to_csv(os.path.join(self.directory, 'test.csv'), index=False)
+
         return df
-    
+
+
+
 
     def distance_from_centre(self): 
 
@@ -722,6 +804,10 @@ class PseudoAnalysis:
             df['closest_node_distance'] = np.nan
             df['approach_angle'] = np.nan
 
+            df['head_other_id'] = np.nan
+            df['closest_node_to_head'] = np.nan
+            df['head_distance'] = np.nan
+
             # --------------------------------------------------
             # PER-FRAME COMPUTATION
             # --------------------------------------------------
@@ -756,8 +842,8 @@ class PseudoAnalysis:
                         })
 
                 nodes = pd.DataFrame(node_rows)
-                coords = nodes[['x', 'y']].to_numpy(float)
-                D = cdist(coords, coords)
+                # coords = nodes[['x', 'y']].to_numpy(float)
+                # D = cdist(coords, coords)
 
                 # group node table by focal larva row (df index)
                 for focal_idx, focal_nodes in nodes.groupby('index'):
@@ -785,6 +871,19 @@ class PseudoAnalysis:
                     df.at[focal_idx, 'other_id'] = nearest['track_id']
                     df.at[focal_idx, 'closest_node_interaction'] = interaction
                     df.at[focal_idx, 'closest_node_distance'] = D[a, b]
+
+                     # NEW: closest other node to the focal HEAD
+                    focal_head = focal_nodes[focal_nodes['part'] == 'head'][['x', 'y']].to_numpy(float)
+                    # if focal_head.size == 2: #one row with two values e.g. xy dont want nans 
+                    if focal_head.shape[0] != 0:
+        
+                        Dh = cdist(focal_head, B)  # 1 x (3*(n-1))
+                        if not np.isnan(Dh).all():
+                            b_h = int(np.nanargmin(Dh))
+                            nearest_h = other_nodes.iloc[b_h]
+                            df.at[focal_idx, 'head_other_id'] = nearest_h['track_id']
+                            df.at[focal_idx, 'closest_node_to_head'] = nearest_h['part']
+                            df.at[focal_idx, 'head_distance'] = float(Dh[0, b_h])
 
                     # approach angle: body->head vs head->(nearest node)
                     v_body_head = np.array([
