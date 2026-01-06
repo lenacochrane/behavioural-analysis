@@ -7,6 +7,15 @@ import sys
 import matplotlib.patches as mpatches
 import os
 
+"""
+“Seen” interactions are cases where both larvae are oriented toward each other before contact, 
+whereas “unseen” interactions occur when one larva approaches from behind while the other is not facing it; 
+in these unseen cases, the approacher is the larva moving toward the interaction, 
+and the receiver is the larva being approached
+
+"""
+
+
 df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/cropped_interactions.csv')
 
 print(df.columns)
@@ -73,6 +82,7 @@ df = df.merge(labels, on='interaction_id', how='inner')  # inner = only labeled 
 # df.to_csv(os.path.join(output, 'unseen_versus_seen_interactions.csv'), index=False)
 
 
+
 ##### UNSEEN APPROACH VERSUS RECEIVED #####
 
 df_unseen = df[df['approach_type'] == 'unseen'].copy()
@@ -132,17 +142,22 @@ sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='receiver_speed',
-    errorbar=('ci', 95), color='blue', label='Receiver'
+    errorbar=('ci', 95), color='green', label='Receiver'
 )
 
 sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='approacher_speed',
-    errorbar=('ci', 95), color='gray', label='Approacher'
+    errorbar=('ci', 95), color='red', label='Approacher'
 )
 
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_overtime.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_overtime.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -152,14 +167,14 @@ sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='receiver_speed',
-    errorbar=('ci', 95), color='blue', label='Receiver'
+    errorbar=('ci', 95), color='green', label='Receiver'
 )
 
 sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='approacher_speed',
-    errorbar=('ci', 95), color='green', label='Approacher'
+    errorbar=('ci', 95), color='red', label='Approacher'
 )
 
 sns.lineplot(
@@ -172,6 +187,11 @@ sns.lineplot(
 plt.ylim(0,2)
 
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_overtime_with_min_distance.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_overtime_with_min_distance.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -181,19 +201,24 @@ sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='receiver_heading_angle',
-    errorbar=('ci', 95), color='blue', label='Receiver'
+    errorbar=('ci', 95), color='green', label='Receiver'
 )
 
 sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='approacher_heading_angle',
-    errorbar=('ci', 95), color='green', label='Approacher'
+    errorbar=('ci', 95), color='red', label='Approacher'
 )
 
 plt.ylim(0,180)
 
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_angle.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -202,20 +227,26 @@ sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='receiver_turn',
-    errorbar=('ci', 95), color='blue', label='Receiver'
+    errorbar=('ci', 95), color='green', label='Receiver'
 )
 
 sns.lineplot(
     data=df_unseen,
     x='Normalized Frame',
     y='approacher_turn',
-    errorbar=('ci', 95), color='green', label='Approacher'
+    errorbar=('ci', 95), color='red', label='Approacher'
 )
 
 plt.ylim(0,30)
 
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_angle_change.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/receiver_vs_approacher_angle_change.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
+
 
 
 
@@ -283,6 +314,11 @@ plt.legend(
     frameon=False
 )
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/seen_v_unseen.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/seen_v_unseen.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -300,12 +336,17 @@ sns.lineplot(
     data=seen_angles,
     x='Normalized Frame',
     y='heading_angle',
-    errorbar=('ci', 95), color='green', label='Seen'
+    errorbar=('ci', 95), color='orange', label='Seen'
 )
 
 plt.ylim(0,180)
 
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/unseen_versus_seen_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/unseen_versus_seen_angle.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -321,7 +362,7 @@ sns.lineplot(
     data=seen_angles,
     x='Normalized Frame',
     y='turn',
-    errorbar=('ci', 95), color='green', label='Seen'
+    errorbar=('ci', 95), color='orange', label='Seen'
 )
 
 # sns.lineplot(
@@ -339,4 +380,9 @@ plt.ylim(0,30)
 #     frameon=False
 # )
 plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/unseen_versus_seen_angle_change.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/unseen_versus_seen_angle_change.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()

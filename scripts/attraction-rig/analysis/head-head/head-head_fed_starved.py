@@ -4,6 +4,22 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
+
+# ---- Adobe-friendly fonts (must be set BEFORE plotting) ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+
+
+default_pal = sns.color_palette("deep", 2)
+
+COND_PALETTE = {
+    "fed": default_pal[0],         # blue
+    "starved": default_pal[1],     # orange
+}
+
+# (optional) enforce condition order everywhere
+COND_ORDER = ["fed", "starved"]
 
 
 df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/nearest_neighbour.csv')
@@ -61,6 +77,7 @@ plt.close()
 
 
 
+
 plt.figure(figsize=(8,8))
 sns.histplot(
     data=df,
@@ -70,7 +87,7 @@ sns.histplot(
     stat='density',         # compare shapes not raw counts
     common_norm=False,      # don't force same total area
     element='step',
-    fill=False
+    fill=False, palette=COND_PALETTE
 )
 
 
@@ -84,7 +101,13 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/speed.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/speed.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
+
 
 
 plt.figure(figsize=(8,8))
@@ -222,6 +245,7 @@ plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/angle_within_5mm.png', dpi=300, bbox_inches='tight')
 plt.close()
+
 
 
 
@@ -373,6 +397,8 @@ plt.close()
 
 
 
+
+
 tailing = df[
     (df['closest_other_node'] == 'tail') &
     (df['closest_other_node_distance'] < 1) &  
@@ -384,7 +410,7 @@ print(tailing['role'].value_counts())
 
 total_frames_per_file = tailing.groupby(['file', 'role']).size().reset_index(name='total_frames')
 
-sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd')
+sns.barplot(data=total_frames_per_file, x='role', y='total_frames', ci='sd', palette=COND_PALETTE)
 
 plt.xlabel('Role', fontsize=12, fontweight='bold')
 plt.ylabel('Number of Tailing Frames', fontsize=12, fontweight='bold')  
@@ -393,6 +419,11 @@ plt.ylim(0, None)
 plt.title('Tailing Events within 1mm and <30° Approach Angle', fontsize=16, fontweight='bold')
 plt.tight_layout(rect=[1, 1, 1, 1])
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_1mm.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/head_head_tailing_events_1mm.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.show()
 
 
@@ -419,17 +450,24 @@ counts['track'] = counts['track'].map({
 })
 
 
-plt.figure(figsize=(10,4))
+plt.figure(figsize=(8,8))
 sns.barplot(
     data=counts,
     x='track',
     y='n_frames',
-    hue='node', legend={'0: fed', '1: starved'}
+    hue='node', legend={'0: fed', '1: starved'}, alpha=0.8, edgecolor='black', linewidth=2, ci='sd'
 )
 
-plt.xticks(rotation=90)
-plt.xlabel('Track')
-plt.ylabel('Number of frames')
+
+plt.xlabel('')
+plt.ylim(0, None)
+plt.ylabel('Number of frames', fontsize=12, fontweight='bold')
+plt.title('1mm Contact Frames: Head vs Tail', fontsize=16, fontweight='bold')
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/1mm_contact_headvtail.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/1mm_contact_headvtail.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)   
 plt.show()

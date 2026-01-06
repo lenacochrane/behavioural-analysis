@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
 
 
 ###### INTERACTION TYPE - ALL NODE-NODE PER FRAME CONTACTS ######
@@ -16,6 +17,10 @@ df2['condition'] = 'fed-starved'
 
 df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved/closest_contacts_1mm.csv')
 df3['condition'] = 'starved-starved'
+
+# ---- Adobe-friendly fonts (must be set BEFORE plotting) ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
 
 
 plt.figure(figsize=(4,8))
@@ -59,10 +64,10 @@ grouped['total_contacts'] = grouped['total_contacts'].astype(int)
 
 
 
-sns.violinplot(data=grouped, x='condition', y='total_contacts', edgecolor='black', linewidth=2, inner='quartile', alpha=0.8)
+sns.violinplot(data=grouped, x='condition', y='total_contacts', edgecolor='black', linewidth=2, inner='quartile', alpha=0.8, color='mediumseagreen')
 
-plt.xlabel('Condition', fontsize=12, fontweight='bold')
-plt.ylabel('Interaction Count', fontsize=12, fontweight='bold')
+plt.xlabel('', fontsize=12, fontweight='bold')
+plt.ylabel('Total Count', fontsize=12, fontweight='bold')
 
 
 plt.title('Total Contact Frames', fontsize=16, fontweight='bold')
@@ -73,5 +78,10 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 plt.ylim(0, None)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/total_contact_frames.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/total_contact_frames.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 
 plt.show()

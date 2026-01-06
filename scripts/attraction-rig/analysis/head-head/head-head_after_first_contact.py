@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
 
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/fed-fed/head_head_first_contact_kinematics.csv')
@@ -14,6 +15,12 @@ df2['condition'] = 'fed-starved'
 
 df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved/head_head_first_contact_kinematics.csv')
 df3['condition'] = 'starved-starved'
+
+
+# ---- Adobe-friendly fonts (must be set BEFORE plotting) ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+
 
 
 ##### ALL CONDITIONS TOGETHER
@@ -112,6 +119,16 @@ plt.close()
 
 
 
+default_pal = sns.color_palette("deep", 2)
+
+COND_PALETTE = {
+    "fed": default_pal[0],         # blue
+    "starved": default_pal[1],     # orange
+}
+
+# (optional) enforce condition order everywhere
+COND_ORDER = ["fed", "starved"]
+
 
 ##### FED-STARVED ONLY
 
@@ -130,16 +147,23 @@ sns.lineplot(
     x='rel_frame',
     y='speed',
     hue='role',
-    errorbar=('ci', 95)
+    errorbar=('ci', 95), palette=COND_PALETTE, hue_order=COND_ORDER
 )
 
 
+
 plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlim(0, 10)
 plt.xlabel('Frames relative after first head–head contact')
 plt.ylabel('Speed')
 plt.title('Speed around after head–head contact')
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_speed.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_speed.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
 
 
@@ -153,17 +177,24 @@ sns.lineplot(
     x='rel_frame',
     y='heading_angle',
     hue='role',
-    errorbar=('ci', 95)
+    errorbar=('ci', 95), palette=COND_PALETTE, hue_order=COND_ORDER
 )
 
 
 plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlim(0, 10)
 plt.xlabel('Frames relative after first head–head contact')
 plt.ylabel('Heading Angle')
 plt.title('Heading Angle around after head–head contact')
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_heading_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_heading_angle.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
+
 
 
 plt.figure(figsize=(6,4))
@@ -173,17 +204,24 @@ sns.lineplot(
     x='rel_frame',
     y='heading_angle_change',
     hue='role',
-    errorbar=('ci', 95)
+    errorbar=('ci', 95), palette=COND_PALETTE, hue_order=COND_ORDER
 )
 
 
 plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlim(0, 10)
 plt.xlabel('Frames relative after first head–head contact')
 plt.ylabel('Heading Angle Change')
 plt.title('Heading Angle Change around after head–head contact')
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_heading_angle_change.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_heading_angle_change.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.close()
+
 
 
 plt.figure(figsize=(6,4))

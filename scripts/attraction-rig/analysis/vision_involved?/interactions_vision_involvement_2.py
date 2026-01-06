@@ -121,10 +121,15 @@ for ax, b in zip(axes, bin_order):
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, title='Track', loc='upper right', frameon=False)
 
-fig.suptitle("Speed over time grouped by dominant pre-approach bin", fontsize=16, fontweight='bold')
+fig.suptitle("Speed Over Time: Grouped by Dominant Pre-Approach Bin", fontsize=16, fontweight='bold')
 fig.tight_layout(rect=[0, 0, 0.95, 0.93])
 
-plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/interactions/approach_angle', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/interactions_approach_angle', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/interactions_approach_angle.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 plt.show()
 
 

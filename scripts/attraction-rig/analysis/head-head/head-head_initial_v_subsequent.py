@@ -4,7 +4,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
 
+# ---- Adobe-friendly fonts (must be set BEFORE plotting) ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/fed-fed/head_head_contacts_kinematics_over_time.csv')
 df1['condition'] = 'fed-fed'
@@ -50,6 +54,8 @@ plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/h
 plt.close()
 
 
+
+
 fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True, sharex=True)
 
 for ax, cond in zip(axes, df['condition'].unique()):
@@ -75,6 +81,8 @@ for ax, cond in zip(axes, df['condition'].unique()):
 
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/speed.pdf',
+             format='pdf', bbox_inches='tight')
 plt.close()
 
 
@@ -133,6 +141,8 @@ for ax, cond in zip(axes, df['condition'].unique()):
 
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/heading_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/heading_angle.pdf',
+             format='pdf', bbox_inches='tight')
 plt.close()
 
 
@@ -166,6 +176,18 @@ plt.close()
 
 
 
+
+default_pal = sns.color_palette("deep", 4)
+
+COND_PALETTE = {
+    "first": default_pal[2],         # blue
+    "other": default_pal[3],     # orange
+}
+
+# (optional) enforce condition order everywhere
+COND_ORDER = ["first", "other"]
+
+
 ###### JUST FED AND STARVED
 
 df_subset = df[df['condition'] == 'fed-starved']
@@ -188,20 +210,25 @@ for ax, role in zip(axes, ['fed', 'starved']):
         y='speed',
         hue='interaction_group',
         errorbar=('ci', 95),
-        ax=ax
+        ax=ax, palette=COND_PALETTE, hue_order=COND_ORDER
     )
 
     ax.axvline(0, color='black', linestyle='--', linewidth=1)
     ax.set_title(role)
     ax.set_xlabel('Relative frame')
     ax.set_ylabel('Speed' if role == 'fed' else '')
+    ax.set_xlim(0, 15)
 
     if ax != axes[-1]:
         ax.get_legend().remove()
 
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_speed.pdf',
+             format='pdf', bbox_inches='tight')
 plt.close()
+
+
 
 
 
@@ -233,6 +260,7 @@ plt.close()
 
 
 
+
 fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True, sharex=True)
 
 for ax, role in zip(axes, ['fed', 'starved']):
@@ -244,20 +272,24 @@ for ax, role in zip(axes, ['fed', 'starved']):
         y='heading_angle',
         hue='interaction_group',
         errorbar=('ci', 95),
-        ax=ax
+        ax=ax, palette=COND_PALETTE, hue_order=COND_ORDER
     )
 
     ax.axvline(0, color='black', linestyle='--', linewidth=1)
     ax.set_title(role)
     ax.set_xlabel('Relative frame')
     ax.set_ylabel('Heading angle' if role == 'fed' else '')
+    ax.set_xlim(0, 15)
 
     if ax != axes[-1]:
         ax.get_legend().remove()
 
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_heading_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_heading_angle.pdf',
+             format='pdf', bbox_inches='tight')
 plt.close()
+
 
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True, sharex=True)
@@ -271,17 +303,20 @@ for ax, role in zip(axes, ['fed', 'starved']):
         y='heading_angle_change',
         hue='interaction_group',
         errorbar=('ci', 95),
-        ax=ax
+        ax=ax, palette=COND_PALETTE, hue_order=COND_ORDER
     )
 
     ax.axvline(0, color='black', linestyle='--', linewidth=1)
     ax.set_title(role)
     ax.set_xlabel('Relative frame')
     ax.set_ylabel('Heading angle change' if role == 'fed' else '')
+    ax.set_xlim(0, 15)
 
     if ax != axes[-1]:
         ax.get_legend().remove()
 
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_heading_angle_change.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_heading_angle_change.pdf',
+             format='pdf', bbox_inches='tight')
 plt.close()

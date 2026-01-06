@@ -5,6 +5,23 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
+
+
+# ---- Adobe / Illustrator friendly PDFs ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+
+# ---- Seaborn default "deep" colours ----
+pal = sns.color_palette("deep", 3)
+
+PALETTE = {
+    "GH": pal[0],     # blue
+    "SI": pal[1], # orange,
+    "PSEUDO-GH": pal[2] # orange
+}
+
+HUE_ORDER = ["GH", "SI", "PSEUDO-GH"]
 
 
 
@@ -54,7 +71,7 @@ for ax, angle_interval in zip(axes, df['angle_bin'].cat.categories):
         y='speed',
         hue='condition',
         errorbar=('ci', 95),
-        ax=ax
+        ax=ax, palette=PALETTE, hue_order=HUE_ORDER
     )
 
     ax.set_title(f"Approach angle {angle_interval.left:.0f}–{angle_interval.right:.0f}°")
@@ -71,7 +88,8 @@ fig.suptitle('Speed vs Nearest Neighbour Distance by Approach Angle Bin', fontsi
 fig.tight_layout(rect=[0, 0, 0.95, 0.93])
 
 
-plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/nearest_neighour_min_distance/min_distance_approach_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/approach-angle-binned_speed_min-distance.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/approach-angle-binned_speed_min-distance.pdf', dpi=300, bbox_inches='tight')
 
 plt.show()
 
@@ -106,7 +124,7 @@ for ax, angle_interval in zip(axes, df['angle_bin'].cat.categories):
         y='speed',
         hue='condition',
         errorbar=('ci', 95),
-        ax=ax
+        ax=ax, palette=PALETTE, hue_order=HUE_ORDER
     )
 
     ax.set_title(f"Approach angle {angle_interval.left:.0f}–{angle_interval.right:.0f}°")
@@ -123,6 +141,7 @@ fig.suptitle('Speed vs Nearest Neighbour Distance by Approach Angle Bin', fontsi
 fig.tight_layout(rect=[0, 0, 0.95, 0.93])
 
 
-plt.savefig('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/is_it_vision/nearest_neighour_min_distance/body_body_distance_approach_angle.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/approach-angle-binned_speed_body-body.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/vision_involved/approach-angle-binned_speed_body-body.pdf', dpi=300, bbox_inches='tight')
 
-plt.show()
+plt.close()

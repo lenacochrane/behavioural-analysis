@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 import matplotlib.patches as mpatches
+import matplotlib as mpl
 
 
 ###### INTERACTION TYPE - ALL NODE-NODE PER FRAME CONTACTS ######
@@ -16,6 +17,23 @@ df2['condition'] = 'fed-starved'
 
 df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved/interaction_types.csv')
 df3['condition'] = 'starved-starved'
+
+# ---- Adobe-friendly fonts (must be set BEFORE plotting) ----
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+
+
+default_pal = sns.color_palette("deep", 3)
+
+COND_PALETTE = {
+    "fed-fed": default_pal[0],         # blue
+    "fed-starved": default_pal[1],     # orange
+    "starved-starved": default_pal[2], # green
+}
+
+# (optional) enforce condition order everywhere
+COND_ORDER = ["fed-fed", "fed-starved", "starved-starved"]
+
 
 
 plt.figure(figsize=(8,8))
@@ -34,14 +52,14 @@ grouped = (
 )
 
 
-sns.barplot(data=grouped, x='interaction_type', y='count', hue='condition', edgecolor='black', linewidth=2, errorbar='sd', alpha=0.8)
+sns.barplot(data=grouped, x='interaction_type', y='count', hue='condition', edgecolor='black', linewidth=2, errorbar='sd', alpha=0.8, hue_order=COND_ORDER, palette=COND_PALETTE)
 
 plt.xlabel('Interaction Type', fontsize=12, fontweight='bold')
-plt.ylabel('Interaction Count', fontsize=12, fontweight='bold')
+plt.ylabel('Frame Count', fontsize=12, fontweight='bold')
 
 
 # Add an overall title to the entire figure
-plt.title('Interaction Type', fontsize=16, fontweight='bold')
+plt.title('All Nodes per Frame <1mm', fontsize=16, fontweight='bold')
 
 # Adjust layout to prevent overlap, considering the overall title
 # plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -53,7 +71,15 @@ plt.xticks(rotation=45)
 
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_all_nodes.png', dpi=300, bbox_inches='tight')
+
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_all_nodes.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
+
 plt.close()
+
 
 
 
@@ -82,14 +108,13 @@ grouped = (
     .reset_index(name='count')
 )
 
-sns.barplot(data=grouped, x='Closest Interaction Type', y='count', hue='condition', edgecolor='black', linewidth=2, errorbar='sd', alpha=0.8)
+sns.barplot(data=grouped, x='Closest Interaction Type', y='count', hue='condition', edgecolor='black', linewidth=2, errorbar='sd', alpha=0.8, hue_order=COND_ORDER, palette=COND_PALETTE)
 
 plt.xlabel('Closest Interaction Type', fontsize=12, fontweight='bold')
-plt.ylabel('Interaction Count', fontsize=12, fontweight='bold')
-
+plt.ylabel('Frame Count', fontsize=12, fontweight='bold')
 
 # Add an overall title to the entire figure
-plt.title('Interaction Type', fontsize=16, fontweight='bold')
+plt.title('Closest Node per Frame <1mm', fontsize=16, fontweight='bold')
 
 # Adjust layout to prevent overlap, considering the overall title
 # plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -100,6 +125,12 @@ plt.ylim(0, None)
 plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_closest_nodes.png', dpi=300, bbox_inches='tight')
+
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_closest_nodes.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
 
 plt.close()
 
@@ -179,7 +210,6 @@ df3['condition'] = 'starved-starved'
 
 plt.figure(figsize=(8,8))
 
-
 df = pd.concat([df1, df2, df3], ignore_index=True)
 df['day'] = df['file'].str.split('_').str[0]
 
@@ -197,7 +227,7 @@ sns.stripplot(
     dodge=True,
     jitter=0.25,
     alpha=0.8,
-    size=5
+    size=5,
 )
 
 
@@ -217,6 +247,62 @@ plt.ylim(0, None)
 plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_closest_nodes_first_contact.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/interaction_type_closest_nodes_first_contact.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
+
+
+plt.close()
+
+
+
+
+plt.figure(figsize=(8,8))
+
+df = pd.concat([df1, df2, df3], ignore_index=True)
+df['day'] = df['file'].str.split('_').str[0]
+
+first_contact = (
+    df.groupby(['file', 'condition', 'day'])['frame']
+      .min()
+      .reset_index(name='first_contact_frame')
+)
+
+sns.stripplot(
+    data=first_contact,
+    x='condition',
+    y='first_contact_frame',
+    dodge=True,
+    jitter=0.25,
+    alpha=0.8,
+    size=5, palette=COND_PALETTE, hue_order=COND_ORDER
+)
+
+
+plt.xlabel('', fontsize=12, fontweight='bold')
+plt.ylabel('First Contact Frame', fontsize=12, fontweight='bold')
+
+
+# Add an overall title to the entire figure
+plt.title('First Contact', fontsize=16, fontweight='bold')
+
+# Adjust layout to prevent overlap, considering the overall title
+# plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.tight_layout(rect=[1, 1, 1, 1])
+
+plt.ylim(0, None)
+
+plt.xticks(rotation=45)
+
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/first_contact.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/first_contact.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
+
 
 plt.close()
 
@@ -476,7 +562,7 @@ sns.histplot(
     stat='density',         # compare shapes not raw counts
     common_norm=False,      # don't force same total area
     element='step',
-    fill=False
+    fill=False, palette=COND_PALETTE
 )
 
 
@@ -490,6 +576,12 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 plt.xticks(rotation=45)
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/speed.png', dpi=300, bbox_inches='tight')
+plt.savefig(
+    '/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/speed.pdf',
+    format='pdf',
+    bbox_inches='tight'
+)
+
 plt.close()
 # Show the plot
 
