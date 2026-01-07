@@ -1086,6 +1086,211 @@ class PseudoAnalysis:
         df_single.to_csv(os.path.join(self.directory, 'digging_distances_single.csv'), index=False)
         df_two.to_csv(os.path.join(self.directory, 'digging_distances_pair.csv'), index=False)
 
+    
+
+    def individual_approach_responses(self):
+
+        parts = ['head', 'body', 'tail']
+
+        def min_node_distance(row_a, row_b):
+            best_d = np.inf
+            best_pair = None
+
+            for p in parts:
+                x2 = row_b.get(f"x_{p}", np.nan)
+                y2 = row_b.get(f"y_{p}", np.nan)
+                if pd.isna(x2) or pd.isna(y2):
+                    continue
+
+                d = np.hypot(row_a['x_head'] - x2, row_a['y_head'] - y2)
+                if d < best_d:
+                    best_d = d
+                    best_pair = p
+
+            return best_d, best_pair
+
+        def min_approach_angle(row_a, row_b):
+            # heading vector: body -> head (focal larva)
+            hx, hy = row_a['x_head'], row_a['y_head']
+            bx, by = row_a['x_body'], row_a['y_body']
+            v_heading = np.array([hx - bx, hy - by])
+
+            if np.linalg.norm(v_heading) == 0:
+                return np.nan, None
+
+            best_angle = np.inf
+            best_node = None
+
+            for p in parts:
+                tx = row_b.get(f"x_{p}", np.nan)
+                ty = row_b.get(f"y_{p}", np.nan)
+                if pd.isna(tx) or pd.isna(ty):
+                    continue
+
+                v_target = np.array([tx - hx, ty - hy])
+                if np.linalg.norm(v_target) == 0:
+                    continue
+
+                cosang = np.dot(v_heading, v_target) / (
+                    np.linalg.norm(v_heading) * np.linalg.norm(v_target)
+                )
+                cosang = np.clip(cosang, -1, 1)
+                angle = np.degrees(np.arccos(cosang))
+
+                if angle < best_angle:
+                    best_angle = angle
+                    best_node = p
+
+            return best_angle, best_node
+
+
+        all_events = []
+
+        for file in self.pseudo_files:
+            df = self.pseudo_data[file]
+            df = df.sort_values(by='frame', ascending=True)
+            df['filename'] = file
+
+            frame_groups = dict(tuple(df.groupby('frame')))
+            frames = sorted(frame_groups.keys())
+
+            per_frame = {}
+            for fr, g in frame_groups.items():
+                per_frame[fr] = {
+                    tid: row._asdict()
+                    for tid, row in zip(g['track_id'], g.itertuples(index=False))
+                }
+
+            for frame in frames[:-1]:  # need next frame
+                if frame + 1 not in per_frame:
+                    continue
+
+                rows_now = per_frame[frame]
+                rows_next = per_frame[frame + 1]
+
+                for focal_id in rows_now:
+                    if focal_id not in rows_next:
+                        continue
+
+                    focal = rows_now[focal_id]
+                    focal_next = rows_next[focal_id]
+
+                    ## LARVAE WITH SMALLEST NODE DISTANCE FROM HEAD AND THEN ONE NODE OF THAT LARVAE MUST BE < 35 DEGREES TO BE INC
+
+                    # --- Step 1: find the nearest larva (by closest-node distance), regardless of angle ---
+                    nearest = None
+
+                    for stim_id in rows_now:
+                        if stim_id == focal_id:
+                            continue
+                        if stim_id not in rows_next:
+                            continue
+
+                        stim = rows_now[stim_id]
+
+                        d_now, stim_node = min_node_distance(focal, stim)
+                        if d_now > 20:
+                            continue
+
+                        if (nearest is None) or (d_now < nearest['d_now']):
+                            nearest = {
+                                'stim_id': stim_id,
+                                'd_now': d_now,
+                                'stim_node': stim_node
+                            }
+
+                    # if no neighbour in range, skip
+                    if nearest is None:
+                        continue
+
+                    stim_id = nearest['stim_id']
+                    stim = rows_now[stim_id]
+                    stim_next = rows_next[stim_id]
+
+                    d_now = nearest['d_now']
+                    stim_node = nearest['stim_node']
+
+                    # --- Step 2: visibility gate based on ANY node angle ---
+                    angle, angle_node = min_approach_angle(focal, stim)
+                    if angle is None or np.isnan(angle) or angle > 35:
+                        continue  # nearest neighbour is not in front, skip this frame
+
+                    # # --- Step 3: outcome to the SAME larva next frame ---
+                    # d_next, _ = min_node_distance(focal_next, stim_next)
+
+                    # if d_next < d_now:
+                    #     outcome = 'approach'
+                    # elif d_next > d_now:
+                    #     outcome = 'avoid'
+                    # else:
+                    #     outcome = 'neutral'
+
+                    # all_events.append({
+                    #     'filename': file,
+                    #     'frame': frame,
+                    #     'focal_id': focal_id,
+                    #     'stim_id': stim_id,
+                    #     'distance': d_now,
+                    #     'closest_node': stim_node,
+                    #     'approach_angle': angle,
+                    #     'angle_node': angle_node,
+                    #     'distance_moved': d_next - d_now,
+                    #     'outcome': outcome
+                    # })
+
+                    future_ds = []
+                    for k in (1, 2, 3, 4, 5):
+                        fr_k = frame + k
+                        if fr_k not in per_frame:
+                            future_ds = None
+                            break
+                        if focal_id not in per_frame[fr_k] or stim_id not in per_frame[fr_k]:
+                            future_ds = None
+                            break
+
+                        focal_k = per_frame[fr_k][focal_id]
+                        stim_k = per_frame[fr_k][stim_id]
+
+                        d_k, _ = min_node_distance(focal_k, stim_k)
+                        if not np.isfinite(d_k):
+                            future_ds = None
+                            break
+
+                        future_ds.append(d_k)
+
+                    if future_ds is None:
+                        continue
+
+                    d_future = float(np.mean(future_ds))
+
+                    if d_future < d_now:
+                        outcome = 'approach'
+                    elif d_future > d_now:
+                        outcome = 'avoid'
+                    else:
+                        outcome = 'neutral'
+
+                    all_events.append({
+                        'filename': file,
+                        'frame': frame,
+                        'focal_id': focal_id,
+                        'stim_id': stim_id,
+                        'distance': d_now,
+                        'closest_node': stim_node,
+                        'approach_angle': angle,
+                        'angle_node': angle_node,
+                        'distance_future_mean': d_future,
+                        'distance_moved': d_future - d_now,
+                        'outcome': outcome
+                    })
+
+
+        df_out = pd.DataFrame(all_events)
+        df_out.to_csv(
+            os.path.join(self.directory, 'individual_approach_responses.csv'),
+            index=False)
+
+
 
 
 
@@ -1112,8 +1317,9 @@ def perform_analysis(directory):
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
-    analysis.nearest_neighbour()
+    # analysis.nearest_neighbour()
     # analysis.interaction_types()
+    analysis.individual_approach_responses()
 
     # analysis.total_digging(cleaned=True)
     # analysis.digging_behaviour()

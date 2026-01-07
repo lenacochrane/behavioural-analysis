@@ -32,7 +32,7 @@ df = pd.concat([df1, df2], ignore_index=True)
 
 
 bins = list(range(0, 90, 1))  # [0, 10, 20, ..., 100]
-df['bin'] = pd.cut(df['closest_node_distance'], bins, include_lowest=True)
+df['bin'] = pd.cut(df['head_distance'], bins, include_lowest=True)
 df['bin_center'] = df['bin'].apply(lambda x: x.mid)
 
 
@@ -57,7 +57,7 @@ plt.subplots_adjust(wspace=0.3, hspace=0.4)
 
 # plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/angle-min_dist.png', dpi=300, bbox_inches='tight')
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/angle-min_dist.pdf', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/angle-min_dist-head.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/nearest-neighour-distance/angle-min_dist-head.pdf', dpi=300, bbox_inches='tight')
 
 plt.close()

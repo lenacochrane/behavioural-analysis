@@ -2360,13 +2360,555 @@ class HoleAnalysis:
         data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
+    #### DEF potential_interactions
+
+    
+    def potential_interactions(self):
+    
+        parts = ['head', 'body', 'tail']
+
+        def unify_interaction_type(p1, p2):
+            return '-'.join(sorted([p1, p2]))
+
+        def min_node_distance(row_a, row_b):
+
+            best_d = np.inf
+            best_pair = None
+
+            for p1 in parts:
+                x1 = row_a.get(f"x_{p1}", np.nan)
+                y1 = row_a.get(f"y_{p1}", np.nan)
+                if pd.isna(x1) or pd.isna(y1):
+                    continue
+
+                for p2 in parts:
+                    x2 = row_b.get(f"x_{p2}", np.nan)
+                    y2 = row_b.get(f"y_{p2}", np.nan)
+                    if pd.isna(x2) or pd.isna(y2):
+                        continue
+
+                    d = np.hypot(x1 - x2, y1 - y2)
+                    if d < best_d:
+                        best_d = d
+                        best_pair = unify_interaction_type(p1, p2)
+
+
+            return best_d, best_pair
+
+
+        all_events = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].copy()
+
+            df = df.sort_values('frame')
+            df['filename'] = track_file
+
+            frame_groups = dict(tuple(df.groupby('frame')))
+            frames = sorted(frame_groups.keys())
+
+            # per-frame dict: {frame: {track_id: row}}
+            per_frame = {}
+            for frame_key, frame_df in frame_groups.items():
+                per_frame[frame_key] = {
+                    track_id: row
+                    for track_id, row in zip(frame_df['track_id'], frame_df.itertuples(index=False))
+                }
+
+            track_ids = sorted(df['track_id'].unique())
+
+ 
+            ### ITERATE THROUGH TRACK PAIRS
+            for i in range(len(track_ids)):
+                for j in range(i + 1, len(track_ids)):
+                    id1, id2 = track_ids[i], track_ids[j]
+
+                    in_encounter = False
+                    d_start = None
+                    t_start = None
+                    start_pair = None
+                    
+                    ### ITERATE THROUGH FRAMES
+                    for frame in frames:
+                        rows = per_frame.get(frame, {})
+                        if id1 not in rows or id2 not in rows:
+                            in_encounter = False
+                            continue
+
+                        d_min, part_pair = min_node_distance(rows[id1]._asdict(),
+                                                            rows[id2]._asdict())
+
+                        if not in_encounter:
+                            if d_min < 10.0:
+                                # trigger encounter
+                                in_encounter = True
+                                t_start = frame
+                                d_start = d_min
+                                start_pair = part_pair
+
+                                # closer after 3 seconds (fps = 1)
+                                window = 3
+                                closer = False
+                                closer_distance = None
+                                t_window = t_start + window
+                                if t_window in per_frame and id1 in per_frame[t_window] and id2 in per_frame[t_window]:
+                                    d, _ = min_node_distance(
+                                        per_frame[t_window][id1]._asdict(),
+                                        per_frame[t_window][id2]._asdict()
+                                    )
+                                    closer_distance = float(d)
+                                    closer = d < d_start
+
+                                # touch within 15 seconds
+                                window_touch = 15
+                                touch = False
+                                touch_frame = None
+                                touch_part_pair = None
+
+                                for fr2 in range(t_start + 1, t_start + window_touch + 1):
+                                    if fr2 not in per_frame:
+                                        continue
+                                    if id1 not in per_frame[fr2] or id2 not in per_frame[fr2]:
+                                        continue
+
+                                    d2, p2 = min_node_distance(
+                                        per_frame[fr2][id1]._asdict(),
+                                        per_frame[fr2][id2]._asdict()
+                                    )
+
+                                    if d2 > 10.0:
+                                        break # lost contact
+
+                                    if d2 < 1.0:
+                                        touch = True
+                                        touch_frame = fr2
+                                        touch_part_pair = p2
+                                        break
+
+                                all_events.append({
+                                    'filename': track_file,
+                                    'track1': id1,
+                                    'track2': id2,
+                                    'start_frame': t_start,
+                                    'start_min_dist': float(d_start),
+                                    'first_nodes': start_pair,
+                                    'window': window,
+                                    'closer': closer,
+                                    'closer_distance': closer_distance,
+                                    'touch_window': window_touch,
+                                    'touch': touch,
+                                    'touch_frame': touch_frame,
+                                    'touching_nodes': touch_part_pair
+                                })
+
+                        else:
+                            # wait until separation to re-arm
+                            if d_min > 10.0:
+                                in_encounter = False
+
+        potential_interactions_df = pd.DataFrame(all_events)
+        potential_interactions_df.to_csv(os.path.join(self.directory, "potential_interactions.csv"), index=False)   
+
+    
+
+
+    def individual_approach_responses(self):
+
+        parts = ['head', 'body', 'tail']
+
+        def min_node_distance(row_a, row_b):
+            best_d = np.inf
+            best_pair = None
+
+            for p in parts:
+                x2 = row_b.get(f"x_{p}", np.nan)
+                y2 = row_b.get(f"y_{p}", np.nan)
+                if pd.isna(x2) or pd.isna(y2):
+                    continue
+
+                d = np.hypot(row_a['x_head'] - x2, row_a['y_head'] - y2)
+                if d < best_d:
+                    best_d = d
+                    best_pair = p
+
+            return best_d, best_pair
+
+        def min_approach_angle(row_a, row_b):
+            # heading vector: body -> head (focal larva)
+            hx, hy = row_a['x_head'], row_a['y_head']
+            bx, by = row_a['x_body'], row_a['y_body']
+            v_heading = np.array([hx - bx, hy - by])
+
+            if np.linalg.norm(v_heading) == 0:
+                return np.nan, None
+
+            best_angle = np.inf
+            best_node = None
+
+            for p in parts:
+                tx = row_b.get(f"x_{p}", np.nan)
+                ty = row_b.get(f"y_{p}", np.nan)
+                if pd.isna(tx) or pd.isna(ty):
+                    continue
+
+                v_target = np.array([tx - hx, ty - hy])
+                if np.linalg.norm(v_target) == 0:
+                    continue
+
+                cosang = np.dot(v_heading, v_target) / (
+                    np.linalg.norm(v_heading) * np.linalg.norm(v_target)
+                )
+                cosang = np.clip(cosang, -1, 1)
+                angle = np.degrees(np.arccos(cosang))
+
+                if angle < best_angle:
+                    best_angle = angle
+                    best_node = p
+
+            return best_angle, best_node
+
+
+        all_events = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].copy()
+            df = df.sort_values('frame')
+            df['filename'] = track_file
+
+            frame_groups = dict(tuple(df.groupby('frame')))
+            frames = sorted(frame_groups.keys())
+
+            per_frame = {}
+            for fr, g in frame_groups.items():
+                per_frame[fr] = {
+                    tid: row._asdict()
+                    for tid, row in zip(g['track_id'], g.itertuples(index=False))
+                }
+
+            for frame in frames[:-1]:  # need next frame
+                if frame + 1 not in per_frame:
+                    continue
+
+                rows_now = per_frame[frame]
+                rows_next = per_frame[frame + 1]
+
+                for focal_id in rows_now:
+                    if focal_id not in rows_next:
+                        continue
+
+                    focal = rows_now[focal_id]
+                    focal_next = rows_next[focal_id]
+
+                    ### ALL LARVAE COMBINATIONS PER FRAME
+
+                    # for stim_id in rows_now:
+                    #     if stim_id == focal_id:
+                    #         continue
+                    #     if stim_id not in rows_next:
+                    #         continue
+
+                    #     stim = rows_now[stim_id]
+                    #     stim_next = rows_next[stim_id]
+
+                    #     # distance + closest node
+                    #     d_now, stim_node = min_node_distance(focal, stim)
+
+                    #     # if d_now < 2 or d_now > 20:
+                    #     #     continue
+
+                    #     if d_now > 40:
+                    #         continue
+
+                    #     angle, angle_node = min_approach_angle(focal, stim)
+                    #     if np.angle is None or np.isnan(angle) or angle > 35:
+                    #         continue
+
+
+                    #     # distance next frame
+                    #     d_next, _ = min_node_distance(focal_next, stim_next)
+
+                    #     delta = d_next - d_now
+                    #     if d_next < d_now:
+                    #         outcome = 'approach'
+                    #     elif d_next > d_now:
+                    #         outcome = 'avoid'
+         
+
+                    #     all_events.append({
+                    #         'filename': track_file,
+                    #         'frame': frame,
+                    #         'focal_id': focal_id,
+                    #         'stim_id': stim_id,
+                    #         'distance': d_now,
+                    #         'closest_node': stim_node,
+                    #         'approach_angle': angle,
+                    #         'angle_node': angle_node,
+                    #         'distance_moved': delta,
+                    #         'outcome': outcome
+                    #     })
+
+                    ## LARVAE WITH SMALLEST APPROACH ANGLE 
+
+                    # best = None
+
+                    # for stim_id in rows_now:
+                    #     if stim_id == focal_id:
+                    #         continue
+                    #     if stim_id not in rows_next:
+                    #         continue
+
+                    #     stim = rows_now[stim_id]
+
+                    #     d_now, stim_node = min_node_distance(focal, stim)
+
+                    #     if d_now > 20:
+                    #         continue
+
+                    #     angle, angle_node = min_approach_angle(focal, stim)
+                    #     if angle is None or np.isnan(angle) or angle > 35:
+                    #         continue
+
+                    #     # pick the most "in front" (smallest angle), tie-break by distance
+                    #     if (best is None) or (angle < best['angle']) or (angle == best['angle'] and d_now < best['d_now']):
+                    #         best = {
+                    #             'stim_id': stim_id,
+                    #             'd_now': d_now,
+                    #             'stim_node': stim_node,
+                    #             'angle': angle,
+                    #             'angle_node': angle_node
+                    #         }
+
+                    # # if no valid stimulus for this focal at this frame, skip
+                    # if best is None:
+                    #     continue
+
+                    # stim_id = best['stim_id']
+                    # stim_next = rows_next[stim_id]
+
+                    # d_now = best['d_now']
+                    # stim_node = best['stim_node']
+                    # angle = best['angle']
+                    # angle_node = best['angle_node']
+
+                    # # distance next frame
+                    # d_next, _ = min_node_distance(focal_next, stim_next)
+
+                    # if d_next < d_now:
+                    #     outcome = 'approach'
+                    # elif d_next > d_now:
+                    #     outcome = 'avoid'
+                    # else:
+                    #     outcome = 'neutral'
+
+                    # all_events.append({
+                    #     'filename': track_file,
+                    #     'frame': frame,
+                    #     'focal_id': focal_id,
+                    #     'stim_id': stim_id,
+                    #     'distance': d_now,
+                    #     'closest_node': stim_node,
+                    #     'approach_angle': angle,
+                    #     'angle_node': angle_node,
+                    #     'distance_moved': d_next - d_now,
+                    #     'outcome': outcome
+                    # })
+
+
+                    ## LARVAE WITH SMALLEST NODE DISTANCE FROM HEAD
+
+                    # best = None
+
+                    # for stim_id in rows_now:
+                    #     if stim_id == focal_id:
+                    #         continue
+                    #     if stim_id not in rows_next:
+                    #         continue
+
+                    #     stim = rows_now[stim_id]
+
+                    #     d_now, stim_node = min_node_distance(focal, stim)
+                    #     if d_now > 20:
+                    #         continue
+
+                    #     angle, angle_node = min_approach_angle(focal, stim)
+
+                    #     # pick the closest stimulus (min distance)
+                    #     if (best is None) or (d_now < best['d_now']):
+                    #         best = {
+                    #             'stim_id': stim_id,
+                    #             'd_now': d_now,
+                    #             'stim_node': stim_node,
+                    #             'angle': angle,
+                    #             'angle_node': angle_node
+                    #         }
+
+                    # if best is None:
+                    #     continue
+
+                    # stim_id = best['stim_id']
+                    # stim_next = rows_next[stim_id]
+
+                    # d_now = best['d_now']
+                    # stim_node = best['stim_node']
+                    # angle = best['angle']
+                    # angle_node = best['angle_node']
+
+                    # d_next, _ = min_node_distance(focal_next, stim_next)
+
+                    # if d_next < d_now:
+                    #     outcome = 'approach'
+                    # elif d_next > d_now:
+                    #     outcome = 'avoid'
+
+
+                    # all_events.append({
+                    #     'filename': track_file,
+                    #     'frame': frame,
+                    #     'focal_id': focal_id,
+                    #     'stim_id': stim_id,
+                    #     'distance': d_now,
+                    #     'closest_node': stim_node,
+                    #     'approach_angle': angle,
+                    #     'angle_node': angle_node,
+                    #     'distance_moved': d_next - d_now,
+                    #     'outcome': outcome
+                    # })
+
+                    ## LARVAE WITH SMALLEST NODE DISTANCE FROM HEAD AND THEN ONE NODE OF THAT LARVAE MUST BE < 35 DEGREES TO BE INC
+
+                    # --- Step 1: find the nearest larva (by closest-node distance), regardless of angle ---
+                    nearest = None
+
+                    for stim_id in rows_now:
+                        if stim_id == focal_id:
+                            continue
+                        if stim_id not in rows_next:
+                            continue
+
+                        stim = rows_now[stim_id]
+
+                        d_now, stim_node = min_node_distance(focal, stim)
+                        if d_now > 20:
+                            continue
+
+                        if (nearest is None) or (d_now < nearest['d_now']):
+                            nearest = {
+                                'stim_id': stim_id,
+                                'd_now': d_now,
+                                'stim_node': stim_node
+                            }
+
+                    # if no neighbour in range, skip
+                    if nearest is None:
+                        continue
+
+                    stim_id = nearest['stim_id']
+                    stim = rows_now[stim_id]
+                    stim_next = rows_next[stim_id]
+
+                    d_now = nearest['d_now']
+                    stim_node = nearest['stim_node']
+
+                    # --- Step 2: visibility gate based on ANY node angle ---
+                    angle, angle_node = min_approach_angle(focal, stim)
+                    if angle is None or np.isnan(angle) or angle > 35:
+                        continue  # nearest neighbour is not in front, skip this frame
+
+                    # # --- Step 3: outcome to the SAME larva next frame ---
+                    # d_next, _ = min_node_distance(focal_next, stim_next)
+
+                    # if d_next < d_now:
+                    #     outcome = 'approach'
+                    # elif d_next > d_now:
+                    #     outcome = 'avoid'
+                    # else:
+                    #     outcome = 'neutral'
+
+                    # all_events.append({
+                    #     'filename': track_file,
+                    #     'frame': frame,
+                    #     'focal_id': focal_id,
+                    #     'stim_id': stim_id,
+                    #     'distance': d_now,
+                    #     'closest_node': stim_node,
+                    #     'approach_angle': angle,
+                    #     'angle_node': angle_node,
+                    #     'distance_moved': d_next - d_now,
+                    #     'outcome': outcome
+                    # })
+
+                    # --- Step 3: outcome over next 3 frames (mean distance) and approach angle ---
+                    future_ds = []
+                    future_as = []
+                    for k in (1, 2, 3, 4, 5):
+                        fr_k = frame + k
+                        if fr_k not in per_frame:
+                            future_ds = None
+                            break
+                        if focal_id not in per_frame[fr_k] or stim_id not in per_frame[fr_k]:
+                            future_ds = None
+                            break
+
+                        focal_k = per_frame[fr_k][focal_id]
+                        stim_k = per_frame[fr_k][stim_id]
+
+                        d_k, _ = min_node_distance(focal_k, stim_k)
+                        if not np.isfinite(d_k):
+                            future_ds = None
+                            break
+
+                        future_ds.append(d_k)
+
+                        a_k, _ = min_approach_angle(focal_k, stim_k)
+                        if a_k is None or not np.isfinite(a_k):
+                            future_ds = None
+                            break
+                        future_as.append(a_k)
+
+
+                    if future_ds is None:
+                        continue
+
+                    d_future = float(np.mean(future_ds))
+                    a_future = float(np.mean(future_as))
+
+                    if d_future < 1.0:
+                        outcome = 'contact'
+                    elif (d_future < d_now) and (a_future <= 35):
+                        outcome = 'approach'
+                    elif (d_future > d_now) and (a_future >= 90):
+                        outcome = 'avoid'
+                    else:
+                        outcome = 'neutral'
+
+                    all_events.append({
+                        'filename': track_file,
+                        'frame': frame,
+                        'focal_id': focal_id,
+                        'stim_id': stim_id,
+                        'distance': d_now,
+                        'closest_node': stim_node,
+                        'approach_angle': angle,
+                        'angle_node': angle_node,
+                        'distance_future_mean': d_future,
+                        'approach_angle_future_mean': a_future,
+                        'distance_moved': d_future - d_now,
+                        'angle_change': a_future - angle,
+                        'outcome': outcome
+                    })
+
+
+        df_out = pd.DataFrame(all_events)
+        df_out.to_csv(
+            os.path.join(self.directory, 'individual_approach_responses.csv'),
+            index=False)
+
 
 
 
         
-
-
-     
 
 
     ### METHOD INTERACTIONS: IDENTIFY AND QUANTIFY INTERACTIONS FOR UMAP ANALYSIS
