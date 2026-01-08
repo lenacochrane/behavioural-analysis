@@ -58,12 +58,13 @@ def perform_analysis(directory):
     ## PROXIMITY AND INTERACTION DYNAMICS 
 
     # analysis.potential_interactions()
-    analysis.individual_approach_responses()
+    # analysis.individual_approach_responses()
 
     # analysis.nearest_neighbour()
     # analysis.interactions()
     # analysis.interaction_types()
-    # analysis.interaction_type_bout()
+    # analysis.interaction_types_closest()
+    analysis.interaction_type_bout()
     # analysis.interaction_bout_dynamics() 
     # analysis.contacts(proximity_threshold=5)
 

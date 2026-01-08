@@ -53,6 +53,75 @@ plt.tight_layout()
 plt.show()
 
 
+
+
+fig, axes = plt.subplots(1, 2, figsize=(15, 4), sharey=True)
+
+for ax, condition in zip(axes, prob['condition'].unique()):
+    sub = prob[prob['condition'] == condition]
+
+    # mean curve per condition across videos + 95% CI
+    sns.lineplot(
+        data=sub,
+        x='distance_bin',
+        y='probability',
+        hue='outcome',
+        errorbar=('ci', 95),
+        ax=ax
+    )
+
+    ax.set_title(f'{condition}')
+    ax.set_xlabel('Distance (mm)')
+    ax.set_ylabel('' if ax is axes[0] else '')
+    ax.set_ylim(0, 1)
+
+    # rotate x tick labels so bins are readable
+    ax.tick_params(axis='x', rotation=90)
+
+    # keep legend only on last plot (or first, your choice)
+    if ax is not axes[-1]:
+        ax.get_legend().remove()
+
+axes[-1].legend(title='Condition', loc='upper right')
+plt.tight_layout()
+plt.show()
+
+
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
+
+for ax, outcome in zip(axes, prob['outcome'].unique()):
+    sub = prob[prob['outcome'] == outcome]
+
+    # mean curve per condition across videos + 95% CI
+    sns.lineplot(
+        data=sub,
+        x='distance_bin',
+        y='probability',
+        hue='condition',
+        errorbar=('ci', 95),
+        ax=ax
+    )
+
+    ax.set_title(f'{outcome}')
+    ax.set_xlabel('Distance (mm)')
+    ax.set_ylabel('' if ax is axes[0] else '')
+    ax.set_ylim(0, 1)
+
+    # rotate x tick labels so bins are readable
+    ax.tick_params(axis='x', rotation=90)
+
+    # keep legend only on last plot (or first, your choice)
+    if ax is not axes[-1]:
+        ax.get_legend().remove()
+
+axes[-1].legend(title='Condition', loc='upper right')
+plt.tight_layout()
+plt.show()
+
+
+
+
 ## APPROACH PROBABILITY PER DISTANCE BIN
 
 per_video = (
@@ -101,7 +170,7 @@ plt.ylim(0, 1)
 plt.title('Approach Probability by Distance')
 plt.legend(title='Condition')
 plt.tight_layout()
-plt.show()
+plt.close()
 
 
 
@@ -118,7 +187,7 @@ plt.ylim(0, 1)
 plt.title('Approach Probability by Distance')
 plt.legend(title='Condition')
 plt.tight_layout()
-plt.show()
+plt.close()
 
 
 
@@ -154,7 +223,7 @@ for ax, node in zip(axes, nodes):
 
 axes[-1].legend(title='Condition', loc='upper right')
 plt.tight_layout()
-plt.show()
+plt.close()
 
 
 

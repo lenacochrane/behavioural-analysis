@@ -19,7 +19,7 @@ from shapely.wkt import loads as load_wkt
 from itertools import combinations
 from joblib import Parallel, delayed
 from itertools import product
-
+import itertools
 
 class PseudoAnalysis:
 
@@ -920,6 +920,78 @@ class PseudoAnalysis:
 
 
 
+    # def interaction_types(self, threshold=1):
+    #     def unify_interaction_type(part1, part2):
+    #         return '_'.join(sorted([part1, part2]))
+
+    #     data = []
+
+    #     for file in self.pseudo_files:
+    #         df = self.pseudo_data[file]
+    #         # track_ids = df['track_id'].unique()
+
+    #         # Set up interaction counters using unified types
+    #         interaction_counts = {
+    #             'head_head': 0,
+    #             'tail_tail': 0,
+    #             'body_body': 0,
+    #             'body_head': 0,  # includes head_body
+    #             'body_tail': 0,  # includes tail_body
+    #             'head_tail': 0,  # includes tail_head
+    #             'file': file,
+    #         }
+
+    #         for frame in df['frame'].unique():
+    #             frame_data = df[df['frame'] == frame]
+
+    #             if len(frame_data) < 2:
+    #                 continue
+
+    #             # Loop over all unordered combinations of body parts
+    #             for part1, part2 in [
+    #                 ('head', 'head'),
+    #                 ('tail', 'tail'),
+    #                 ('body', 'body'),
+    #                 ('head', 'body'),
+    #                 ('tail', 'body'),
+    #                 ('head', 'tail'),
+    #             ]:
+    #                 interaction_type = unify_interaction_type(part1, part2)
+
+    #                 positions1 = frame_data[[f'track_id', f'x_{part1}', f'y_{part1}']].to_numpy()
+    #                 positions2 = frame_data[[f'track_id', f'x_{part2}', f'y_{part2}']].to_numpy()
+
+    #                 ids1 = positions1[:, 0]
+    #                 ids2 = positions2[:, 0]
+    #                 coords1 = positions1[:, 1:].astype(float)
+    #                 coords2 = positions2[:, 1:].astype(float)
+
+    #                 distances = cdist(coords1, coords2)
+    #                 mask = ids1[:, None] != ids2[None, :]
+
+    #                 if positions1 is positions2:
+    #                     upper_triangle = np.triu((distances < threshold) & mask, k=1)
+    #                     interaction_counts[interaction_type] += np.sum(upper_triangle)
+    #                 else:
+    #                     # interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+    #                     for i, id1 in enumerate(ids1):
+    #                         for j, id2 in enumerate(ids2):
+    #                             if id1 < id2 and distances[i, j] < threshold:
+    #                                 interaction_counts[interaction_type] += 1
+
+    #         data.append(interaction_counts)
+
+    #     interaction_df = pd.DataFrame(data)
+    #     melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
+
+    #     if self.shorten and self.shorten_duration is not None:
+    #         suffix = f"_{self.shorten_duration}"
+    #     else:
+    #         suffix = ""
+
+    #     filename = f"interaction_types{suffix}.csv"
+    #     melted_df.to_csv(os.path.join(self.directory, filename), index=False)
+
 
 
     def interaction_types(self, threshold=1):
@@ -932,59 +1004,70 @@ class PseudoAnalysis:
             df = self.pseudo_data[file]
             # track_ids = df['track_id'].unique()
 
-            # Set up interaction counters using unified types
-            interaction_counts = {
-                'head_head': 0,
-                'tail_tail': 0,
-                'body_body': 0,
-                'body_head': 0,  # includes head_body
-                'body_tail': 0,  # includes tail_body
-                'head_tail': 0,  # includes tail_head
-                'file': file,
-            }
+            df['frame_bin'] = (df['frame'] // 600) * 600  # Bins: 0, 600, 1200...
 
-            for frame in df['frame'].unique():
-                frame_data = df[df['frame'] == frame]
+            for bin in sorted(df['frame_bin'].unique()):
+                df_bin = df[df['frame_bin'] == bin]
 
-                if len(frame_data) < 2:
-                    continue
+                # Set up interaction counters using unified types
+                interaction_counts = {
+                    'head_head': 0,
+                    'tail_tail': 0,
+                    'body_body': 0,
+                    'body_head': 0,  # includes head_body
+                    'body_tail': 0,  # includes tail_body
+                    'head_tail': 0,  # includes tail_head
+                    'file': file,
+                    'frame_bin': bin
+                }
 
-                # Loop over all unordered combinations of body parts
-                for part1, part2 in [
-                    ('head', 'head'),
-                    ('tail', 'tail'),
-                    ('body', 'body'),
-                    ('head', 'body'),
-                    ('tail', 'body'),
-                    ('head', 'tail'),
-                ]:
-                    interaction_type = unify_interaction_type(part1, part2)
+                # for frame in df['frame'].unique():
+                #     frame_data = df[df['frame'] == frame]
 
-                    positions1 = frame_data[[f'track_id', f'x_{part1}', f'y_{part1}']].to_numpy()
-                    positions2 = frame_data[[f'track_id', f'x_{part2}', f'y_{part2}']].to_numpy()
+                for frame in df_bin['frame'].unique():
+                    frame_data = df_bin[df_bin['frame'] == frame]
 
-                    ids1 = positions1[:, 0]
-                    ids2 = positions2[:, 0]
-                    coords1 = positions1[:, 1:].astype(float)
-                    coords2 = positions2[:, 1:].astype(float)
+                    if len(frame_data) < 2:
+                        continue
 
-                    distances = cdist(coords1, coords2)
-                    mask = ids1[:, None] != ids2[None, :]
+                    # Loop over all unordered combinations of body parts
+                    for part1, part2 in [
+                        ('head', 'head'),
+                        ('tail', 'tail'),
+                        ('body', 'body'),
+                        ('head', 'body'),
+                        ('tail', 'body'),
+                        ('head', 'tail'),
+                    ]:
+                        interaction_type = unify_interaction_type(part1, part2)
 
-                    if positions1 is positions2:
-                        upper_triangle = np.triu((distances < threshold) & mask, k=1)
-                        interaction_counts[interaction_type] += np.sum(upper_triangle)
-                    else:
-                        # interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
-                        for i, id1 in enumerate(ids1):
-                            for j, id2 in enumerate(ids2):
-                                if id1 < id2 and distances[i, j] < threshold:
-                                    interaction_counts[interaction_type] += 1
+                        positions1 = frame_data[[f'track_id', f'x_{part1}', f'y_{part1}']].to_numpy()
+                        positions2 = frame_data[[f'track_id', f'x_{part2}', f'y_{part2}']].to_numpy()
 
-            data.append(interaction_counts)
+                        ids1 = positions1[:, 0]
+                        ids2 = positions2[:, 0]
+                        coords1 = positions1[:, 1:].astype(float)
+                        coords2 = positions2[:, 1:].astype(float)
+
+                        distances = cdist(coords1, coords2)
+                        mask = ids1[:, None] != ids2[None, :]
+
+                        if positions1 is positions2:
+                            upper_triangle = np.triu((distances < threshold) & mask, k=1)
+                            interaction_counts[interaction_type] += np.sum(upper_triangle)
+                        else:
+                            # interaction_counts[interaction_type] += np.sum((distances < threshold) & mask)
+                            ## STOP TRACK 1-2 AND 2-1 BEING COUNTED 
+                            for i, id1 in enumerate(ids1):
+                                for j, id2 in enumerate(ids2):
+                                    if id1 < id2 and distances[i, j] < threshold:
+                                        interaction_counts[interaction_type] += 1
+
+
+                data.append(interaction_counts)
 
         interaction_df = pd.DataFrame(data)
-        melted_df = interaction_df.melt(id_vars='file', var_name='interaction_type', value_name='count').sort_values(by='file')
+        melted_df = interaction_df.melt(id_vars=['file', 'frame_bin'], var_name='interaction_type', value_name='count').sort_values(by='file')
 
         if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
@@ -993,6 +1076,127 @@ class PseudoAnalysis:
 
         filename = f"interaction_types{suffix}.csv"
         melted_df.to_csv(os.path.join(self.directory, filename), index=False)
+    
+
+
+    ### METHOD INTERACTION_TYPES_CLOSEST: COUNTS CLOSEST! PROXIMAL CONTACTS BETWEEN LARVAE (1MM THRESHOLD) 
+    def interaction_types_closest(self, threshold=1):
+
+        """
+        Frame-level closest-contact detection (no bouts).
+        For each larval pair per frame:
+        - compute all 9 node-node distances
+        - keep only the minimum distance + its node-node type
+        - only log frames where min distance < threshold
+        Output: one row per (file, frame, pair) contact frame
+        """
+
+        data = []
+        no_contacts = []
+
+        parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(parts, parts))
+
+        def unify_interaction_type(part1, part2):
+            return '_'.join(sorted([part1, part2]))
+
+        def process_track_pair(track_a, track_b, df, track_file):
+            results = []
+            track_a_data = df[df['track_id'] == track_a]
+            track_b_data = df[df['track_id'] == track_b]
+
+            common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+            if not common_frames:
+                return results
+
+            for frame in common_frames:
+                row_a = track_a_data[track_a_data['frame'] == frame]
+                row_b = track_b_data[track_b_data['frame'] == frame]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                # build coords
+                coords_a = {p: row_a[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+                coords_b = {p: row_b[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+
+                # compute all 9 distances, keep minimum
+                min_dist = float('inf')
+            #   min_type = None
+                min_part_a = None
+                min_part_b = None
+                for part1, part2 in interaction_pairs:
+                    dist = np.linalg.norm(coords_a[part1] - coords_b[part2])
+                    if dist < min_dist:
+                        min_dist = dist
+                        min_part_a = part1
+                        min_part_b = part2
+                        # min_type = unify_interaction_type(part1, part2)
+
+                if min_dist < threshold:
+                    results.append({
+                        'file': track_file,
+                        'frame': frame,
+                        'Interaction Pair': tuple(sorted((track_a, track_b))),
+                        'track_0': track_a,
+                        'track_1': track_b,
+                        'track_0_node': min_part_a,
+                        'track_1_node': min_part_b,
+                        'Distance': min_dist,
+                        'Closest Interaction Type': unify_interaction_type(min_part_a, min_part_b)
+                    })
+
+            return results
+        
+        for file in self.pseudo_files:
+            df = self.pseudo_data[file]
+            df = df.sort_values(by='frame', ascending=True)
+            df['filename'] = file
+            track_file = file
+
+            track_ids = sorted(df['track_id'].unique()) # 0 always first
+            track_combinations = list(combinations(track_ids, 2))
+
+            all_results = Parallel(n_jobs=-1)(
+                delayed(process_track_pair)(track_a, track_b, df, track_file)
+                for track_a, track_b in track_combinations
+            )
+
+            flattened_results = [item for sublist in all_results for item in sublist]
+            if not flattened_results:
+                print(f"No closest-contact frames for {track_file}")
+                no_contacts.append(track_file)
+                continue
+
+            data.append(pd.DataFrame(flattened_results))
+
+        # placeholders for files with none
+        for file in no_contacts:
+            data.append(pd.DataFrame([{
+                'file': file,
+                'frame': np.nan,
+                'Interaction Pair': None,
+                'Distance': np.nan,
+                'Closest Interaction Type': None
+            }]))
+
+        closest_df = pd.concat(data, ignore_index=True)
+
+        if self.shorten and self.shorten_duration is not None:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"closest_contacts_{threshold}mm{suffix}.csv"
+        closest_df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        return closest_df
+
+
+
+
+
+
+
 
 
 
@@ -1142,6 +1346,31 @@ class PseudoAnalysis:
                     best_node = p
 
             return best_angle, best_node
+        
+        def approach_angle_to_node(row_a, row_b, node):
+            # heading vector: body -> head (focal larva)
+            hx, hy = row_a['x_head'], row_a['y_head']
+            bx, by = row_a['x_body'], row_a['y_body']
+            v_heading = np.array([hx - bx, hy - by])
+
+            if np.linalg.norm(v_heading) == 0:
+                return np.nan
+
+            tx = row_b.get(f"x_{node}", np.nan)
+            ty = row_b.get(f"y_{node}", np.nan)
+            if pd.isna(tx) or pd.isna(ty):
+                return np.nan
+
+            v_target = np.array([tx - hx, ty - hy])
+            if np.linalg.norm(v_target) == 0:
+                return np.nan
+
+            cosang = np.dot(v_heading, v_target) / (
+                np.linalg.norm(v_heading) * np.linalg.norm(v_target)
+            )
+            cosang = np.clip(cosang, -1, 1)
+            return float(np.degrees(np.arccos(cosang)))
+
 
 
         all_events = []
@@ -1192,6 +1421,9 @@ class PseudoAnalysis:
                         if d_now > 20:
                             continue
 
+                        if d_now < 1.0:
+                            continue
+
                         if (nearest is None) or (d_now < nearest['d_now']):
                             nearest = {
                                 'stim_id': stim_id,
@@ -1226,7 +1458,7 @@ class PseudoAnalysis:
                     #     outcome = 'neutral'
 
                     # all_events.append({
-                    #     'filename': file,
+                    #     'filename': track_file,
                     #     'frame': frame,
                     #     'focal_id': focal_id,
                     #     'stim_id': stim_id,
@@ -1238,8 +1470,10 @@ class PseudoAnalysis:
                     #     'outcome': outcome
                     # })
 
+                    # --- Step 3: outcome over next 3 frames (mean distance) and approach angle ---
                     future_ds = []
-                    for k in (1, 2, 3, 4, 5):
+                    future_as = []
+                    for k in (1, 2, 3, 4): # next x frames
                         fr_k = frame + k
                         if fr_k not in per_frame:
                             future_ds = None
@@ -1251,24 +1485,52 @@ class PseudoAnalysis:
                         focal_k = per_frame[fr_k][focal_id]
                         stim_k = per_frame[fr_k][stim_id]
 
-                        d_k, _ = min_node_distance(focal_k, stim_k)
+                        d_k, d_node = min_node_distance(focal_k, stim_k)
                         if not np.isfinite(d_k):
                             future_ds = None
                             break
 
                         future_ds.append(d_k)
 
+                        # a_k, _ = min_approach_angle(focal_k, stim_k)
+                        # if a_k is None or not np.isfinite(a_k):
+                        #     future_ds = None
+                        #     break
+                        # future_as.append(a_k)
+
+                        a_k = approach_angle_to_node(focal_k, stim_k, d_node)
+                        if np.isnan(a_k):
+                            future_ds = None
+                            break
+                        future_as.append(a_k)
+
+
+
                     if future_ds is None:
                         continue
 
                     d_future = float(np.mean(future_ds))
+                    d_future_min = float(np.min(future_ds))
+                    a_future = float(np.mean(future_as))
 
-                    if d_future < d_now:
+                    # if (d_future < 1.0) or (d_future_min < 1.0):
+                    #     outcome = 'contact'
+                    # elif (d_future < d_now) and (a_future <= 35):
+                    #     outcome = 'approach'
+                    # elif (d_future > d_now) and (a_future >= 90):
+                    #     outcome = 'avoid'
+                    # else:
+                    #     outcome = 'neutral'
+
+                    if (d_future < 1.0) or (d_future_min < 1.0):
                         outcome = 'approach'
-                    elif d_future > d_now:
+                    elif (d_future < d_now) and (a_future <= angle):
+                        outcome = 'approach'
+                    elif (d_future > d_now) and (a_future >= angle): #90
                         outcome = 'avoid'
                     else:
-                        outcome = 'neutral'
+                        outcome = 'other'
+
 
                     all_events.append({
                         'filename': file,
@@ -1280,9 +1542,12 @@ class PseudoAnalysis:
                         'approach_angle': angle,
                         'angle_node': angle_node,
                         'distance_future_mean': d_future,
+                        'approach_angle_future_mean': a_future,
                         'distance_moved': d_future - d_now,
+                        'angle_change': a_future - angle,
                         'outcome': outcome
                     })
+
 
 
         df_out = pd.DataFrame(all_events)
@@ -1318,8 +1583,9 @@ def perform_analysis(directory):
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
     # analysis.nearest_neighbour()
-    # analysis.interaction_types()
-    analysis.individual_approach_responses()
+    analysis.interaction_types()
+    analysis.interaction_types_closest()
+    # analysis.individual_approach_responses()
 
     # analysis.total_digging(cleaned=True)
     # analysis.digging_behaviour()
@@ -1328,7 +1594,7 @@ def perform_analysis(directory):
 
 
 
-perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
+# perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed')
 perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/socially-isolated')
 # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/group-housed')
 # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/pseudo-n2/socially-isolated')
