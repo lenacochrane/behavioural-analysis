@@ -293,7 +293,11 @@ class ClusterPipeline:
             # → tag which original track was anchor (1 or 2)
             df.loc[idx, 'anchor_track']  = winner
             df.loc[idx, 'partner_track'] = 3 - winner
+        
 
+        ## APPROACH ANGLE CALCULATION FLIPPED INITIALLY BY ACCIDENT
+        df["track1_approach_angle"] = 180 - df["track1_approach_angle"]
+        df["track2_approach_angle"] = 180 - df["track2_approach_angle"]
 
         # === HEADING ANGLE CHANGE ===
         df['track1_heading_angle_change'] = df.groupby("interaction_id")["track1_angle"].diff().abs()
@@ -940,6 +944,8 @@ class ClusterPipeline:
 
         per_video_prop_path = os.path.join(self.directory, 'cluster_proportions_per_video.png')
         plt.savefig(per_video_prop_path, dpi=300, bbox_inches='tight')
+        output = os.path.join(self.directory, 'cluster_proportions_per_video.pdf')
+        plt.savefig(output, format='pdf', bbox_inches='tight')
         plt.close()
 
 
@@ -1308,9 +1314,22 @@ class ClusterPipeline:
                     5: '5+12', 12: '5+12'
                 }
         
+        # true group map 
+        group_map = {
+                    1: '1+2', 2: '1+2',
+                    3: '3+4', 4: '3+4',
+                    6: '5+6+7', 7: '5+6+7',
+                    8: '8+9', 9: '8+9',
+                    10: '10+11', 11: '10+11',
+                    5: '5+6+7', 
+                    12: '12'
+                }
+        
         df['hierarchal_group'] = df[cluster_name].map(group_map)
         df_interaction['hierarchal_group'] = df_interaction[cluster_name].map(group_map)
-        df_interaction['hierarchal_group'] = pd.to_numeric(df_interaction['hierarchal_group'], errors='coerce').astype('Int64')
+        # df_interaction['hierarchal_group'] = pd.to_numeric(df_interaction['hierarchal_group'], errors='coerce').astype('Int64')
+        df_interaction['hierarchal_group'] = df_interaction[cluster_name].map(group_map).astype("string")
+
 
 
 
@@ -1465,6 +1484,7 @@ class ClusterPipeline:
             vmin=0,  # anchor scale at 0
             cmap=my_cmap,
             # cmap='PuBuGn' 
+            rasterized=True,   # <- key for vector formats
         )
         ax2.set_yticks([0])
         ax2.set_yticklabels(['Average Contact\nFrames'])
@@ -1490,8 +1510,8 @@ class ClusterPipeline:
         plt.tight_layout()
         path = os.path.join(output, 'deviations_hierarchical.png')  
         plt.savefig(path, dpi=300, bbox_inches='tight')
-        path = os.path.join(output, 'deviations.pdf')  
-        plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300, transparent=True)
+        path = os.path.join(output, 'deviations_hierarchical.pdf')  
+        plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300, transparent=False)
         plt.close()
 
 
@@ -3184,7 +3204,12 @@ class ClusterPipeline:
 
         out_path = os.path.join(self.directory, "summary_anchor_partner.png")
         plt.savefig(out_path, dpi=300, bbox_inches='tight')
+        out_path = os.path.join(self.directory, "summary_anchor_partner.pdf")
+        plt.savefig(out_path, format="pdf", bbox_inches='tight')
         plt.close(fig_ap)
+
+
+
 
 
     def hierarchal_summary(self):
@@ -3202,6 +3227,7 @@ class ClusterPipeline:
                     10: 'G5', 11: 'G5',
                     5: 'G6', 12: 'G6'
                 }
+        
         
         df['hierarchal_group'] = df[cluster_name].map(group_map)
 
@@ -3264,23 +3290,195 @@ class ClusterPipeline:
             palette[f"{c}_partner"]  = "#edc078"   # light blue
             palette[f"{c}_anchor"] = "#ff7f0e"   # light orange
 
+
+        ### DISTANCE TRAVELLED 
+
         # Plotting the distance data
         for i, (role, group) in enumerate(distance_melted.groupby("hierarchal_group")):
+            hue_order = sorted(group['cluster_role'].unique())
             ax = axes[i]
-            sns.lineplot(data=group, x="Normalized Frame", y="distance", ax=ax, hue='cluster_role', palette=palette, errorbar=('ci', 95))
+            sns.lineplot(data=group, x="Normalized Frame", y="distance", ax=ax, hue='cluster_role', palette=palette, errorbar=('ci', 95), hue_order=hue_order)
             ax.set_title(f"")
             ax.set_ylim(0, None)
             ax.set_xlim(-14, 15)
-        
-        plt.title("Distance Travelled", fontsize=16, fontweight='bold')
+
+        plt.suptitle("Distance Travelled", fontsize=16, fontweight='bold')
 
         plt.tight_layout()        
         save_path = os.path.join(output, "distance.png")
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        save_path = os.path.join(output, "distance.pdf")
+        plt.savefig(save_path, format="pdf", bbox_inches='tight')
         plt.close(fig)
 
 
-        ## min distance
+
+        #### SPEED
+
+        speed_melted = df.melt(
+            id_vars=["interaction_id", cluster_name, "Normalized Frame", "hierarchal_group"],
+            value_vars=["anchor_speed", "partner_speed"],
+            var_name="role",
+            value_name="speed"
+        )
+
+        # normalize role names to match palette
+        speed_melted["role"] = speed_melted["role"].str.replace("_speed", "", regex=False)
+        speed_melted["cluster_role"] = speed_melted[cluster_name].astype(str) + "_" + speed_melted["role"]
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        for i, (hg, group) in enumerate(speed_melted.groupby("hierarchal_group")):
+            ax = axes[i]
+            hue_order = sorted(group['cluster_role'].unique())
+            sns.lineplot(
+                data=group,
+                x="Normalized Frame",
+                y="speed",
+                ax=ax,
+                hue="cluster_role",
+                palette=palette,
+                hue_order=hue_order,
+                errorbar=("ci", 95),
+            )
+
+            ax.set_xlim(-14, 15)
+            ax.set_ylim(0, None)
+
+        fig.suptitle("Speed", fontsize=16, fontweight="bold", y=1.02)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        plt.savefig(os.path.join(output, "speed.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(output, "speed.pdf"), format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+
+        #### ACCELERATION
+
+        speed_melted = df.melt(
+            id_vars=["interaction_id", cluster_name, "Normalized Frame", "hierarchal_group"],
+            value_vars=["anchor_acceleration", "partner_acceleration"],
+            var_name="role",
+            value_name="acceleration"
+        )
+
+        # normalize role names to match palette
+        speed_melted["role"] = speed_melted["role"].str.replace("_acceleration", "", regex=False)
+        speed_melted["cluster_role"] = speed_melted[cluster_name].astype(str) + "_" + speed_melted["role"]
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        for i, (hg, group) in enumerate(speed_melted.groupby("hierarchal_group")):
+            ax = axes[i]
+            hue_order = sorted(group['cluster_role'].unique())
+            sns.lineplot(
+                data=group,
+                x="Normalized Frame",
+                y="acceleration",
+                ax=ax,
+                hue="cluster_role",
+                palette=palette,
+                hue_order=hue_order,
+                errorbar=("ci", 95),
+            )
+
+            ax.set_xlim(-14, 15)
+            ax.set_ylim(-0.2, 0.2)
+
+        fig.suptitle("Acceleration", fontsize=16, fontweight="bold", y=1.02)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        plt.savefig(os.path.join(output, "acceleration.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(output, "acceleration.pdf"), format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+
+        #### APPROACH ANGLE CHANGE
+
+        speed_melted = df.melt(
+            id_vars=["interaction_id", cluster_name, "Normalized Frame", "hierarchal_group"],
+            value_vars=["anchor_approach_angle_change", "partner_approach_angle_change"],
+            var_name="role",
+            value_name="approach_angle_change"
+        )
+
+        # normalize role names to match palette
+        speed_melted["role"] = speed_melted["role"].str.replace("_approach_angle_change", "", regex=False)
+        speed_melted["cluster_role"] = speed_melted[cluster_name].astype(str) + "_" + speed_melted["role"]
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        for i, (hg, group) in enumerate(speed_melted.groupby("hierarchal_group")):
+            ax = axes[i]
+            hue_order = sorted(group['cluster_role'].unique())
+            sns.lineplot(
+                data=group,
+                x="Normalized Frame",
+                y="approach_angle_change",
+                ax=ax,
+                hue="cluster_role",
+                palette=palette,
+                hue_order=hue_order,
+                errorbar=("ci", 95),
+            )
+
+            ax.set_xlim(-14, 15)
+            ax.set_ylim(0, None)
+
+        fig.suptitle("Approach Angle Change", fontsize=16, fontweight="bold", y=1.02)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        plt.savefig(os.path.join(output, "approach_angle_change.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(output, "approach_angle_change.pdf"), format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+
+        #### HEADING ANGLE CHANGE
+
+        speed_melted = df.melt(
+            id_vars=["interaction_id", cluster_name, "Normalized Frame", "hierarchal_group"],
+            value_vars=["anchor_heading_angle_change", "partner_heading_angle_change"],
+            var_name="role",
+            value_name="heading_angle_change"
+        )
+
+        # normalize role names to match palette
+        speed_melted["role"] = speed_melted["role"].str.replace("_heading_angle_change", "", regex=False)
+        speed_melted["cluster_role"] = speed_melted[cluster_name].astype(str) + "_" + speed_melted["role"]
+
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        for i, (hg, group) in enumerate(speed_melted.groupby("hierarchal_group")):
+            ax = axes[i]
+            hue_order = sorted(group['cluster_role'].unique())
+            sns.lineplot(
+                data=group,
+                x="Normalized Frame",
+                y="heading_angle_change",
+                ax=ax,
+                hue="cluster_role",
+                palette=palette,
+                hue_order=hue_order,
+                errorbar=("ci", 95),
+            )
+
+            ax.set_xlim(-14, 15)
+            ax.set_ylim(0, None)
+
+        fig.suptitle("Heading Angle Change", fontsize=16, fontweight="bold", y=1.02)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        plt.savefig(os.path.join(output, "heading_angle_change.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(output, "heading_angle_change.pdf"), format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+
+
+        ###### MIN DISTANCE
 
         fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
         axes = axes.flatten()
@@ -3304,11 +3502,14 @@ class ClusterPipeline:
             ax.set_ylim(0, None)
             ax.set_xlim(-14, 15)
         
-        plt.title("Min Distance", fontsize=16, fontweight='bold')
+        plt.suptitle("Min Distance", fontsize=16, fontweight='bold')
 
         plt.tight_layout()        
         save_path = os.path.join(output, "min-distance.png")
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        save_path = os.path.join(output, "min-distance.pdf")
+        plt.savefig(save_path, format="pdf", bbox_inches='tight')
+
         plt.close(fig)
 
 
@@ -4307,6 +4508,8 @@ class ClusterPipeline:
 
 
 
+
+
     #### METHOD RELATIVE_PARTNER_METRICS: COMPARES THE PROJECTED VECTOR BETWEEN THE PREVIOUS PARTNER AND THE ANCHOR AND THE PREVIOUS PARTNER TO THE CURRENT PARTNER
     def relative_partner_metrics(self):
 
@@ -4677,6 +4880,8 @@ class ClusterPipeline:
         plt.savefig(os.path.join(outdir, "forward_movement.png"), dpi=300, bbox_inches="tight")
         plt.close()
 
+
+
         clusters = sorted(data[cluster_name].dropna().unique())
         cols = 4
         rows = int(np.ceil(len(clusters) / cols))
@@ -4717,10 +4922,6 @@ class ClusterPipeline:
         plt.close()
 
 
-
-
-
-
         ####### HIERARAJCAL OF ABOVE #######
 
         group_map = {
@@ -4732,6 +4933,8 @@ class ClusterPipeline:
                     5: 'G6', 12: 'G6'
                 }
         
+        
+
         df['hierarchal_group'] = df[cluster_name].map(group_map)
 
         #### ANGLE
@@ -4757,12 +4960,16 @@ class ClusterPipeline:
             ax.set_ylim(0, 180)
             # ax.set_xlim(-14, 15)
 
-        plt.title("Deviation Angle", fontsize=16, fontweight='bold')
+        plt.suptitle("Deviation Angle", fontsize=16, fontweight='bold')
 
         plt.tight_layout()
         save_path = os.path.join(outdir, "hierarchical-deviation-angle.png")
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close(fig) 
+        save_path = os.path.join(outdir, "hierarchical-deviation-angle.pdf")
+        plt.savefig(save_path, format='pdf', bbox_inches='tight')
+        plt.close(fig)
+
+
 
 
         #### SIDEWAYS MOVEMENT
@@ -4777,12 +4984,14 @@ class ClusterPipeline:
             # ax.set_ylim(0, 180)
             # ax.set_xlim(-14, 15)
 
-        plt.title("Sideways Movement", fontsize=16, fontweight='bold')
+        plt.suptitle("Sideways Movement", fontsize=16, fontweight='bold')
 
         plt.tight_layout()
         save_path = os.path.join(outdir, "hierarchical-sideways-movement.png")
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close(fig) 
+        save_path = os.path.join(outdir, "hierarchical-sideways-movement.pdf")
+        plt.savefig(save_path, format='pdf', bbox_inches='tight')
+        plt.close(fig)
 
         #### FORWARD MOVEMENT
         fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
@@ -4796,12 +5005,56 @@ class ClusterPipeline:
             # ax.set_ylim(0, 180)
             # ax.set_xlim(-14, 15)
 
-        plt.title("Forward Movement", fontsize=16, fontweight='bold')
+        plt.suptitle("Forward Movement", fontsize=16, fontweight='bold')
 
         plt.tight_layout()
         save_path = os.path.join(outdir, "hierarchical-forward-movement.png")
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close(fig) 
+        save_path = os.path.join(outdir, "hierarchical-forward-movement.pdf")
+        plt.savefig(save_path, format='pdf', bbox_inches='tight')
+        plt.close(fig)
+
+
+        #### ALIGNED MOVEMENT
+        fig, axes = plt.subplots(2, 3, figsize=(10, 8), sharex=True, sharey=True, constrained_layout=True)
+        axes = axes.flatten()
+
+        # Plotting the distance data
+        for i, (role, group) in enumerate(df.groupby("hierarchal_group")):
+            ax = axes[i]
+            sns.lineplot(data=group, x="Normalized Frame", y="aligned_movement", ax=ax, hue=cluster_name, palette=palette, errorbar=('ci', 95))
+            ax.set_title(f"")
+            ax.set_ylim(-1, 1)
+            ax.axhline(0, color='0.6', linestyle='--', linewidth=0.8)
+
+            ax2 = ax.twinx()
+            sns.lineplot(
+                data=group,
+                x="Normalized Frame",
+                y="min_distance",
+                ax=ax2,
+                color='gray',
+                errorbar=('ci', 95),
+                linewidth=0.5
+            )
+
+            ax2.set_ylabel("")
+            ax2.tick_params(axis='y', colors='gray')
+            ax2.spines['right'].set_color('gray')
+            ax2.set_ylim(0, 1)
+
+            # ---- ADD THIS BLOCK (shading) ----
+
+
+
+        plt.suptitle("Aligned Movement Toward Anchor", fontsize=16, fontweight='bold')
+
+        plt.tight_layout()
+        save_path = os.path.join(outdir, "hierarchical-aligned-movement.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        save_path = os.path.join(outdir, "hierarchical-aligned-movement.pdf")
+        plt.savefig(save_path, format='pdf', bbox_inches='tight')
+        plt.close(fig)
 
 
 
@@ -5261,6 +5514,8 @@ class ClusterPipeline:
         # fig.subplots_adjust(hspace=0.0)
         output = os.path.join(self.directory, "hierarchal_mean_trace_summary.png")
         plt.savefig(output, dpi=300, bbox_inches='tight')
+        output = os.path.join(self.directory, "hierarchal_mean_trace_summary.pdf")
+        plt.savefig(output, format='pdf', bbox_inches='tight')
         plt.close(fig)
 
 
@@ -5365,7 +5620,7 @@ if __name__ == "__main__":
     # Set your paths
     directory = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1"
     interactions = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/test4_F29/cropped_interactions.csv"
-    clusters = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/pca-data2-F18-mcmodels4-Kmax3.csv"
+    clusters = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/pca-data2-F18.csv"
     cluster_name = "Yhat.idt.pca"   # or whatever your cluster column is
     video_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser/videos_original"
 
@@ -5398,10 +5653,10 @@ if __name__ == "__main__":
     # pipeline.mean_traces_gifs() 
     # pipeline.spatial_cluster()
     # pipeline.cluster_over_time()
-    # pipeline.relative_partner_metrics()
+    pipeline.relative_partner_metrics()
     # pipeline.proximal_conspecifs()
     # pipeline.hierarchal_mean_trace_summary()
-    pipeline.schematic()
+    # pipeline.schematic()
 
 
 

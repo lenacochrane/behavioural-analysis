@@ -320,3 +320,119 @@ plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/h
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/fed_starved_heading_angle_change.pdf',
              format='pdf', bbox_inches='tight')
 plt.close()
+
+
+
+
+
+####### STARVED FROM FED-STARVED VERSUS STARVED-STARVED FOR FIRST INTERACTION 
+
+
+df_fs_starved = df_subset[df_subset['role'] == 'starved'].copy()
+df_fs_starved['role'] = 'starved-from-fed-starved'
+df_fs_starved = df_fs_starved[df_fs_starved['interaction_group'] == 'first'].copy()
+
+df_ss = df[df['condition'] == 'starved-starved'].copy()
+df_ss['role'] = 'starved-from-starved'
+df_ss = df_ss[df_ss['interaction_group'] == 'first'].copy()
+
+
+plt.figure(figsize = (8, 8))
+
+combined = pd.concat([df_fs_starved, df_ss], ignore_index=True)
+
+sns.lineplot(
+    data=combined,
+    x='rel_frame',
+    y='heading_angle',
+    hue='role',
+    errorbar=('ci', 95)
+)
+plt.xlim(0,10)
+plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlabel('Relative frame', fontsize=12, fontweight='bold')
+plt.ylabel('Heading angle', fontsize=12, fontweight='bold')
+plt.title('Starved Individuals: First Interaction\nfrom Fed-Starved vs Starved-Starved', fontsize=16, fontweight='bold')    
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_headingangle.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_headingangle.pdf',
+             format='pdf', bbox_inches='tight')
+plt.close()
+
+
+
+plt.figure(figsize = (8, 8))
+
+sns.lineplot(
+    data=combined,
+    x='rel_frame',
+    y='speed',
+    hue='role',
+    errorbar=('ci', 95)
+)
+plt.xlim(0,10)
+plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlabel('Relative frame', fontsize=12, fontweight='bold')
+plt.ylabel('Speed', fontsize=12, fontweight='bold')
+plt.title('Starved Individuals: First Interaction\nfrom Fed-Starved vs Starved-Starved', fontsize=16, fontweight='bold')    
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_speed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_speed.pdf',
+             format='pdf', bbox_inches='tight')
+plt.close()
+
+
+
+
+
+
+
+
+df_fs_starved_other = df_subset[df_subset['role'] == 'starved'].copy()
+df_fs_starved_other['role'] = 'starved-from-fed-starved'
+df_fs_starved_other = df_fs_starved_other[df_fs_starved_other['interaction_group'] == 'other'].copy()
+
+df_ss_other = df[df['condition'] == 'starved-starved'].copy()
+df_ss_other['role'] = 'starved-from-starved'
+df_ss_other = df_ss_other[df_ss_other['interaction_group'] == 'other'].copy()
+
+
+plt.figure(figsize = (8, 8))
+
+combined = pd.concat([df_fs_starved_other, df_ss_other], ignore_index=True)
+
+sns.lineplot(
+    data=combined,
+    x='rel_frame',
+    y='heading_angle',
+    hue='role',
+    errorbar=('ci', 95)
+)
+plt.xlim(0,10)
+plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlabel('Relative frame', fontsize=12, fontweight='bold')
+plt.ylabel('Heading angle', fontsize=12, fontweight='bold')
+plt.title('Starved Individuals: Other Interaction\nfrom Fed-Starved vs Starved-Starved', fontsize=16, fontweight='bold')    
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_headingangle_other.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_headingangle_other.pdf',
+             format='pdf', bbox_inches='tight')
+plt.close()
+
+
+
+plt.figure(figsize = (8, 8))
+
+sns.lineplot(
+    data=combined,
+    x='rel_frame',
+    y='speed',
+    hue='role',
+    errorbar=('ci', 95)
+)
+plt.xlim(0,10)
+plt.axvline(0, color='black', linestyle='--', linewidth=1)
+plt.xlabel('Relative frame', fontsize=12, fontweight='bold')
+plt.ylabel('Speed', fontsize=12, fontweight='bold')
+plt.title('Starved Individuals: Other Interaction\nfrom Fed-Starved vs Starved-Starved', fontsize=16, fontweight='bold')    
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_speed_other.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/h-h-first_other/starved_first_interaction_speed_other.pdf',
+             format='pdf', bbox_inches='tight')
+plt.close()

@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import sys
 
 
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/returns.csv')
+df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/returns.csv')
 df1['condition'] = 'GH'
 
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/returns.csv')
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/returns.csv')
 df2['condition'] = 'SI'
 
 plt.figure(figsize=(8,8))
@@ -32,6 +32,7 @@ plt.ylim(0, None)
 plt.xticks(fontweight='bold')
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes/returns/returns.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes/returns/returns.pdf', format='pdf', bbox_inches='tight')
 
 # Show the plot
 plt.show()

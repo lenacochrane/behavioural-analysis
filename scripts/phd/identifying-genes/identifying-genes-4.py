@@ -77,7 +77,8 @@ def scz_schema(df):
 # ID: FILTER FOR TOP LOF GENES
 # ------------------------------------------------------------------------------
 def id(df):
-    df = df[df['significant.based.on.FDR'] < 0.01]
+    # df = df[df['significant.based.on.FDR'] < 0.01]
+    df = df[df['FDR.corrected.id.set.LoF.q.values'] < 0.01]
     df['disease'] = 'Intellectual Disability'  
     df = df.rename(columns={'gene.name': 'gene_symbol'})
     return df
@@ -558,72 +559,72 @@ def concat_dataframes(df1, df2, df3, df4, df5):
 
 """ ASD """
 ### LOAD SFARI EXPORTED CSV AND FILTER FOR CATAGORY 1 GENES
-df_sfari_export = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/asd/SFARI-Gene_genes_10-23-2025release_11-10-2025export.csv')
+df_sfari_export = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/asd/SFARI-Gene_genes_10-23-2025release_11-10-2025export.csv')
 df_sfari = sfari(df_sfari_export) 
 ### IDENTIFY GENE ORTHOLOGS AND DISEASE ASSOCATIONS >0.6
 df_sfari = orthologue(df_sfari)
 df_sfari = disease_association(df_sfari)
-df_sfari.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/asd/sfari.csv'), index=False)
+df_sfari.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/asd/sfari.csv'), index=False)
 ## WEIGHTED SCORE >= 9.99
 df_sfari = weighted_score(df_sfari)
 ## 5 GENES WITH HIGHEST EAGLE SCORES
 df_sfari = eagle_score(df_sfari)
-df_sfari.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/asd/sfari_top.csv'), index=False)
+df_sfari.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/asd/sfari_top.csv'), index=False)
 
 """ SCZ """
 ### LOAD SCZ SCHEMA RESULTS AND FILTER FOR THE TOP 10 GENES IDENTIFIED
-df_schema_export = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/scz/meta_results_2025_11_10_13_35_57.csv')
+df_schema_export = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/scz/meta_results_2025_11_10_13_35_57.csv')
 df_schema = scz_schema(df_schema_export)
 ### IDENTIFY GENE ORTHOLOGS AND DISEASE ASSOCATIONS >0.6
 df_schema = orthologue(df_schema)
 df_schema = disease_association(df_schema)
-df_schema.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/scz/schema.csv'), index=False)
+df_schema.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/scz/schema.csv'), index=False)
 ## WEIGHTED SCORE >= 9.99
 df_schema = weighted_score(df_schema)
 ## TRiP UNAVAILABLE
 df_schema = df_schema[df_schema["gene_symbol"] != "XPO7"]
-df_schema.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/scz/schema_top.csv'), index=False)
+df_schema.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/scz/schema_top.csv'), index=False)
 
 """ ID """
 ### LOAD AND FILTER FOR TOP LOF GENES
-df_id = pd.read_excel('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/id/41593_2016_BFnn4352_MOESM25_ESM.xls',  sheet_name='id.set.undiagnosed.patient.set.')
+df_id = pd.read_excel('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/id/41593_2016_BFnn4352_MOESM25_ESM.xls',  sheet_name='id.set.undiagnosed.patient.set.')
 df_id = id(df_id)
 ### IDENTIFY GENE ORTHOLOGS AND DISEASE ASSOCATIONS >0.6
 df_id = orthologue(df_id)
 df_id = disease_association(df_id)
-df_id.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/id/ID_filter.csv'), index=False)
+df_id.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/id/ID_filter.csv'), index=False)
 ## WEIGHTED SCORE >= 9.99
 df_id = weighted_score(df_id)
-df_id.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/id/ID_top.csv'), index=False)
+df_id.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/id/ID_top.csv'), index=False)
 
 """ EPI """
 ## LOAD EPI25 RESULTS AND FILTER FOR TOP DEE AND ALL-EPILEPSY HITS
-df_epi25 = pd.read_csv("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/epi/Epi25_gene_results.tsv.bgz", compression="gzip", sep="\t")
+df_epi25 = pd.read_csv("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/epi/Epi25_gene_results.tsv.bgz", compression="gzip", sep="\t")
 df_epi25 = epi25(df_epi25)
 ### IDENTIFY GENE ORTHOLOGS AND DISEASE ASSOCATIONS >0.6
 df_epi25 = orthologue(df_epi25)
 df_epi25 = disease_association(df_epi25)
 ## WEIGHTED SCORE >= 9.99
 df_epi25 = weighted_score(df_epi25)
-df_epi25.to_csv("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/epi/Epi25_gene_results_top.csv", index=False)
+df_epi25.to_csv("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/epi/Epi25_gene_results_top.csv", index=False)
 
 """ ADHD """
-## LOAD RESULTS AND FILTER TO 6 IDENTIFIES ADHD GENES 
-df_adhd = pd.read_excel('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/adhd/media-3.xlsx', sheet_name='S.Table3-cleaned')
+## LOAD RESULTS AND FILTER TO 6 IDENTIFIES ADHD GENES
+df_adhd = pd.read_excel('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/adhd/media-3.xlsx', sheet_name='S.Table3-cleaned')
 df_adhd = adhd(df_adhd)
 # ### IDENTIFY GENE ORTHOLOGS AND DISEASE ASSOCATIONS >0.6
 df_adhd = orthologue(df_adhd)
 df_adhd = disease_association(df_adhd)
-df_adhd.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/adhd/adhd.csv'), index=False)
+df_adhd.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/adhd/adhd.csv'), index=False)
 ## WEIGHTED SCORE >= 9.99
 df_adhd = weighted_score(df_adhd)
-df_adhd.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/adhd/adhd_top.csv'), index=False)
+df_adhd.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/adhd/adhd_top.csv'), index=False)
 
 ## CONCAT DATAFRAMES
 df = concat_dataframes(df_sfari, df_schema, df_id, df_epi25, df_adhd)
 ## GENE ONTOLOGY
 df = goterm(df)
-df.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/disease-mining/refined2/target_genes.csv'), index=False)
+df.to_csv(os.path.join('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/target_genes.csv'), index=False)
 
 
 

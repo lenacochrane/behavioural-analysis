@@ -18,20 +18,15 @@ df = pd.concat([df1, df2], ignore_index=True)
 
 per_video = (
     df
-    .groupby(['condition', 'filename'])
+    .groupby(['condition', 'filename']) #, 'filename'])
     .agg(
-        n_encounters=('closer', 'size'), # total number of encounters
-        n_closer=('closer', 'sum'), # number of encounters where they got closer
-        n_touch=('touch', 'sum') # number of encounters where they touched
+        n_encounters=('touch', 'size'),   # total encounters
+        n_touch=('touch', 'sum'),          # encounters with touch
+        touch_rate=('touch', 'mean')       # fraction that touched
     )
     .reset_index()
 )
 
-per_video['closer_percent'] = (
-    per_video['n_closer'] / per_video['n_encounters'])
-
-per_video['touch_percent'] = (
-    per_video['n_touch'] / per_video['n_closer'])
 
 
 plt.figure(figsize=(2,6))
@@ -39,7 +34,7 @@ plt.figure(figsize=(2,6))
 sns.stripplot(
     data=per_video,
     x='condition',
-    y='n_encounters',
+    y='touch_rate',
     jitter=True,
     alpha=0.7
 )
@@ -48,16 +43,18 @@ sns.stripplot(
 sns.pointplot(
     data=per_video,
     x='condition',
-    y='n_encounters',
+    y='touch_rate',
     errorbar=('ci', 95),
     color='black',
     markers='_',
     linestyle='none'
 )
 
-plt.ylabel('P(closer)')
+plt.title('Potential Interactions\n(Threshold = 10 cm)')
+plt.ylabel('P(touch)')
 plt.xlabel('')
 # plt.ylim(0, 1)
 plt.tight_layout()
-
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/potential_interactions/potential_interactions_10.0.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/potential_interactions/potential_interactions_10.0.pdf', format='pdf', bbox_inches='tight')
 plt.show()

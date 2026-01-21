@@ -68,8 +68,6 @@ def translate_rotate_syllables(df):
     return df
 
 
-
-
 def syllables_with_traces(df, output_directory):
 
     """

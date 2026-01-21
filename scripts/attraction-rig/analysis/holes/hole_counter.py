@@ -6,18 +6,20 @@ import matplotlib.pyplot as plt
 import sys
 
 
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/hole_count.csv')
+df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/hole_count.csv')
 df1['condition'] = 'GH'
 
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/hole_count.csv')
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/hole_count.csv')
 df2['condition'] = 'SI'
 
 plt.figure(figsize=(8,8))
 
 df = pd.concat([df1, df2], ignore_index=True)
 
+palette = sns.color_palette()[:2]
+hue_order = ['GH', 'SI']
 
-sns.lineplot(data=df, x='time', y='inside_count', ci='sd', hue='condition')
+sns.lineplot(data=df, x='time', y='inside_count', ci='sd', hue='condition', palette=palette, hue_order=hue_order)
 
 plt.xlabel('Time (s)', fontsize=12, fontweight='bold')
 plt.ylabel('Hole Count', fontsize=12, fontweight='bold')
@@ -31,6 +33,7 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 
 plt.xticks(fontweight='bold')
 
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes/hole_count/hole-count.pdf', format='pdf', bbox_inches='tight')
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes/hole_count/hole-count.png', dpi=300, bbox_inches='tight')
 
 # Show the plot

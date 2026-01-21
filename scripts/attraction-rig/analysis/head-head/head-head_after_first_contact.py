@@ -34,6 +34,8 @@ df['heading_angle_change'] = (
       .diff().abs() 
 )
 
+
+
 plt.figure(figsize=(6,4))
 
 sns.lineplot(
@@ -128,6 +130,8 @@ COND_PALETTE = {
 
 # (optional) enforce condition order everywhere
 COND_ORDER = ["fed", "starved"]
+
+
 
 
 ##### FED-STARVED ONLY
@@ -242,3 +246,10 @@ plt.title('Min Distance around after head–head contact')
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/fed_starved/first-h-h/fed_starved_min_distance.png', dpi=300, bbox_inches='tight')
 plt.close()
+
+
+
+
+
+
+

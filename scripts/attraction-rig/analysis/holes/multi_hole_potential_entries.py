@@ -39,6 +39,7 @@ plt.ylim(0, None)
 plt.xticks(fontweight='bold')
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/probability_enter/total_missed.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/probability_enter/total_missed.pdf', format='pdf', bbox_inches='tight')
 
 # Show the plot
 plt.show()

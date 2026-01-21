@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -9,12 +8,25 @@ import os
 import matplotlib as mpl
 import networkx as nx
 from matplotlib.patches import FancyArrowPatch
+from matplotlib.colors import ListedColormap
 
+
+"""
+PURPOSE
+------------
+This script quantifies how individual larvae transition between different interaction types across successive encounters. 
+Interactions are clustered, ordered in time per larva, and used to compute cluster-to-cluster transition probabilities, 
+which are compared between isolated and group-housed conditions.
+
+"""
+
+# -----------------------------------------------------
+# DEFINING CLUSTER TO CLUSTER TRANSITIONS PER INDIVIDUAL
+# -----------------------------------------------------
+output = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/transitions_between_clusters'
 
 df_interaction = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/cropped_interactions.csv')
-
 df_cluster = pd.read_csv("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/pca-data2-F18.csv")
-
 cluster_name = "Yhat.idt.pca"
 
 df = pd.merge(
@@ -24,7 +36,7 @@ df = pd.merge(
             how='inner')
 
 
-df = df[df['Normalized Frame'] == 0]
+df = df[df['Normalized Frame'] == 0].copy()
 
 df['track_ids'] = (
     df['Interaction Pair']
@@ -32,8 +44,7 @@ df['track_ids'] = (
     .str.split(',')
     .apply(lambda x: [int(x[0]), int(x[1])]))
 
-# explode → two rows per interaction
-df = df.explode('track_ids').rename(columns={'track_ids': 'track_id'})
+df = df.explode('track_ids').rename(columns={'track_ids': 'track_id'}) # explode → two rows per interaction
 
 df = df[[
     'file',
@@ -44,21 +55,15 @@ df = df[[
     cluster_name, 'condition']]
 
 df  = df.rename(columns={cluster_name: 'cluster'})
-df = df.rename(columns={'Normalized Frame': 'time'})
-
-df = df.sort_values(by=['file', 'track_id', 'time'])
-
-# df = df[(df["Frame"] >= 1800) & (df["Frame"] < 3600)].copy()
-
+df = df.rename(columns={'Frame': 'time'})
+df = df.sort_values(by=['file', 'track_id', 'time', 'interaction_id']) #interaction_id
+df['cluster'] = df['cluster'].astype(int)
 
 df['next_cluster'] = (
     df
     .groupby(['file', 'track_id'])['cluster']
-    .shift(-1)
-)
-
+    .shift(-1))
 df = df.dropna(subset=['next_cluster']) # drop rows where next_cluster is NaN - last interaction for each track
-
 df['next_cluster'] = df['next_cluster'].astype(int)
 
 
@@ -66,13 +71,9 @@ isolated_transitions = (
     df[df['condition'] == 'iso']
     .groupby(['cluster', 'next_cluster'])
     .size()
-    .unstack(fill_value=0)
-)
+    .unstack(fill_value=0))
 
-# current cluster on rows, next cluster on columns - total the row and then divide each column by the row total to get probabilities
-# row-normalise → probabilities
 isolated_transitions_normalised = isolated_transitions.div(isolated_transitions.sum(axis=1), axis=0)
-
 
 grouped_transitions = (
     df[df['condition'] == 'group']
@@ -83,19 +84,13 @@ grouped_transitions = (
 grouped_transitions_normalised = grouped_transitions.div(grouped_transitions.sum(axis=1), axis=0)
 
 
-output = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/umap-pipeline/youngser_2/idt1/transitions_between_clusters'
 
-
-vmax = max(
-    isolated_transitions_normalised.max().max(),
-    grouped_transitions_normalised.max().max()
-)
-
-
-
-
+# -----------------------------------------------------
+# HEATMAP: TRANSITION PROBABILITIES BETWEEN CLUSTER
+# -----------------------------------------------------
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=False, sharey=False)
+vmax = max(isolated_transitions_normalised.max().max(),grouped_transitions_normalised.max().max())
 
 # --- ISO ---
 hm1 = sns.heatmap(
@@ -130,8 +125,6 @@ ax2.set_ylabel("")  # optional: avoid repeating label
 ax2.set_xticklabels(ax2.get_xticklabels(), rotation=0)
 ax2.set_yticklabels(ax2.get_yticklabels(), rotation=0)
 
-
-
 fig.subplots_adjust(right=0.88, wspace=0.25)
 
 # add a new axis for the colorbar (this is "position it right of ax2")
@@ -144,108 +137,9 @@ plt.savefig(os.path.join(output, "iso_vs_group_transition_heatmaps.png"), dpi=30
 plt.close()
 
 
-
-
-
-
-
-#### ---------------------------------------------------------
-
-
-# # --- pick your matrices ---
-# M_iso = isolated_transitions_normalised.copy()
-# M_grp = grouped_transitions_normalised.copy()
-
-# # 1) Make sure both have the same row/col order (same cluster set)
-# all_clusters = sorted(set(M_iso.index) | set(M_iso.columns) | set(M_grp.index) | set(M_grp.columns))
-
-# M_iso = M_iso.reindex(index=all_clusters, columns=all_clusters, fill_value=0)
-# M_grp = M_grp.reindex(index=all_clusters, columns=all_clusters, fill_value=0)
-
-# # 2) Global scaling so widths/colors comparable between iso and group
-# global_max = max(M_iso.to_numpy().max(), M_grp.to_numpy().max())
-# if global_max == 0:
-#     raise ValueError("No transitions found (all probabilities are 0).")
-
-# # 3) Build graphs from matrices (include ALL non-zero edges)
-# def matrix_to_digraph(M):
-#     G = nx.DiGraph()
-#     for c in M.index:
-#         G.add_node(int(c))
-#     for i in M.index:
-#         for j in M.columns:
-#             w = float(M.loc[i, j])
-#             if w > 0:   # this draws ALL non-zero transitions (including i==j self transitions)
-#                 G.add_edge(int(i), int(j), weight=w)
-#     return G
-
-# G_iso = matrix_to_digraph(M_iso)
-# G_grp = matrix_to_digraph(M_grp)
-
-# # 4) Same circular positions for both
-# pos = nx.circular_layout(all_clusters)
-
-# # 5) Draw helper
-# cmap = plt.cm.viridis
-# norm = mpl.colors.Normalize(vmin=0, vmax=global_max)
-
-# def draw_transition_circle(ax, G, title):
-#     ax.set_title(title)
-#     ax.axis("off")
-
-#     # nodes
-#     nx.draw_networkx_nodes(G, pos, ax=ax, node_size=700)
-#     nx.draw_networkx_labels(G, pos, ax=ax, font_size=9)
-
-#     # edges: width + alpha + color all based on probability
-#     edges = list(G.edges(data=True))
-#     weights = np.array([d["weight"] for (_, _, d) in edges])
-
-#     # width scaling (tune these two numbers if you want)
-#     min_w, max_w = 0.2, 6.0
-#     widths = min_w + (weights / global_max) * (max_w - min_w)
-
-#     # alpha scaling (so tiny edges don’t scream)
-#     alphas = 0.05 + 0.95 * (weights / global_max)
-
-#     # draw one-by-one so alpha can differ per edge cleanly
-#     for (u, v, d), lw, a in zip(edges, widths, alphas):
-#         w = d["weight"]
-#         nx.draw_networkx_edges(
-#             G, pos, ax=ax,
-#             edgelist=[(u, v)],
-#             width=lw,
-#             alpha=a,
-#             edge_color=[cmap(norm(w))],
-#             arrows=True,
-#             arrowsize=14,
-#             connectionstyle="arc3,rad=0.12" if u != v else "arc3,rad=0.35",  # nicer loops
-#             min_source_margin=15,
-#             min_target_margin=15
-#         )
-
-# # 6) Plot side-by-side with ONE shared colorbar outside
-# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-
-# draw_transition_circle(ax1, G_iso, "Isolated")
-# draw_transition_circle(ax2, G_grp, "Group housed")
-
-# # shared colorbar (outside)
-# sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
-# sm.set_array([])
-
-# # IMPORTANT: don't use tight_layout() if it keeps fighting your colorbar placement
-# fig.subplots_adjust(right=0.88, wspace=0.25)
-# cax = fig.add_axes([0.90, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
-# cbar = fig.colorbar(sm, cax=cax)
-# cbar.set_label("Transition probability")
-
-# plt.savefig(os.path.join(output, "iso_vs_group_transition_circlegraphs.png"), dpi=300, bbox_inches="tight")
-# plt.show()
-
-
-
-
+# -------------------------------------------------------
+# CIRCLE GRAPHS: TRANSITION PROBABILITIES BETWEEN CLUSTER
+# -------------------------------------------------------
 
 # --- pick your matrices ---
 M_iso = isolated_transitions_normalised.copy()
@@ -409,11 +303,10 @@ plt.close()
 
 
 
+# ---------------------------------------------------------------------
+# CIRCLE GRAPHS: TRANSITION PROBABILITIES BETWEEN CLUSTER (THRESHOLDED)
+# ---------------------------------------------------------------------
 
-
-###### ---------------------------------------------------------
-
-# --- pick your matrices ---
 M_iso = isolated_transitions_normalised.copy()
 M_grp = grouped_transitions_normalised.copy()
 
@@ -575,13 +468,10 @@ plt.close()
 
 
 
-################ DIFFERENCES
-# -----------------------------
-# DIFFERENCE HEATMAP (Group - Iso)
-# blue = more group, red = more iso
-# -----------------------------
+# ----------------------------------------------------------------
+# HEATMAP: DIFFERENCE IN TRANSITION PROBABILITIES BETWEEN CLUSTERS 
+# ----------------------------------------------------------------
 
-# Align both probability matrices to same full cluster grid
 all_clusters = sorted(
     set(isolated_transitions_normalised.index) |
     set(isolated_transitions_normalised.columns) |
@@ -613,16 +503,14 @@ plt.ylabel("From cluster (k)")
 plt.title("Transition difference: Group − Iso")
 plt.tight_layout()
 plt.savefig(os.path.join(output, "transition_diff_group_minus_iso.png"), dpi=300)
+plt.savefig(os.path.join(output, "transition_diff_group_minus_iso.pdf"), format="pdf", bbox_inches="tight")
 plt.close()
 
 
+# --------------------------------------------------------------------------------------------------
+# HEATMAP: DIFFERENCE IN TRANSITION PROBABILITIES BETWEEN CLUSTERS (DOWNWEIGHTS LESS COMMON CLUSTERS)
+# --------------------------------------------------------------------------------------------------
 
-
-# -----------------------------
-# FAIR WEIGHTING (per condition)
-# Weight is per starting cluster, computed separately in iso and group,
-# then combined so neither condition dominates.
-# -----------------------------
 # raw count matrices aligned (needed for support weighting)
 C_iso = isolated_transitions.reindex(index=all_clusters, columns=all_clusters, fill_value=0)
 C_grp = grouped_transitions.reindex(index=all_clusters, columns=all_clusters, fill_value=0)
@@ -663,23 +551,18 @@ plt.close()
 
 
 
+# ---------------------------------------------------------------------
+# CIRCLE GRAPH: DIFFERENCE IN TRANSITION PROBABILITIES BETWEEN CLUSTERS
+# ----------------------------------------------------------------------
 
-###### ---------------------------------------------------------
-# ============================
-# CIRCLE GRAPH FOR DIFFERENCE MATRIX (Group - Iso)
-# ============================
-
-# pick which difference matrix you want to visualise:
-# D = P_diff.copy()
-D = P_diff_weighted_fair.copy()   # or D = P_diff.copy() if you want unweighted
-
+D = P_diff.copy()   # or D = P_diff.copy() if you want unweighted # P_diff_weighted_fair 
 
 # align to same cluster order
 all_clusters = sorted(set(D.index) | set(D.columns))
 D = D.reindex(index=all_clusters, columns=all_clusters, fill_value=0)
 
 # --- build graph from difference matrix ---
-def diff_matrix_to_digraph(D, thresh=0.03):
+def diff_matrix_to_digraph(D, thresh=0.02):
     """
     thresh = minimum absolute difference to draw an edge
     """
@@ -693,7 +576,7 @@ def diff_matrix_to_digraph(D, thresh=0.03):
                 G.add_edge(int(i), int(j), weight=w)
     return G
 
-G_diff = diff_matrix_to_digraph(D, thresh=0.02)  # tune 0.01–0.03 usually
+G_diff = diff_matrix_to_digraph(D, thresh=0.05)  # tune 0.01–0.03 usually
 
 # positions (same circular layout)
 pos = nx.circular_layout(all_clusters)
@@ -714,7 +597,7 @@ def w_to_alpha(w, min_a=0.15, max_a=0.95):
 
 # draw
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-ax.set_title("Transition difference circle: Group − Iso")
+ax.set_title("Transition Likelihood Difference")
 ax.axis("off")
 
 nx.draw_networkx_nodes(G_diff, pos, ax=ax, node_size=700)
@@ -746,18 +629,19 @@ sm.set_array([])
 
 cax = fig.add_axes([0.90, 0.25, 0.015, 0.5])  # smaller bar
 cbar = fig.colorbar(sm, cax=cax)
-cbar.set_label("ΔP = P(group) − P(iso)")
+cbar.set_label("P(group) − P(iso)")
 
 plt.savefig(os.path.join(output, "transition_diff_circlegraph.png"), dpi=300, bbox_inches="tight")
+plt.savefig(os.path.join(output, "transition_diff_circlegraph.pdf"), format="pdf", bbox_inches="tight")
 plt.close()
 
 
 
 
-# ============================================
-# DURATION-CLASS TRANSITIONS (short/medium/long)
-# + circlegraph for Group - Iso difference
-# ============================================
+
+# -------------------------------------------------------------
+# COLLAPSE CLUSTERS INTO SHORT, MEDIUM OR LONG DURATION CLASSES
+# -------------------------------------------------------------
 
 # 1) map clusters -> duration class
 dur_map = {
@@ -814,8 +698,13 @@ W_fair = 0.5 * (W_iso + W_grp)
 
 P_diff_dur_weighted = P_diff_dur.mul(W_fair, axis=0)
 
+
+# --------------------------------------------------
+# CIRCLE GRAPH: DURATION CLASS TRANSITION DIFFERENCE
+# --------------------------------------------------
+
 # 5) circlegraph for duration diff (Group - Iso)
-D = P_diff_dur_weighted.copy()   # or P_diff_dur if you want unweighted
+D = P_diff_dur.copy()   # or P_diff_dur if you want unweighted # P_diff_dur_weighted
 
 nodes = dur_order
 pos = nx.circular_layout(nodes)
@@ -847,7 +736,7 @@ def diff_matrix_to_digraph_labels(D, thresh=0.02):
 Gd = diff_matrix_to_digraph_labels(D, thresh=0.02)
 
 fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-ax.set_title("Duration transition diff (Group − Iso)")
+ax.set_title("Transition Likelihood")
 ax.axis("off")
 
 nx.draw_networkx_nodes(Gd, pos, ax=ax, node_size=1200)
@@ -877,19 +766,21 @@ for u, v, dct in Gd.edges(data=True):
 # smaller colorbar
 sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
-cax = fig.add_axes([0.90, 0.28, 0.02, 0.45])
+cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
 cbar = fig.colorbar(sm, cax=cax)
-cbar.set_label("ΔP = P(group) − P(iso)")
+cbar.set_label("P(group) - P(iso)")
 
 plt.savefig(os.path.join(output, "duration_transition_duration_diff_circlegraph.png"), dpi=300, bbox_inches="tight")
+plt.savefig(os.path.join(output, "duration_transition_duration_diff_circlegraph.pdf"), format="pdf", bbox_inches="tight")
+
 plt.close()
 
 
 
-# ============================================
-# RASTER: duration class per larva over interaction index
-# (iso left, group right)
-# ============================================
+# --------------------------------------
+# RASTA PLOT: DURATION CLUSTER OVER TIME
+# --------------------------------------
+
 
 from matplotlib.colors import ListedColormap
 
@@ -917,7 +808,8 @@ df_raster = df.copy()
 df_raster["duration"] = df_raster["cluster"].astype(int).map(dur_map)
 df_raster["dur_code"] = df_raster["duration"].map(dur_code)
 
-# interaction index per larva
+df_raster = df_raster.sort_values(["file","track_id","time","interaction_id"])
+
 df_raster["interaction_idx"] = (
     df_raster
     .groupby(["file", "track_id"])
@@ -946,22 +838,54 @@ df_raster["interaction_idx"] = (
 # mat_grp = make_duration_raster(df_raster[df_raster["condition"] == "group"])
 
 
-def make_duration_raster_sorted_by_first(d):
-    # for each larva (file,track_id): total interactions + first duration class
+# def make_duration_raster_sorted_by_first(d):
+#     # for each larva (file,track_id): total interactions + first duration class
+#     summary = (
+#         d.sort_values("interaction_idx")
+#          .groupby(["file", "track_id"])
+#          .agg(
+#              max_idx=("interaction_idx", "max"),
+#              first_code=("dur_code", "first")   # first interaction type (0/1/2)
+#          )
+#     )
+
+#     # sort rows: first by first interaction type, then by length (desc)
+#     summary = summary.sort_values(["first_code", "max_idx"], ascending=[True, False])
+
+#     larvae = summary.index.tolist()
+#     max_len = int(summary["max_idx"].max()) + 1
+
+#     mat = np.full((len(larvae), max_len), np.nan)
+#     row = {pid: i for i, pid in enumerate(larvae)}
+
+#     for file, tid, idx, code in d[["file", "track_id", "interaction_idx", "dur_code"]].itertuples(index=False):
+#         mat[row[(file, tid)], idx] = code
+
+#     return mat
+
+def make_duration_raster_sorted(d):
+    # ensure correct order first
+    d = d.sort_values(["file", "track_id", "time", "interaction_id"])
+
+    # per-larva summary
     summary = (
-        d.sort_values("interaction_idx")
-         .groupby(["file", "track_id"])
+        d.groupby(["file", "track_id"])
          .agg(
-             max_idx=("interaction_idx", "max"),
-             first_code=("dur_code", "first")   # first interaction type (0/1/2)
+             mean_code=("dur_code", "mean"),   # overall tendency
+             n=("dur_code", "count")           # number of interactions
          )
     )
 
-    # sort rows: first by first interaction type, then by length (desc)
-    summary = summary.sort_values(["first_code", "max_idx"], ascending=[True, False])
+    # sort larvae:
+    # 1) mostly short -> mostly long
+    # 2) longer sequences on top
+    summary = summary.sort_values(
+        ["mean_code", "n"],
+        ascending=[True, False]
+    )
 
     larvae = summary.index.tolist()
-    max_len = int(summary["max_idx"].max()) + 1
+    max_len = d["interaction_idx"].max() + 1
 
     mat = np.full((len(larvae), max_len), np.nan)
     row = {pid: i for i, pid in enumerate(larvae)}
@@ -971,16 +895,17 @@ def make_duration_raster_sorted_by_first(d):
 
     return mat
 
+
 # then use:
-mat_iso = make_duration_raster_sorted_by_first(df_raster[df_raster["condition"] == "iso"])
-mat_grp = make_duration_raster_sorted_by_first(df_raster[df_raster["condition"] == "group"])
+mat_iso = make_duration_raster_sorted(df_raster[df_raster["condition"] == "iso"])
+mat_grp = make_duration_raster_sorted(df_raster[df_raster["condition"] == "group"])
 
 
 # colors (bright, readable, black background)
 cmap = ListedColormap([
-    "#7b3294",  # short (purple)
-    "#008837",  # medium (green)
-    "#fdae61",  # long (orange)
+    "#eac7e2",  # short (purple)
+    "#cd68b5",  # medium (green)
+    "#ff00c3",  # long (orange)
 ])
 cmap.set_bad("black")
 
@@ -1007,6 +932,11 @@ cbar.set_label("Interaction duration")
 plt.savefig(
     os.path.join(output, "duration_raster_per_larva_interaction_index.png"),
     dpi=300,
+    bbox_inches="tight"
+)
+plt.savefig(
+    os.path.join(output, "duration_raster_per_larva_interaction_index.pdf"),
+    format="pdf",
     bbox_inches="tight"
 )
 plt.close()

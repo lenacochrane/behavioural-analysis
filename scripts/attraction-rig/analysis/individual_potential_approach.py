@@ -13,8 +13,8 @@ df1['condition'] = 'GH'
 df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated/individual_approach_responses.csv')
 df2['condition'] = 'SI'
 
-# df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/individual_approach_responses.csv')
-# df2['condition'] = 'PSEUDO'
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/individual_approach_responses.csv')
+df2['condition'] = 'PSEUDO'
 
 df = pd.concat([df1, df2], ignore_index=True)
 

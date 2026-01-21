@@ -42,6 +42,52 @@ plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/h
 plt.close()
 
 
+##### PROB OF RETURN FIRST VERSUS REST OF TIME EXITING 
+
+# df already loaded and concatenated, with:
+# columns: condition, file, track, exit frame, returned_same_hole
+
+df = df.sort_values(["condition", "file", "track", "exit frame"]).reset_index(drop=True)
+df["exit_number"] = df.groupby(["condition", "file", "track"]).cumcount() + 1
+df["exit_type"] = np.where(df["exit_number"] == 1, "first_exit", "later_exits")
+
+
+
+
+prob_first_vs_later = (
+    df.groupby(["condition", "file", "exit_type"])["returned_same_hole"]
+      .mean()
+      .reset_index()
+)
+
+plt.figure(figsize=(6,5))
+sns.barplot(
+    data=prob_first_vs_later,
+    x="exit_type",
+    y="returned_same_hole",
+    hue="condition",
+    errorbar="sd",
+    edgecolor="black",
+    linewidth=1.5
+)
+
+plt.ylabel("P(returned to same hole)")
+plt.xlabel("")
+plt.title("Return probability after first vs later exits")
+plt.ylim(0, 1)
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
 bin_size = 600
 total_frames = 3600
 bins = np.arange(0, total_frames + bin_size, bin_size)   # 0,600,...,3600
@@ -71,6 +117,7 @@ plt.title("Same-hole return probability vs exit time")
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/returns/return_probability_by_exit_frame.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/returns/return_probability_by_exit_frame.pdf', format='pdf', bbox_inches='tight')
 plt.close()
 
 

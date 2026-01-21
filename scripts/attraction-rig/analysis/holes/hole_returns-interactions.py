@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import sys
 from matplotlib.ticker import MaxNLocator
 
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/interactions_return.csv')
+df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED/interactions_return.csv')
 df1['condition'] = 'GH'
 
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/interactions_return.csv')
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/SOCIAL-ISOLATION/interactions_return.csv')
 df2['condition'] = 'SI'
 
 df = pd.concat([df1, df2], ignore_index=True)
@@ -81,10 +81,6 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes/interactions/returns/return_time-interactions.png', dpi=300)
 plt.show()
-
-
-
-
 
 
 

@@ -38,6 +38,7 @@ plt.ylim(0, None)
 plt.xticks(fontweight='bold')
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/probability_enter/prob.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/probability_enter/prob.pdf', format='pdf', bbox_inches='tight')
 plt.close()
 
 

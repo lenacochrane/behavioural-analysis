@@ -37,6 +37,7 @@ plt.tight_layout(rect=[1, 1, 1, 1])
 plt.xticks(fontweight='bold')
 
 plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/counts/hole-count.png', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/holes_multi/counts/hole-count.pdf', format='pdf', bbox_inches='tight')
 plt.close()
 
 
