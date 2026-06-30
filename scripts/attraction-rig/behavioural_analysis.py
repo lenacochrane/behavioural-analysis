@@ -1823,6 +1823,7 @@ class HoleAnalysis:
     #     return bout_df
 
 
+
     def interaction_type_bout(self):
 
         threshold = 1.0           # must hit this to START a bout
@@ -1916,7 +1917,7 @@ class HoleAnalysis:
                                 'track_2': pair[1],
                                 'start_frame': bout['start_frame'],
                                 'end_frame': bout['end_frame'],
-                                'duration': bout['end_frame'] - bout['start_frame'],
+                                'duration': bout['end_frame'] - bout['start_frame'] + 1,
                                 'initial_type': interactions_all[0],
                                 'predominant_type': Counter(interactions_all).most_common(1)[0][0],
                             }
@@ -3397,7 +3398,7 @@ class HoleAnalysis:
 
         proximity_threshold = 5  # 5mm
         min_interaction_frames = 5
-        frame_buffer = 20  # Extend interaction by this many frames before and after
+        frame_buffer = 10  # Extend interaction by this many frames before and after
 
         def process_track_pair(track_a, track_b, df, track_file):
             results = []
@@ -3415,11 +3416,26 @@ class HoleAnalysis:
                 while i < len(common_frames):
                     frame = common_frames[i]
 
-                    point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
-                    point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                    # point_a = track_a_data[track_a_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
+                    # point_b = track_b_data[track_b_data['frame'] == frame][['x_body', 'y_body']].to_numpy(dtype=float)
 
-                    dist = float(np.linalg.norm(point_a - point_b))
+                    # dist = float(np.linalg.norm(point_a - point_b))
                     
+                    # if dist < proximity_threshold:
+
+                    row_a = track_a_data[track_a_data['frame'] == frame]
+                    row_b = track_b_data[track_b_data['frame'] == frame]
+
+                    if row_a.empty or row_b.empty:
+                        i += 1
+                        continue
+
+                    a_points = row_a[['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']].to_numpy(dtype=float).reshape(3, 2)
+                    b_points = row_b[['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head']].to_numpy(dtype=float).reshape(3, 2)
+
+                    dists = np.linalg.norm(a_points[:, None, :] - b_points[None, :, :], axis=2)
+                    dist = float(np.min(dists))
+
                     if dist < proximity_threshold:
                         current_interaction.append(frame)
                         i += 1
@@ -3549,12 +3565,96 @@ class HoleAnalysis:
             speed = distance / dt.replace(0, np.nan)
             return speed
 
-        interaction_data['track1_speed'] = interaction_data.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_1 x_body', 'Track_1 y_body')).reset_index(level=0, drop=True)
-        interaction_data['track2_speed'] = interaction_data.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_2 x_body', 'Track_2 y_body')).reset_index(level=0, drop=True)
+        # interaction_data['track1_speed'] = interaction_data.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_1 x_body', 'Track_1 y_body')).reset_index(level=0, drop=True)
+        # interaction_data['track2_speed'] = interaction_data.groupby('Interaction Number').apply(lambda group: speed(group, 'Track_2 x_body', 'Track_2 y_body')).reset_index(level=0, drop=True)
+
+        # #### QUANTIFY ACCELERATION
+        # interaction_data['track1_acceleration'] = interaction_data.groupby('Interaction Number')['track1_speed'].diff() / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        # interaction_data['track2_acceleration'] = interaction_data.groupby('Interaction Number')['track2_speed'].diff() / interaction_data.groupby('Interaction Number')['Frame'].diff()
+
+        # ===== TRACK 1 SPEEDS =====
+
+        interaction_data['track1_speed_body'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_1 x_body', 'Track_1 y_body'))
+            .reset_index(level=0, drop=True)
+        )
+
+        interaction_data['track1_speed_tail'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_1 x_tail', 'Track_1 y_tail'))
+            .reset_index(level=0, drop=True)
+        )
+
+        interaction_data['track1_speed_head'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_1 x_head', 'Track_1 y_head'))
+            .reset_index(level=0, drop=True)
+        )
+
+
+        # ===== TRACK 2 SPEEDS =====
+
+        interaction_data['track2_speed_body'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_2 x_body', 'Track_2 y_body'))
+            .reset_index(level=0, drop=True)
+        )
+
+        interaction_data['track2_speed_tail'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_2 x_tail', 'Track_2 y_tail'))
+            .reset_index(level=0, drop=True)
+        )
+
+        interaction_data['track2_speed_head'] = (
+            interaction_data.groupby('Interaction Number')
+            .apply(lambda group: speed(group, 'Track_2 x_head', 'Track_2 y_head'))
+            .reset_index(level=0, drop=True)
+        )
+
 
         #### QUANTIFY ACCELERATION
-        interaction_data['track1_acceleration'] = interaction_data.groupby('Interaction Number')['track1_speed'].diff() / interaction_data.groupby('Interaction Number')['Frame'].diff()
-        interaction_data['track2_acceleration'] = interaction_data.groupby('Interaction Number')['track2_speed'].diff() / interaction_data.groupby('Interaction Number')['Frame'].diff()
+
+        # ===== TRACK 1 ACCELERATION =====
+
+        interaction_data['track1_acceleration_body'] = (
+            interaction_data.groupby('Interaction Number')['track1_speed_body'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+        interaction_data['track1_acceleration_tail'] = (
+            interaction_data.groupby('Interaction Number')['track1_speed_tail'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+        interaction_data['track1_acceleration_head'] = (
+            interaction_data.groupby('Interaction Number')['track1_speed_head'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+
+        # ===== TRACK 2 ACCELERATION =====
+
+        interaction_data['track2_acceleration_body'] = (
+            interaction_data.groupby('Interaction Number')['track2_speed_body'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+        interaction_data['track2_acceleration_tail'] = (
+            interaction_data.groupby('Interaction Number')['track2_speed_tail'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+        interaction_data['track2_acceleration_head'] = (
+            interaction_data.groupby('Interaction Number')['track2_speed_head'].diff()
+            / interaction_data.groupby('Interaction Number')['Frame'].diff()
+        )
+
+
+
+
+
 
         #### TAIL-BODY-HEAD LENGTH
 
@@ -3688,12 +3788,14 @@ class HoleAnalysis:
             try:
                 part1, part2 = row["interaction_type"].split("-")
 
-                # Track 1 heading: body → head
+                ## EDITED THIS OUT BUT THE ORIGINAL CSV FOR INTERACTIONS DID IT THIS WAY- WRONG APPORACH ANGLE CLCULATED
+
+                # # Track 1 heading: body → head
                 # hx = row['Track_1 x_body'] - row['Track_1 x_head']
                 # hy = row['Track_1 y_body'] - row['Track_1 y_head']
 
-                hx = row['Track_1 x_head'] - row['Track_1 x_body']
-                hy = row['Track_1 y_head'] - row['Track_1 y_body']
+                hx = row['Track_1 x_head'] - row['Track_1 x_body'] 
+                hy = row['Track_1 y_head'] - row['Track_1 y_body'] 
 
                 # Approach vector: Track_2 part2 - Track_1 head
                 ax = row[f'Track_2 x_{part2}'] - row['Track_1 x_head']
@@ -3710,11 +3812,14 @@ class HoleAnalysis:
             try:
                 part1, part2 = row["interaction_type"].split("-")
 
-                # Track 2 heading: body → head
+                ## EDITED THIS OUT BUT THE ORIGINAL CSV FOR INTERACTIONS DID IT THIS WAY- WRONG APPORACH ANGLE CLCULATED
+
+                # # Track 2 heading: body → head
                 # hx = row['Track_2 x_body'] - row['Track_2 x_head']
                 # hy = row['Track_2 y_body'] - row['Track_2 y_head']
-                hx = row['Track_2 x_head'] - row['Track_2 x_body']
-                hy = row['Track_2 y_head'] - row['Track_2 y_body']
+
+                hx = row['Track_2 x_head'] - row['Track_2 x_body'] 
+                hy = row['Track_2 y_head'] - row['Track_2 y_body'] 
 
                 # Approach vector: Track_1 part1 - Track_2 head
                 ax = row[f'Track_1 x_{part1}'] - row['Track_2 x_head']
@@ -3836,10 +3941,13 @@ class HoleAnalysis:
         else:
             suffix = ""
 
-        filename = f"interactions{suffix}.csv"
+        filename = f"interactions{suffix}_newtest.csv"
 
 
         interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
+
+
+
 
 
 ##############################################  ---- GH+SI ----  ##############################################

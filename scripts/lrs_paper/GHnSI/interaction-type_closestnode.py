@@ -70,4 +70,6 @@ plt.ylabel("SI-GH head_tail: who is head?")
 plt.xlabel("")
 sns.despine()
 plt.tight_layout()
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GHnSI/interaction_type-closestnode_n10_headtail.pdf', 
+            format='pdf', bbox_inches='tight')
 plt.show()

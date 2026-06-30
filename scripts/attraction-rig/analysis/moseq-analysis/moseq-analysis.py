@@ -1143,9 +1143,6 @@ def syllable_feature_quantifications(df, directory):
 
 
 
-
-
-
         # ---------- VELOCITY AND HEADING QUANTIFICATION ----------
         total_bouts = grouped['bout_id'].nunique()
         threshold_bouts = 0.05 * total_bouts
@@ -1256,6 +1253,8 @@ def syllable_feature_quantifications(df, directory):
         out_png = os.path.join(syllable_output, f"quantification_normalised_{syll}.png")
         plt.savefig(out_png, dpi=300, bbox_inches='tight')
         plt.close()
+
+
 
 
 

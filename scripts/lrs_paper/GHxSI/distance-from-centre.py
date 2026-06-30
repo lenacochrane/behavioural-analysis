@@ -13,12 +13,6 @@ mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['font.sans-serif'] = ['Arial']
 
-PALETTE = {
-    "GH": 'steelblue',     
-    "SI": 'darkorange',}
-
-HUE_ORDER = ["GH", "SI"]
-
 
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/distance_from_centre.csv')
@@ -57,5 +51,5 @@ plt.ylim(0, 0.4)
 plt.xlim(0,50)
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GHxSI/distance-from-centre.pdf', format='pdf', bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GHnSI/distance-from-centre.pdf', format='pdf', bbox_inches='tight')
 plt.close()

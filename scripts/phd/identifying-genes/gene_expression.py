@@ -34,7 +34,7 @@ https://flybase.org/reports/FBrf0225793
 
 
 
-path = "/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE_EXPRESSION/modENCODE_mRNA-Seq_development.tsv.gz"  # adjust if needed
+path = "/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE-EXPRESSION/BULK/modENCODE_mRNA-Seq_development.tsv.gz"  # adjust if needed
 
 cols = [
     "Release_ID",
@@ -86,7 +86,7 @@ fbgn_to_name = {
     "FBgn0040752": "SHANK3",
     "FBgn0031759": "KDM5B",
     "FBgn0260799": "CTNND2",
-    "FBgn0035049": "MMP16",
+    # "FBgn0035049": "MMP16",
     "FBgn0040022": "SETD1A",
     "FBgn0015509": "CUL1",
     "FBgn0024277": "TRIO",
@@ -206,6 +206,6 @@ plt.yticks(fontweight="bold")
 plt.xlabel("Developmental stage")
 plt.ylabel("Gene")
 plt.tight_layout()
-plt.savefig("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE_EXPRESSION/gene_expression_heatmap_YlOrRd.png", dpi=300, bbox_inches="tight")
-plt.savefig("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE_EXPRESSION/gene_expression_heatmap_YlOrRd.pdf", format="pdf", bbox_inches="tight")
+plt.savefig("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE-EXPRESSION/BULK/gene_expression_heatmap_YlOrRd.png", dpi=300, bbox_inches="tight")
+plt.savefig("/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENE-EXPRESSION/BULK/gene_expression_heatmap_YlOrRd.pdf", format="pdf", bbox_inches="tight")
 plt.show()

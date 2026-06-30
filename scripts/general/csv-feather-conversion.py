@@ -12,11 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Users/cochral/Desktop/SLAEP/h-h/2026-03-09_12-40-34_td14.tracks.000_2026-03-09_12-40-34_td14.analysis.csv')
-
+df = pd.read_csv('/Users/cochral/Desktop/SLAEP/h-h/SI-S-S/2026-06-22_12-05-22_td10.tracks_edited.000_2026-06-22_12-05-22_td10.analysis.csv')
 print(df['track'].unique())
 
+
+
 track_gaps = {}
+
 
 for track_id in df['track'].unique():
     track_df = df[df['track'] == track_id].sort_values(by='frame_idx')
@@ -56,9 +58,13 @@ else:
 ################################################################################
 # %% HIGHLIGHT TRACK JUMPS
 
+
 df['displacement'] = df.groupby('track').apply(
     lambda x: np.sqrt(x['body.x'].diff()**2 + x['body.y'].diff()**2)
 ).reset_index(level=0, drop=True)
+
+
+
 
 jumped_tracks = df[df['displacement'] > 30][['frame_idx', 'track', 'displacement']]
 print(jumped_tracks)
@@ -68,7 +74,7 @@ print(jumped_tracks)
 
 # %% PRINT FRAMES OF CERTAIN TRACK
 
-print(df[df['track'] == 'track_15']['frame_idx'])
+print(df[df['track'] == 'track_21']['frame_idx'])
 
 
 ######################
@@ -105,7 +111,8 @@ print(df.head())
 
 # %% CSV -> FEATHER AND SLP
 
-df.to_feather('/Users/cochral/Desktop/SLAEP/feather.feather')
+
+df.to_feather('/Users/cochral/Desktop/SLAEP/h-h/feather.feather')
 
 
 

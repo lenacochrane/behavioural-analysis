@@ -233,32 +233,33 @@ def disease_ontology_heatmap(df, output_directory):
 
 
 
-# ------------------------------------------------------------------------------
-# GENES_ONTOLOGY_HEATMAP: gene ontology heatmap 
-# ------------------------------------------------------------------------------
-def genes_ontology_heatmap(df, output_directory):
+# # ------------------------------------------------------------------------------
+# # GENES_ONTOLOGY_HEATMAP: gene ontology heatmap 
+# # ------------------------------------------------------------------------------
+# def genes_ontology_heatmap(df, output_directory):
 
-    all_genes = sorted(df["gene_symbol"].unique())   # all 65
-    tmp = df.copy()
-    tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
-    tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
+#     all_genes = sorted(df["gene_symbol"].unique())   # all 65
+#     tmp = df.copy()
+#     tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
+#     tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
 
-    mat = (
-        tmp.assign(flag=1)
-          .pivot_table(index="GO_BP", columns="gene_symbol", values="flag",
-                       aggfunc="max", fill_value=0)
-          .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
-    )
+#     mat = (
+#         tmp.assign(flag=1)
+#           .pivot_table(index="GO_BP", columns="gene_symbol", values="flag",
+#                        aggfunc="max", fill_value=0)
+#           .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
+#     )
 
-    plt.figure(figsize=(12, 12))
-    sns.heatmap(mat, cmap="YlGnBu", cbar=False)
-    plt.xlabel("")
-    plt.ylabel("")
-    plt.title('Gene Ontology', fontweight='bold', fontsize=16)
-    plt.tight_layout()
-    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
-    plt.savefig(outfile, dpi=300, bbox_inches="tight")
-    plt.close()  
+#     plt.figure(figsize=(12, 12))
+#     sns.heatmap(mat, cmap="YlGnBu", cbar=False)
+#     plt.xlabel("")
+#     plt.ylabel("")
+#     plt.title('Gene Ontology', fontweight='bold', fontsize=16)
+#     plt.tight_layout()
+#     outfile = os.path.join(output_directory, 'gene_ontology_heatmap.pdf')
+#     plt.savefig(outfile, bbox_inches="tight")
+#     plt.close()  
+
 
 
 # df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/target_genes.csv')
@@ -384,32 +385,32 @@ def weighted_ortholog_score_diff(df, output_directory):
 
 
 
-# ------------------------------------------------------------------------------
-# GENES_ONTOLOGY_HEATMAP: gene ontology heatmap 
-# ------------------------------------------------------------------------------
-def genes_ontology_heatmap(df, output_directory):
+# # ------------------------------------------------------------------------------
+# # GENES_ONTOLOGY_HEATMAP: gene ontology heatmap 
+# # ------------------------------------------------------------------------------
+# def genes_ontology_heatmap(df, output_directory):
 
-    all_genes = sorted(df["gene_symbol"].unique())   # all 65
-    tmp = df.copy()
-    tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
-    tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
+#     all_genes = sorted(df["gene_symbol"].unique())   # all 65
+#     tmp = df.copy()
+#     tmp["GO_BP"] = tmp["GO_Slim_BP_Most_Frequent"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else (x or []))
+#     tmp = tmp.explode("GO_BP").dropna(subset=["GO_BP"])
 
-    mat = (
-        tmp.assign(flag=1)
-          .pivot_table(index="GO_BP", columns="gene_symbol", values="flag",
-                       aggfunc="max", fill_value=0)
-          .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
-    )
+#     mat = (
+#         tmp.assign(flag=1)
+#           .pivot_table(index="GO_BP", columns="gene_symbol", values="flag",
+#                        aggfunc="max", fill_value=0)
+#           .reindex(columns=all_genes, fill_value=0)   # <-- ensures all genes appear
+#     )
 
-    plt.figure(figsize=(6, 12))
-    sns.heatmap(mat, cmap="Greens", cbar=False)
-    plt.xlabel("")
-    plt.ylabel("")
-    plt.title('Gene Ontology', fontweight='bold', fontsize=16)
-    plt.tight_layout()
-    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
-    plt.savefig(outfile, dpi=300, bbox_inches="tight")
-    plt.close()
+#     plt.figure(figsize=(6, 12))
+#     sns.heatmap(mat, cmap="Greens", cbar=False)
+#     plt.xlabel("")
+#     plt.ylabel("")
+#     plt.title('Gene Ontology', fontweight='bold', fontsize=16)
+#     plt.tight_layout()
+#     outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
+#     plt.savefig(outfile, dpi=300, bbox_inches="tight")
+#     plt.close()
 
 
 
@@ -419,39 +420,43 @@ def genes_ontology_heatmap(df, output_directory):
     # GO term -> snappy category
     go_to_cat = {
         # DNA & Chromosomes
-        "DNA Integrity": "DNA & Chromosomes",
-        "chromatin organization": "DNA & Chromosomes",
-        "chromosome segregation": "DNA & Chromosomes",
+        "DNA Integrity": "Genome Integrity & Chromatin",
+        "chromatin organization": "Genome Integrity & Chromatin",
+        "chromosome segregation": "Genome Integrity & Chromatin",
 
-        # RNA & Gene Control
-        "RNA Regulation": "RNA & Gene Control",
-        "regulation of DNA-templated transcription": "RNA & Gene Control",
 
-        # Protein Factory
-        "Ribosome Biogenesis": "Protein Factory",
-        "cytoplasmic translation": "Protein Factory",
-        "protein-containing complex assembly": "Protein Factory",
+        # Gene expression
+        "RNA Regulation": "Gene Expression Regulation",
+        "regulation of DNA-templated transcription": "Gene Expression Regulation",
 
-        # Protein Cleanup & Processing
-        "Protein Housekeeping": "Protein Cleanup",
-        "protein catabolic process": "Protein Cleanup",
-        "autophagy": "Protein Cleanup",
-        "lysosome organization": "Protein Cleanup",
+        # Protein synthesis / assembly
+        "Ribosome Biogenesis": "Protein Synthesis & Assembly",
+        "cytoplasmic translation": "Protein Synthesis & Assembly",
+        "protein-containing complex assembly": "Protein Synthesis & Assembly",
 
-        # Cell Architecture
-        "Cytoskeleton Organization": "Cell Architecture",
-        "membrane organization": "Cell Architecture",
-        "cell junction organization": "Cell Architecture",
-        "establishment or maintenance of cell polarity": "Cell Architecture",
 
-        # Cell Stickiness / ECM
-        "Cell Adhesion": "Cell Stickiness / ECM",
-        "extracellular matrix organization": "Cell Stickiness / ECM",
+        # Protein/organelle turnover
+        "Protein Housekeeping": "Protein Turnover & Autophagy",
+        "protein catabolic process": "Protein Turnover & Autophagy",
+        "autophagy": "Protein Turnover & Autophagy",
+        "lysosome organization": "Protein Turnover & Autophagy",
 
-        # Trafficking & Transport
-        "Intracellular Trafficking": "Trafficking & Transport",
-        "vesicle-mediated transport": "Trafficking & Transport",
-        "transmembrane transport": "Trafficking & Transport",
+        # Cell structure / polarity
+        "Cytoskeleton Organization": "Cell Architecture & Polarity",
+        "cell junction organization": "Cell Architecture & Polarity",
+        "establishment or maintenance of cell polarity": "Cell Architecture & Polarity",
+
+        # Membrane / vesicles / transport
+        "membrane organization": "Membrane Trafficking & Transport",
+        "Intracellular Trafficking": "Membrane Trafficking & Transport",
+        "vesicle-mediated transport": "Membrane Trafficking & Transport",
+        "transmembrane transport": "Membrane Trafficking & Transport",
+
+
+        # Adhesion / ECM
+        "Cell Adhesion": "Cell Adhesion & ECM",
+        "extracellular matrix organization": "Cell Adhesion & ECM",
+
 
         # Signals & Communication
         "Signaling": "Signaling",
@@ -461,10 +466,13 @@ def genes_ontology_heatmap(df, output_directory):
         "generation of precursor metabolites and energy": "Metabolism & Energy",
 
         # Development & Differentiation
-        "Cell Development": "Development",
-        "anatomical structure development": "Development",
-        "nervous system process": "Development",
-        "reproductive process": "Development",
+        "Cell Development": "Cell Development",
+        "anatomical structure development": "Cell Development",
+
+
+        # Neural / Reproductive programs
+        "nervous system process": "Neural Processes",
+        "reproductive process": "Reproductive Processes",
 
         # Immunity & Defense
         "Immunity & Defense": "Immunity & Defense",
@@ -494,88 +502,7 @@ def genes_ontology_heatmap(df, output_directory):
         "Cell Death",
     ]
 
-    # go_to_cat = {}
-
-#     go_to_cat = {
-#     # DNA & Chromosomes -> chromatin organization
-#     "DNA Integrity": "chromatin organization",
-#     "chromatin organization": "chromatin organization",
-#     "chromosome segregation": "chromatin organization",
-
-#     # RNA & Gene Control -> regulation of DNA-templated transcription
-#     "RNA Regulation": "regulation of DNA-templated transcription",
-#     "regulation of DNA-templated transcription": "regulation of DNA-templated transcription",
-
-#     # Protein Factory -> cytoplasmic translation
-#     "Ribosome Biogenesis": "cytoplasmic translation",
-#     "cytoplasmic translation": "cytoplasmic translation",
-#     "protein-containing complex assembly": "cytoplasmic translation",
-
-#     # Protein Cleanup -> autophagy
-#     "Protein Housekeeping": "autophagy",
-#     "protein catabolic process": "autophagy",
-#     "autophagy": "autophagy",
-#     "lysosome organization": "autophagy",
-
-#     # Cell Architecture -> cell junction organization
-#     "Cytoskeleton Organization": "cell junction organization",
-#     "membrane organization": "cell junction organization",
-#     "cell junction organization": "cell junction organization",
-#     "establishment or maintenance of cell polarity": "cell junction organization",
-
-#     # Cell Stickiness / ECM -> cell adhesion
-#     "Cell Adhesion": "cell adhesion",
-#     "extracellular matrix organization": "cell adhesion",
-
-#     # Trafficking & Transport -> transmembrane transport
-#     "Intracellular Trafficking": "transmembrane transport",
-#     "vesicle-mediated transport": "transmembrane transport",
-#     "transmembrane transport": "transmembrane transport",
-
-#     # Signals & Communication -> (not in your cat_order list, so no anchor available)
-#     "Signaling": 'signaling',
-
-#     # Metabolism & Energy -> (not in your cat_order list, so no anchor available)
-#     "Metabolic Process": 'protein catabolic process',
-#     "generation of precursor metabolites and energy": 'protein catabolic process',
-
-#     # Development -> anatomical structure development
-#     "Cell Development": "anatomical structure development",
-#     "anatomical structure development": "anatomical structure development",
-#     "nervous system process": "anatomical structure development",
-#     "reproductive process": "anatomical structure development",
-
-#     # Immunity & Defense -> immune system process
-#     "Immunity & Defense": "immune system process",
-#     "defense response to other organism": "immune system process",
-
-#     # Cell Death -> programmed cell death
-#     "Cell Death": "programmed cell death",
-# }
-
-
-
-
-#     cat_order = [
-#     "anatomical structure development",
-#     'autophagy',
-#     'cell adhesion',
-#     'cell junction organization',
-#     'chromatin organization',
-#     'chromosome segregation',
-#     'cytoplasmic translation',
-#     'cytoskeleton organization',
-#     'immune system process',
-#     'nervous system process',
-#     'programmed cell death',
-#     'protein catabolic process',
-#     'protein maturation',
-#     'protein-containing complex assembly',
-#     'regulation of DNA-templated transcription',
-#     'signaling',
-#     'transmembrane transport',
-#     'vesicle-mediated transport',
-#     ]
+    df = df[df["gene_symbol"] != "MMP16"]
 
 
     all_genes = sorted(df["gene_symbol"].unique())   # all genes
@@ -596,14 +523,14 @@ def genes_ontology_heatmap(df, output_directory):
     # build matrix: rows = GO terms, columns = genes, 1 if gene has that GO term
     mat = (
         tmp.assign(flag=1)
-           .pivot_table(index="GO_BP", #category
+           .pivot_table(index="category", #category #GO_BP
                         columns="gene_symbol",
                         values="flag",
                         aggfunc="max",
                         fill_value=0)
            .reindex(columns=all_genes, fill_value=0)  # ensure all genes present
            .sort_index()                               # optional: sort GO terms
-        #    .reindex(index=cat_order, fill_value=0)        # <<< USE cat_order HERE
+        
       
     )
 
@@ -616,9 +543,13 @@ def genes_ontology_heatmap(df, output_directory):
     plt.title('Gene Ontology', fontweight='bold', fontsize=16)
     plt.tight_layout()
 
-    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.png')
-    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    outfile = os.path.join(output_directory, 'gene_ontology_heatmap.pdf')
+    plt.savefig(outfile, bbox_inches="tight")
     plt.close()
+
+
+
+
 
 
 
@@ -718,10 +649,10 @@ def weighted_ortholog_disease_matrix(df, output_directory):
 
 df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/target_genes.csv')
 output_directory = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/GENES/plots'
-weighted_ortholog_disease_matrix(df, output_directory)
+# weighted_ortholog_disease_matrix(df, output_directory)
 
 # genes_ontology_heatmap(df, output_directory)
 # weighted_ortholog_score_diff(df, output_directory)
 # scatter_similarity_identitiy_disease(df, output_directory)
 genes_ontology_heatmap(df, output_directory)
-disease_ontology_heatmap(df, output_directory)
+# disease_ontology_heatmap(df, output_directory)

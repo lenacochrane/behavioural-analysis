@@ -11,31 +11,16 @@ import numpy as np
 
 import pandas as pd
 
-rows = []
 
-# Existing control lines
-for control in range(1, 4):  # control_1 to control_3
-    for rep in range(1, 5):
-        rows.append({
-            "sample_id": f"control_{control}_{rep}",
-            "condition": f"control_{control}",
-            "replicate": rep
-        })
 
-# Trip lines (1–22)
-for trip in range(1, 23):  # trip_1 to trip_22
-    for rep in range(1, 5):
-        rows.append({
-            "sample_id": f"trip_{trip}_{rep}",
-            "condition": f"trip_{trip}",
-            "replicate": rep
-        })
+interaction_data = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated/interactions_newtest.csv')    
 
-df = pd.DataFrame(rows)
+total_interactions = interaction_data['Interaction Number'].nunique()
 
-# Save to CSV
-df.to_csv("/Users/cochral/Desktop/sample_structure.csv", index=False)
+invalid_interactions = (
+    interaction_data.groupby('Interaction Number')['Normalized Frame']
+    .agg(lambda x: not set(range(-10, 11)).issubset(set(x)))
+    .sum()
+)
 
-print(df.head())
-print(df.tail())
-
+print(f"{invalid_interactions} / {total_interactions} interactions are missing full -10 to +10 normalized frames")

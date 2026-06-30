@@ -23,7 +23,7 @@ def perform_analysis(directory):
     # analysis = HoleAnalysis()
     analysis = HoleAnalysis(directory)
 
-    analysis.merged_dataframes()
+    # analysis.merged_dataframes()
 
     # analysis.post_processing()
     # analysis.quality_control()
@@ -33,7 +33,6 @@ def perform_analysis(directory):
     ####### --- LARVAL BEHAVIOUR --- ######
 
     ## REMOVE DIGGING FROM ANALYSIS 
-
     analysis.digging_mask()
 
 
@@ -52,7 +51,6 @@ def perform_analysis(directory):
     # analysis.euclidean_distance()
     # analysis.euclidean_distance_variance(200, 600) # currently plotting the plataeu but arbitary time start for plateu 
     # analysis.distance_from_centre()
-    # analysis.trajectory()
     # analysis.movement_direction()
 
     ## PROXIMITY AND INTERACTION DYNAMICS 
@@ -72,9 +70,8 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=10)
 
 
-
     # analysis.nearest_neighbour()
-    # analysis.interactions()
+    analysis.interactions()
     # analysis.interaction_types()
     # analysis.interaction_types_closest()
     # analysis.interaction_type_bout()
@@ -86,6 +83,7 @@ def perform_analysis(directory):
     # analysis.nearest_neighbour() # has track id, speed, acceleration, angles etc
     # analysis.GH_SI_interaction_types_closest(threshold=1) # has track id, speed, acceleration, angles etc
     
+
     ## HEAD-HEAD ANALYSIS
     # analysis.head_head_interaction_type()
     # analysis.head_head_interaction_type_over_time()
@@ -106,8 +104,8 @@ def perform_analysis(directory):
 
 
     ####### --- DIGGING IN ABSENCE OF HOLES --- ######
-    analysis.total_digging(cleaned=True) #HAVE TO MODIFY???
-    analysis.digging_behaviour()
+    # analysis.total_digging(cleaned=True) #HAVE TO MODIFY???
+    # analysis.digging_behaviour()
 
 
     ####### --- HOLES --- ######
@@ -154,10 +152,11 @@ if __name__ == "__main__":
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
 
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
+
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')
@@ -170,12 +169,15 @@ if __name__ == "__main__":
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-mask/diff-video')
 
 
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/group-housed/starved-starved')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/group-housed/fed-starved')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/group-housed/fed-fed')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/socially-isolated/starved-starved')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/socially-isolated/fed-starved')
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/socially-isolated/fed-fed')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/starved-starved')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-starved')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-fed')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/starved-starved')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-starved')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-fed')
+
+
+  
 
 
 

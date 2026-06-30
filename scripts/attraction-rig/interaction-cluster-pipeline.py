@@ -139,6 +139,7 @@ def modify_cluster_ids(file, output):
     df.to_csv(output, index=False)
 
 
+
 #### CLASS TO ANALYSE THE CLUSTERS  
 class ClusterPipeline:
 
@@ -620,6 +621,7 @@ class ClusterPipeline:
 
         print('grid videos generated') 
 
+
     ##########################################################################################################
     ## METHOD RAW_TRAJECTORIES: GENERATE RAW TRAJECTORIES OF INTERACTIONS
     ##########################################################################################################
@@ -836,6 +838,8 @@ class ClusterPipeline:
             fig.suptitle(f"Cluster {cluster_id} – Relative Trajectories by Phase", fontsize=14)
             fig.savefig(os.path.join(output, f"cluster_{cluster_id}_phased_trajectory.png"))
             plt.close()
+    
+
     
 
     #### METHOD BARPLOTS: BARPLOTS OF CLUSTERS
