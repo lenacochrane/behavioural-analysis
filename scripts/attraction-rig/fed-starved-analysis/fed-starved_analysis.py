@@ -419,66 +419,6 @@ class FedStarvedAnalysis:
         return result
     
 
-
-
-
-
-    def interacted_before_leaving(self):
-
-        bout_df = self.interaction_type_bout()
-        results = []
-
-        for track_file in self.track_files:
-
-            df = self.track_data[track_file]
-
-            counts = (
-                df.groupby("frame")["track_id"]
-                .nunique()
-                .sort_index()
-            )
-
-            leave_mask = (counts.shift(1) == 2) & (counts < 2)
-
-            if leave_mask.any():
-                leave_frame = leave_mask[leave_mask].index[0]
-                left = True
-            else:
-                leave_frame = np.nan
-                left = False
-
-            file_bouts = bout_df[bout_df["file"] == track_file]
-
-            if left:
-                bouts_before_leave = file_bouts[file_bouts["start_frame"] < leave_frame]
-            else:
-                bouts_before_leave = file_bouts.iloc[0:0]
-
-            results.append({
-                "file": track_file,
-                "left": left,
-                "leave_frame": leave_frame,
-                "interacted_before_leaving": len(bouts_before_leave) > 0,
-                "n_bouts_before_leaving": len(bouts_before_leave),
-                "total_interaction_duration_before_leaving": (
-                    bouts_before_leave["duration"].sum()
-                    if len(bouts_before_leave) > 0 else 0
-                )
-
-            })
-
-        summary = pd.DataFrame(results)
-        summary.to_csv(os.path.join(self.directory, "interacted_before_leaving.csv"), index=False)
-
-        return summary
-
-
-
-
-
-
-
-
     # METHOD DISTANCE_FROM_CENTRE: CALCULATES DISTANCES FROM CENTRE COORDINATES 
 
     def distance_from_centre(self): 
@@ -2877,8 +2817,7 @@ if __name__ == "__main__":
         # analysis.file_summary()  # run without digging mask!!! 
 
         analysis.filtering_files()
-         
-        # analysis.digging_mask() 
+        analysis.digging_mask() 
 
 
         # analysis.interaction_types_closest()
@@ -2887,7 +2826,6 @@ if __name__ == "__main__":
         # analysis.head_approach_angle()
         # analysis.nearest_neighbour()
         # analysis.interaction_type_bout() 
-        # analysis.interacted_before_leaving()
         # analysis.pairwise_approach_probability()
         # analysis.individual_approach_probability()  
 
