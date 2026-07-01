@@ -246,6 +246,100 @@ class FedStarvedAnalysis:
                 print(f"Conversion applied for {track_file} with conversion factor: {conversion_factor:.3f}")
 
     
+    # METHOD FILTERING_FILES: KEEPS FILES WHERE THE TWO LARVAE COME CLOSE ENOUGH
+
+    def filtering_files(self, head_head_threshold=5, head_contact_threshold=1):
+
+        results = []
+        included_track_files = []
+        included_matching_pairs = []
+
+        def below_threshold(values, threshold, inclusive=False):
+            values = np.asarray(values, dtype=float)
+            values = values[np.isfinite(values)]
+            if values.size == 0:
+                return False
+            if inclusive:
+                return bool(np.min(values) <= threshold)
+            return bool(np.min(values) < threshold)
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].copy()
+
+            head_head_within_5mm = False
+            head_contact_within_1mm = False
+
+            if not df.empty:
+                df = df.sort_values(['frame', 'track_id'])
+                row_counts = df.groupby('frame')['track_id'].transform('size')
+                track_counts = df.groupby('frame')['track_id'].transform('nunique')
+                df_two = df[(row_counts == 2) & (track_counts == 2)]
+
+                if not df_two.empty:
+                    first_larvae = df_two.groupby('frame').nth(0)
+                    second_larvae = df_two.groupby('frame').nth(1)
+
+                    head_1 = first_larvae[['x_head', 'y_head']].to_numpy(dtype=float)
+                    head_2 = second_larvae[['x_head', 'y_head']].to_numpy(dtype=float)
+
+                    head_head_distances = np.linalg.norm(head_1 - head_2, axis=1)
+                    head_head_within_5mm = below_threshold(
+                        head_head_distances,
+                        head_head_threshold,
+                        inclusive=True
+                    )
+
+                    nodes_1 = np.stack([
+                        first_larvae[['x_head', 'y_head']].to_numpy(dtype=float),
+                        first_larvae[['x_body', 'y_body']].to_numpy(dtype=float),
+                        first_larvae[['x_tail', 'y_tail']].to_numpy(dtype=float),
+                    ], axis=1)
+
+                    nodes_2 = np.stack([
+                        second_larvae[['x_head', 'y_head']].to_numpy(dtype=float),
+                        second_larvae[['x_body', 'y_body']].to_numpy(dtype=float),
+                        second_larvae[['x_tail', 'y_tail']].to_numpy(dtype=float),
+                    ], axis=1)
+
+                    head_1_to_nodes_2 = np.linalg.norm(nodes_2 - head_1[:, None, :], axis=2)
+                    head_2_to_nodes_1 = np.linalg.norm(nodes_1 - head_2[:, None, :], axis=2)
+                    head_contact_within_1mm = below_threshold(
+                        np.concatenate([
+                            head_1_to_nodes_2.ravel(),
+                            head_2_to_nodes_1.ravel(),
+                        ]),
+                        head_contact_threshold
+                    )
+
+            passed_filter = head_head_within_5mm or head_contact_within_1mm
+
+            results.append({
+                'file_name': track_file,
+                'passed_filter': 'Y' if passed_filter else 'N',
+                'head_head_within_5mm': 'Y' if head_head_within_5mm else 'N',
+                'head_contact_within_1mm': 'Y' if head_contact_within_1mm else 'N',
+            })
+
+            if passed_filter:
+                included_track_files.append(track_file)
+                included_matching_pairs.append(match)
+
+        included_files = pd.DataFrame(results)
+        included_files.to_csv(os.path.join(self.directory, "included_files.csv"), index=False)
+
+        self.track_files = included_track_files
+        self.matching_pairs = included_matching_pairs
+        self.track_data = {
+            track_file: self.track_data[track_file]
+            for track_file in included_track_files
+        }
+
+        print(f"Saved included files filter to: {os.path.join(self.directory, 'included_files.csv')}")
+        print(f"Included {len(included_track_files)} of {len(results)} files after filtering.")
+
+        return included_files
+
 
 
 
@@ -2809,7 +2903,5 @@ if __name__ == "__main__":
         # analysis.movement_direction()
      
   
-
-
 
 
