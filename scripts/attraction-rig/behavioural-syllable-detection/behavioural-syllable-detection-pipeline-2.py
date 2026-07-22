@@ -128,6 +128,14 @@ def process_directory(directory):
                 (track_file_data["dist_tail"] < centre_threshold)
             )
 
+            track_file_data["distance_to_wall_body"] = radius - track_file_data["dist_body"]
+            track_file_data["distance_to_wall_head"] = radius - track_file_data["dist_head"]
+            track_file_data["distance_to_wall_tail"] = radius - track_file_data["dist_tail"]
+            track_file_data["near_wall"] = (
+                (track_file_data["distance_to_wall_body"] >= 2.5) &
+                (track_file_data["distance_to_wall_body"] <= 5.8)
+            )
+
             track_file_data.drop(columns=["dist_body", "dist_head", "dist_tail"], inplace=True)
 
 
@@ -590,36 +598,255 @@ def digging(track_df):
     df = track_df.copy()
     df = df.sort_values("frame").reset_index(drop=True)
 
-    # Smooth body position slightly
-    df["x"] = df["x_body"].rolling(window=5, min_periods=1).mean()
-    df["y"] = df["y_body"].rolling(window=5, min_periods=1).mean()
+    def close_short_gaps(mask, max_gap=35):
+        mask = np.asarray(mask, dtype=bool).copy()
+        i = 0
+        while i < len(mask):
+            if mask[i]:
+                i += 1
+                continue
 
-    # Frame-to-frame movement
+            start = i
+            while i < len(mask) and not mask[i]:
+                i += 1
+
+            if start > 0 and i < len(mask) and (i - start) <= max_gap:
+                mask[start:i] = True
+
+        return mask
+
+    # Smooth body position before calculating local confinement.
+    df["x"] = df["x_body"].rolling(window=5, min_periods=1, center=True).median()
+    df["y"] = df["y_body"].rolling(window=5, min_periods=1, center=True).median()
+
     df["dx"] = df["x"].diff().fillna(0)
     df["dy"] = df["y"].diff().fillna(0)
     df["distance"] = np.sqrt(df["dx"]**2 + df["dy"]**2)
 
-    # XY confinement
-    df["x_std"] = df["x"].rolling(window=10, min_periods=1).std().fillna(0)
-    df["y_std"] = df["y"].rolling(window=10, min_periods=1).std().fillna(0)
-    df["overall_std"] = np.sqrt(df["x_std"]**2 + df["y_std"]**2)
+    if "body_speed" not in df.columns:
+        df["body_speed"] = np.sqrt(
+            df["x_body"].diff()**2 +
+            df["y_body"].diff()**2
+        )
 
-    # Candidate digging frames
-    df["digging_candidate"] = (
-        (df["distance"] < 0.2) &
-        (df["overall_std"] < 0.50)
+    for window in (20, 30, 60):
+        df[f"path_{window}"] = df["distance"].rolling(
+            window=window,
+            min_periods=1
+        ).sum()
+
+        df[f"displacement_{window}"] = np.sqrt(
+            (df["x"] - df["x"].shift(window))**2 +
+            (df["y"] - df["y"].shift(window))**2
+        )
+
+        x_std = df["x"].rolling(window=window, min_periods=1).std()
+        y_std = df["y"].rolling(window=window, min_periods=1).std()
+        df[f"position_std_{window}"] = np.sqrt(x_std**2 + y_std**2)
+
+    head_x = df.get("x_head_corrected", df["x_head"])
+    head_y = df.get("y_head_corrected", df["y_head"])
+    tail_x = df.get("x_tail_corrected", df["x_tail"])
+    tail_y = df.get("y_tail_corrected", df["y_tail"])
+
+    df["pose_length"] = (
+        np.sqrt((head_x - df["x_body"])**2 + (head_y - df["y_body"])**2) +
+        np.sqrt((df["x_body"] - tail_x)**2 + (df["y_body"] - tail_y)**2)
+    )
+    df["pose_length_smooth"] = df["pose_length"].rolling(
+        window=20,
+        min_periods=1,
+        center=True
+    ).median()
+
+    # These are the old pixel-based compute_digging thresholds converted to mm,
+    # then relaxed slightly because this pipeline uses corrected coordinates.
+    scale = 1.3
+    df["confined_movement"] = (
+        (
+            (df["path_20"] <= 2.10 * scale) &
+            (df["displacement_20"] <= 1.75 * scale) &
+            (df["position_std_20"] <= 0.62 * scale)
+        )
+        |
+        (
+            (df["path_30"] <= 3.05 * scale) &
+            (df["displacement_30"] <= 2.30 * scale) &
+            (df["position_std_30"] <= 0.80 * scale)
+        )
+        |
+        (
+            (df["path_60"] <= 4.80 * scale) &
+            (df["displacement_60"] <= 2.65 * scale) &
+            (df["position_std_60"] <= 1.05 * scale)
+        )
+    ).fillna(False)
+
+    df["compact_posture"] = (df["pose_length_smooth"] <= 3.80).fillna(False)
+    df["digging_candidate"] = close_short_gaps(
+        df["confined_movement"].to_numpy(),
+        max_gap=35
     )
 
-    df["digging_status"] = False
+    digging_status = np.zeros(len(df), dtype=bool)
+    compact_posture = df["compact_posture"].to_numpy(dtype=bool)
+    digging_candidate = df["digging_candidate"].to_numpy(dtype=bool)
 
-    rolling_mean = df["digging_candidate"].rolling(100).mean()
+    min_run = 75
+    min_after_compact = 50
+    backfill = 25
 
-    for i in range(len(df) - 99):
-        if rolling_mean.iloc[i + 99] >= 0.9:
-            df.iloc[i:i+100, df.columns.get_loc("digging_status")] = True
+    i = 0
+    while i < len(df):
+        if not digging_candidate[i]:
+            i += 1
+            continue
+
+        start = i
+        while i < len(df) and digging_candidate[i]:
+            i += 1
+        end = i
+
+        if (end - start) < min_run:
+            continue
+
+        compact_idx = np.where(compact_posture[start:end])[0]
+        if len(compact_idx) == 0:
+            continue
+
+        onset = start + compact_idx[0]
+        if (end - onset) < min_after_compact:
+            continue
+
+        onset = max(0, onset - backfill)
+        digging_status[onset:end] = True
+
+    # Confirm bouts as sustained states. Isolated short confined/compact bouts
+    # are often resting, while real digging can appear as clustered bouts with
+    # brief movement interruptions.
+    confirmed_digging = np.zeros(len(df), dtype=bool)
+    bout_ranges = []
+    i = 0
+    while i < len(df):
+        if not digging_status[i]:
+            i += 1
+            continue
+
+        start = i
+        while i < len(df) and digging_status[i]:
+            i += 1
+        end = i - 1
+        bout_ranges.append((start, end))
+
+    long_bout_frames = 220
+    nearby_bout_gap = 200
+    min_nearby_bouts = 2
+
+    for bout_idx, (start, end) in enumerate(bout_ranges):
+        start_frame = df.loc[start, "frame"]
+        end_frame = df.loc[end, "frame"]
+        bout_length = end_frame - start_frame + 1
+
+        if bout_length >= long_bout_frames:
+            confirmed_digging[start:end + 1] = True
+            continue
+
+        nearby_bouts = 0
+        for other_idx, (other_start, other_end) in enumerate(bout_ranges):
+            if other_idx == bout_idx:
+                continue
+
+            other_start_frame = df.loc[other_start, "frame"]
+            other_end_frame = df.loc[other_end, "frame"]
+            frame_gap = min(
+                abs(other_start_frame - end_frame),
+                abs(start_frame - other_end_frame)
+            )
+
+            if frame_gap <= nearby_bout_gap:
+                nearby_bouts += 1
+
+        if nearby_bouts >= min_nearby_bouts:
+            confirmed_digging[start:end + 1] = True
+
+    # Rescue short bouts only in specific contexts:
+    # 1. a terminal bout is cut off by the end of the video, or
+    # 2. a larva returns to digging after earlier confirmed digging.
+    confirmed_bout_ranges = []
+    i = 0
+    while i < len(df):
+        if not confirmed_digging[i]:
+            i += 1
+            continue
+
+        start = i
+        while i < len(df) and confirmed_digging[i]:
+            i += 1
+        end = i - 1
+        confirmed_bout_ranges.append((start, end))
+
+    raw_candidate_ranges = []
+    i = 0
+    while i < len(df):
+        if not digging_candidate[i]:
+            i += 1
+            continue
+
+        start = i
+        while i < len(df) and digging_candidate[i]:
+            i += 1
+        end = i - 1
+        raw_candidate_ranges.append((start, end))
+
+    return_bout_min_frames = 45
+    return_bout_gap = 60
+    end_buffer_frames = 120
+    terminal_bout_min_frames = 150
+    last_frame = df["frame"].iloc[-1]
+
+    for start, end in raw_candidate_ranges:
+        if confirmed_digging[start:end + 1].any():
+            continue
+
+        start_frame = df.loc[start, "frame"]
+        end_frame = df.loc[end, "frame"]
+        bout_length = end_frame - start_frame + 1
+
+        if bout_length < return_bout_min_frames:
+            continue
+
+        reaches_video_end = (last_frame - end_frame) <= end_buffer_frames
+
+        if reaches_video_end and bout_length >= terminal_bout_min_frames:
+            confirmed_digging[start:end + 1] = True
+            confirmed_bout_ranges.append((start, end))
+            continue
+
+        prior_confirmed = [
+            (confirmed_start, confirmed_end)
+            for confirmed_start, confirmed_end in confirmed_bout_ranges
+            if df.loc[confirmed_end, "frame"] < start_frame
+        ]
+        if not prior_confirmed:
+            continue
+
+        previous_end = max(df.loc[confirmed_end, "frame"] for _, confirmed_end in prior_confirmed)
+        gap_from_previous = start_frame - previous_end
+
+        if reaches_video_end or gap_from_previous <= return_bout_gap:
+            confirmed_digging[start:end + 1] = True
+            confirmed_bout_ranges.append((start, end))
+
+    digging_status = confirmed_digging
+    df["digging_status"] = digging_status
         
 
     return df
+
+
+
+
+
 
 
 def hunching(track_df):
@@ -1090,94 +1317,59 @@ def run_metrics(track_df):
 
 
 
-""" 
-"""
+def process_experiment_directory(directory):
+    identify_perimeters(directory)
+    track_data = process_directory(directory)
+
+    dfs = []
+
+    for track_file, df in track_data.items():
+        df = (
+            df
+            .groupby("track_id", group_keys=False)
+            .apply(run_metrics)
+            .reset_index(drop=True)
+        )
+
+        print("Raw trigger Trues:", df["flipped"].sum())
+        print("Actually flipped after checking:", df["flipped_corrected"].sum())
+
+        df = nearest_neighbour(df)
+
+        df["file"] = track_file.replace(".tracks.feather", "")
+        dfs.append(df)
+
+    data = pd.concat(dfs, ignore_index=True)
+
+    output_path = os.path.join(directory, 'behaviour_detection.csv')
+    data.to_csv(output_path, index=False)
+
+    return data
 
 
 
 
-
-
-directory = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed'
-
-identify_perimeters(directory)
-track_data = process_directory(directory)
-
-dfs = []
-
-for track_file, df in track_data.items():
-    df = (
-        df
-        .groupby("track_id", group_keys=False)
-        .apply(run_metrics)
-        .reset_index(drop=True))
-    
-    print("Raw trigger Trues:", df["flipped"].sum())
-    print("Actually flipped after checking:", df["flipped_corrected"].sum())
-
-    df = nearest_neighbour(df)
-
-    df["file"] = track_file.replace(".tracks.feather", "")
-    dfs.append(df)
-
-data = pd.concat(dfs, ignore_index=True)
-
-output_path = os.path.join(directory, 'behaviour_detection.csv')
-data.to_csv(output_path, index=False)
-
-
-directory = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated'
-
-identify_perimeters(directory)
-track_data = process_directory(directory)
-
-dfs = []
-
-for track_file, df in track_data.items():
-    df = (
-        df
-        .groupby("track_id", group_keys=False)
-        .apply(run_metrics)
-        .reset_index(drop=True))
-    
-    print("Raw trigger Trues:", df["flipped"].sum())
-    print("Actually flipped after checking:", df["flipped_corrected"].sum())
-
-    df = nearest_neighbour(df)
-
-    df["file"] = track_file.replace(".tracks.feather", "")
-    dfs.append(df)
-
-data = pd.concat(dfs, ignore_index=True)
-
-output_path = os.path.join(directory, 'behaviour_detection.csv')
-data.to_csv(output_path, index=False)
+""" FED-STARVED ANALYSIS """
+# directories = [
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-starved',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-fed',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/starved-starved',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-fed',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/starved-starved',
+# ]
 
 
 
-directory = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated'
+""" GROUPED AND ISOLATED ANALYSIS """
+directories = [
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated',
+]
 
-identify_perimeters(directory)
-track_data = process_directory(directory)
 
-dfs = []
+for directory in directories:
+    process_experiment_directory(directory)
 
-for track_file, df in track_data.items():
-    df = (
-        df
-        .groupby("track_id", group_keys=False)
-        .apply(run_metrics)
-        .reset_index(drop=True))
-    
-    print("Raw trigger Trues:", df["flipped"].sum())
-    print("Actually flipped after checking:", df["flipped_corrected"].sum())
 
-    df = nearest_neighbour(df)
-
-    df["file"] = track_file.replace(".tracks.feather", "")
-    dfs.append(df)
-
-data = pd.concat(dfs, ignore_index=True)
-
-output_path = os.path.join(directory, 'behaviour_detection.csv')
-data.to_csv(output_path, index=False)

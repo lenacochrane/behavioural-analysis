@@ -10,13 +10,13 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 
 ###### INTERACTION TYPE - ALL NODE-NODE PER FRAME CONTACTS ######
 
-df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/fed-fed/closest_contacts_1mm_overtime.csv')
+df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-fed/closest_contacts_1mm_overtime.csv')
 df1['condition'] = 'fed-fed'
 
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-fed/closest_contacts_1mm_overtime.csv')
+df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved/closest_contacts_1mm_overtime.csv')
 df2['condition'] = 'fed-starved'
 
-df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/starved-starved/closest_contacts_1mm_overtime.csv')
+df3 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/starved-starved/closest_contacts_1mm_overtime.csv')
 df3['condition'] = 'starved-starved'
 
 
@@ -49,7 +49,7 @@ def plot_binary_raster(df, condition):
     plt.xticks([])  # frames usually too many to label nicely
 
     plt.tight_layout()
-    plt.savefig(f'/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/rasta/{condition}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/DEL-RASTA/{condition}.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -139,7 +139,7 @@ def plot_type_raster(df, condition):
     )
 
     plt.tight_layout()
-    plt.savefig(f'/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/rasta/{condition}_type.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/DEL-RASTA/{condition}_type.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -225,7 +225,7 @@ def plot_relevant_type_raster(df, condition):
 
     plt.tight_layout()
     plt.savefig(
-        f'/Users/cochral/repos/behavioural-analysis/plots/socially-isolated/head-head/rasta/{condition}_HH_HT_type.png',
+        f'/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/DEL-RASTA/{condition}_HH_HT_type.png',
         dpi=300,
         bbox_inches='tight'
     )

@@ -626,10 +626,10 @@ def cluster_size_vs_nearest_neighbour(parent_folder):
 parent_folder = '/Volumes/lab-windingm/home/users/cochral/PhD/NDD/EXPERIMENTS/ELAV_T27-B05/SIDEVIEW'
 cluster_percentage(parent_folder)
 number_of_clusters(parent_folder)
-average_cluster_size(parent_folder)
-max_cluster_size(parent_folder)
-depth_difference_food(parent_folder)
-nearest_neighbour(parent_folder)    
-cluster_size_vs_nearest_neighbour(parent_folder)
+# average_cluster_size(parent_folder)
+# max_cluster_size(parent_folder)
+# depth_difference_food(parent_folder)
+# nearest_neighbour(parent_folder)    
+# cluster_size_vs_nearest_neighbour(parent_folder)
 
 

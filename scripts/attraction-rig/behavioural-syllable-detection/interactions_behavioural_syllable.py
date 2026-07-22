@@ -16,9 +16,10 @@ df2["condition"] = 'isolated'
 
 df = pd.concat([df1, df2], ignore_index=True)  
 
-interactions = pd.read_csv('/Users/cochral/Desktop/MOSEQ2/KEYPOINT-KAPPA1000/plots/interactions/cropped_interactions.csv')
+
+interactions = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/cropped_interactions.csv')
 interactions['video_id'] = interactions['file'].str.replace('.mp4', '', regex=False)
-cluster = pd.read_csv('/Users/cochral/Desktop/MOSEQ2/KEYPOINT-KAPPA1000/plots/interactions/pca-data2-F18.csv')
+cluster = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/F15_KMAX3_DMAX4_NMIN1500--/pca-data3-F15-mcmodels4-Kmax3-Dmax4-Nmin1500-05-2026.csv')
 
 interactions = pd.merge(
         interactions,
@@ -66,7 +67,7 @@ import matplotlib.patches as mpatches
 # save ethogram per cluster
 # =============================================================================
 
-save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/behavioural-detection-testing/track_videos/interaction"
+save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/F15_KMAX3_DMAX4_NMIN1500--/etho"
 os.makedirs(save_dir, exist_ok=True)
 
 plot_df = interaction_tracks.copy()

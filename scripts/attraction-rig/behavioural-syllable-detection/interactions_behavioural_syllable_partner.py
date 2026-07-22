@@ -17,8 +17,8 @@ df2["condition"] = 'isolated'
 
 df = pd.concat([df1, df2], ignore_index=True)  
 
-interactions = pd.read_csv('/Users/cochral/Desktop/MOSEQ2/KEYPOINT-KAPPA1000/plots/interactions/cropped_interactions.csv')
-cluster = pd.read_csv('/Users/cochral/Desktop/MOSEQ2/KEYPOINT-KAPPA1000/plots/interactions/pca-data2-F18.csv')
+interactions = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/cropped_interactions.csv')
+cluster = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/F15_KMAX3_DMAX4_NMIN1500--/pca-data3-F15-mcmodels4-Kmax3-Dmax4-Nmin1500-05-2026.csv')
 
 
 def anchor_partner(df):
@@ -166,24 +166,24 @@ def anchor_partner(df):
     df['track1_approach_angle_change'] = df.groupby("interaction_id")["track1_approach_angle"].diff().abs()
     df['track2_approach_angle_change'] = df.groupby("interaction_id")["track2_approach_angle"].diff().abs()
 
-    metrics = [
-    'speed',
-    'acceleration',
-    'angle',
-    'approach_angle']
+    # metrics = [
+    # 'speed',
+    # 'acceleration',
+    # 'angle',
+    # 'approach_angle']
 
-    for m in metrics:
-        t1 = df[f'track1_{m}']
-        t2 = df[f'track2_{m}']
-        df[f'anchor_{m}']  = np.where(df['anchor_track']==1, t1, t2)
-        df[f'partner_{m}'] = np.where(df['anchor_track']==1, t2, t1)
+    # for m in metrics:
+    #     t1 = df[f'track1_{m}']
+    #     t2 = df[f'track2_{m}']
+    #     df[f'anchor_{m}']  = np.where(df['anchor_track']==1, t1, t2)
+    #     df[f'partner_{m}'] = np.where(df['anchor_track']==1, t2, t1)
 
-        # === Assign anchor/partner versions
-        df['anchor_heading_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_heading_angle_change'], df['track2_heading_angle_change'])
-        df['partner_heading_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_heading_angle_change'], df['track1_heading_angle_change'])
+    #     # === Assign anchor/partner versions
+    #     df['anchor_heading_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_heading_angle_change'], df['track2_heading_angle_change'])
+    #     df['partner_heading_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_heading_angle_change'], df['track1_heading_angle_change'])
 
-        df['anchor_approach_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_approach_angle_change'], df['track2_approach_angle_change'])
-        df['partner_approach_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_approach_angle_change'], df['track1_approach_angle_change'])
+    #     df['anchor_approach_angle_change']  = np.where(df['anchor_track'] == 1, df['track1_approach_angle_change'], df['track2_approach_angle_change'])
+    #     df['partner_approach_angle_change'] = np.where(df['anchor_track'] == 1, df['track2_approach_angle_change'], df['track1_approach_angle_change'])
 
     
     return df
@@ -240,7 +240,7 @@ from matplotlib.colors import ListedColormap
 
 
 
-save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/behavioural-detection-testing/track_videos/interaction"
+save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/F15_KMAX3_DMAX4_NMIN1500--/etho"
 os.makedirs(save_dir, exist_ok=True)
 
 plot_df = interaction_tracks.copy()

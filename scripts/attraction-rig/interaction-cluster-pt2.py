@@ -1471,6 +1471,120 @@ class ClusterPipeline:
         path = os.path.join(output, 'deviation_pvals_GS_social_experience.csv')
         pvals.to_csv(path, index=False, float_format='%.10f')
 
+        axis_angles = {
+            'G-S': np.deg2rad(90),
+            'S-S': np.deg2rad(210),
+            'G-G': np.deg2rad(330)
+        }
+
+        axis_vectors = {
+            key: np.array([np.cos(angle), np.sin(angle)])
+            for key, angle in axis_angles.items()
+        }
+
+        deviation_axis_df = deviation.copy()
+        deviation_axis_df['axis_x'] = 0.0
+        deviation_axis_df['axis_y'] = 0.0
+
+        for social in social_order:
+            deviation_axis_df['axis_x'] += deviation_axis_df[social] * axis_vectors[social][0]
+            deviation_axis_df['axis_y'] += deviation_axis_df[social] * axis_vectors[social][1]
+
+        deviation_axis_df = deviation_axis_df.reset_index()
+        deviation_axis_df['total_interactions'] = deviation_axis_df[cluster_name].map(cluster_counts.sum(axis=1))
+
+        deviation_axis_df.to_csv(
+            os.path.join(output, 'GS_social_experience_three_axis_deviation_positions.csv'),
+            index=False
+        )
+
+        max_dev = float(np.nanmax(np.abs(deviation[social_order].to_numpy())))
+        if max_dev == 0:
+            max_dev = 1e-6
+
+        axis_limit = max_dev * 1.35
+
+        fig, ax = plt.subplots(figsize=(8, 8))
+
+        for social in ['G-S', 'S-S', 'G-G']:
+            vec = axis_vectors[social]
+            ax.arrow(
+                0,
+                0,
+                axis_limit * vec[0],
+                axis_limit * vec[1],
+                head_width=axis_limit * 0.06,
+                head_length=axis_limit * 0.08,
+                length_includes_head=True,
+                color='0.55',
+                linewidth=2.5,
+                zorder=1
+            )
+            ax.plot(
+                [0, axis_limit * 0.72 * vec[0]],
+                [0, axis_limit * 0.72 * vec[1]],
+                color='0.55',
+                linewidth=1.2,
+                zorder=1
+            )
+            ax.text(
+                axis_limit * 1.12 * vec[0],
+                axis_limit * 1.12 * vec[1],
+                f"+ {social}",
+                ha='center',
+                va='center',
+                fontsize=12,
+                fontweight='bold'
+            )
+
+        # ax.scatter(0, 0, marker='*', s=220, color='red', edgecolor='black', linewidth=0.7, zorder=4)
+        # ax.text(0, -axis_limit * 0.11, 'expected', ha='center', va='top', fontsize=9, color='red')
+
+        scatter = ax.scatter(
+            deviation_axis_df['axis_x'],
+            deviation_axis_df['axis_y'],
+            s=100,
+            c=deviation_axis_df[cluster_name],
+            cmap='viridis',
+            edgecolor='white',
+            linewidth=0.6,
+            zorder=3
+        )
+
+        for _, row in deviation_axis_df.iterrows():
+            ax.plot(
+                [0, row['axis_x']],
+                [0, row['axis_y']],
+                color='0.8',
+                linewidth=0.8,
+                zorder=2
+            )
+            ax.text(
+                row['axis_x'],
+                row['axis_y'] + axis_limit * 0.035,
+                str(row[cluster_name]),
+                ha='center',
+                va='bottom',
+                fontsize=8
+            )
+
+        cbar = fig.colorbar(scatter, ax=ax, fraction=0.045, pad=0.04)
+        cbar.set_label('Cluster ID')
+
+        ax.set_title("GS Condition: three-axis social-experience deviation")
+        ax.set_aspect('equal')
+        ax.set_xlim(-axis_limit * 1.25, axis_limit * 1.25)
+        ax.set_ylim(-axis_limit * 1.25, axis_limit * 1.25)
+        ax.axis('off')
+
+        plt.tight_layout()
+
+        path = os.path.join(output, 'GS_social_experience_three_axis_deviation_plot.pdf')
+        plt.savefig(path, format='pdf', bbox_inches='tight', dpi=300, transparent=True)
+
+
+        plt.close()
+
         palette = {
             'S-S': 'C1',
             'G-S': 'mediumseagreen',
@@ -1534,8 +1648,6 @@ class ClusterPipeline:
 
         plt.tight_layout()
 
-        path = os.path.join(output, 'deviations_GS_social_experience.png')
-        plt.savefig(path, dpi=300, bbox_inches='tight')
 
         path = os.path.join(output, 'deviations_GS_social_experience.pdf')
         plt.savefig(path, format='pdf', bbox_inches='tight', dpi=300, transparent=True)
@@ -1545,6 +1657,224 @@ class ClusterPipeline:
 
 
 
+
+
+
+
+    def GS_pairwise_social_experience_deviation_stats(self):
+
+        df = self.clusters.copy()
+        df_interaction = self.df.copy()
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "GS_pairwise_social_experience_deviation_stats")
+        os.makedirs(output, exist_ok=True)
+
+        mpl.rcParams['pdf.fonttype'] = 42
+        mpl.rcParams['ps.fonttype'] = 42
+
+        df = df[df['condition'] == 'GS'].copy()
+        df_interaction = df_interaction[df_interaction['condition'] == 'GS'].copy()
+
+        if df.empty:
+            print("No GS condition data found.")
+            return
+
+        social_order = ['S-S', 'G-S', 'G-G']
+        possible_pairs = {
+            'S-S': 10,
+            'G-S': 25,
+            'G-G': 10
+        }
+
+        def get_social_experience(pair):
+            if pair is None or pd.isna(pair):
+                return np.nan
+
+            if isinstance(pair, str):
+                pair = pair.replace("(", "").replace(")", "").replace(" ", "")
+                id1, id2 = pair.split(",")
+                id1 = int(id1)
+                id2 = int(id2)
+            else:
+                id1, id2 = pair
+                id1 = int(id1)
+                id2 = int(id2)
+
+            if id1 <= 4 and id2 <= 4:
+                return "S-S"
+            elif id1 >= 5 and id2 >= 5:
+                return "G-G"
+            else:
+                return "G-S"
+
+        pair_lookup = (
+            df_interaction[['file', 'interaction_id', 'Interaction Pair']]
+            .drop_duplicates(subset=['file', 'interaction_id'])
+            .copy()
+        )
+
+        pair_lookup['social_experience'] = pair_lookup['Interaction Pair'].apply(get_social_experience)
+        pair_lookup = pair_lookup.dropna(subset=['social_experience'])
+
+        df = df.merge(
+            pair_lookup[['file', 'interaction_id', 'social_experience']],
+            on=['file', 'interaction_id'],
+            how='left'
+        )
+        df = df.dropna(subset=['social_experience'])
+
+        inter_per_video = (
+            df[['file', 'interaction_id', cluster_name, 'social_experience']]
+            .drop_duplicates(subset=['file', 'interaction_id'])
+            .copy()
+        )
+
+        if inter_per_video.empty:
+            print("No valid GS social-experience interactions found.")
+            return
+
+        counts = (
+            inter_per_video
+            .groupby(['file', cluster_name, 'social_experience'])
+            .size()
+            .reset_index(name='count')
+        )
+
+        all_files = sorted(inter_per_video['file'].dropna().unique())
+        all_clusters = sorted(inter_per_video[cluster_name].dropna().unique())
+
+        full_index = pd.MultiIndex.from_product(
+            [all_files, all_clusters, social_order],
+            names=['file', cluster_name, 'social_experience']
+        )
+
+        counts = (
+            counts
+            .set_index(['file', cluster_name, 'social_experience'])
+            .reindex(full_index, fill_value=0)
+            .reset_index()
+        )
+
+        counts['possible_pairs'] = counts['social_experience'].map(possible_pairs)
+        counts['rate_per_possible_pair'] = counts['count'] / counts['possible_pairs']
+
+        counts.to_csv(
+            os.path.join(output, 'GS_pairwise_social_experience_rates_per_video.csv'),
+            index=False
+        )
+
+        pairwise_tests = [
+            ('G-G', 'G-S'),
+            ('S-S', 'G-S'),
+            ('G-G', 'S-S')
+        ]
+
+        results = []
+
+        for cluster_id in all_clusters:
+            sub = counts[counts[cluster_name] == cluster_id]
+
+            wide = (
+                sub
+                .pivot(index='file', columns='social_experience', values='rate_per_possible_pair')
+                .reindex(columns=social_order)
+                .fillna(0)
+            )
+
+            for group_a, group_b in pairwise_tests:
+                a = wide[group_a]
+                b = wide[group_b]
+                diff = a - b
+
+                if len(diff) >= 2 and not np.allclose(diff, 0):
+                    stat, p = wilcoxon(a, b, alternative='two-sided')
+                elif len(diff) >= 2 and np.allclose(diff, 0):
+                    stat, p = 0, 1.0
+                else:
+                    stat, p = np.nan, np.nan
+
+                results.append({
+                    cluster_name: cluster_id,
+                    'comparison': f'{group_a}_vs_{group_b}',
+                    'group_a': group_a,
+                    'group_b': group_b,
+                    'mean_rate_group_a': a.mean(),
+                    'mean_rate_group_b': b.mean(),
+                    'mean_diff_group_a_minus_group_b': diff.mean(),
+                    'median_diff_group_a_minus_group_b': diff.median(),
+                    'W': stat,
+                    'p': p,
+                    'n_videos': len(diff)
+                })
+
+        stats_df = pd.DataFrame(results)
+        stats_df['p_adj'] = np.nan
+
+        valid = stats_df['p'].notna()
+        if valid.any():
+            stats_df.loc[valid, 'p_adj'] = multipletests(
+                stats_df.loc[valid, 'p'],
+                method='fdr_bh'
+            )[1]
+
+        stats_df.to_csv(
+            os.path.join(output, 'GS_pairwise_social_experience_rate_stats.csv'),
+            index=False,
+            float_format='%.10f'
+        )
+
+        summary = (
+            counts
+            .groupby([cluster_name, 'social_experience'])
+            .agg(
+                mean_count=('count', 'mean'),
+                sd_count=('count', 'std'),
+                mean_rate_per_possible_pair=('rate_per_possible_pair', 'mean'),
+                sd_rate_per_possible_pair=('rate_per_possible_pair', 'std'),
+                possible_pairs=('possible_pairs', 'first')
+            )
+            .reset_index()
+        )
+
+        summary.to_csv(
+            os.path.join(output, 'GS_pairwise_social_experience_rate_summary.csv'),
+            index=False
+        )
+
+        plt.figure(figsize=(12, 6))
+
+        ax = sns.barplot(
+            data=counts,
+            x=cluster_name,
+            y='rate_per_possible_pair',
+            hue='social_experience',
+            hue_order=social_order,
+            order=all_clusters,
+            errorbar='sd',
+            palette={
+                'S-S': 'C1',
+                'G-S': 'mediumseagreen',
+                'G-G': 'C0'
+            }
+        )
+
+        ax.set_title("GS condition: cluster interactions per possible pair")
+        ax.set_xlabel("Cluster ID")
+        ax.set_ylabel("Interaction count per possible pair")
+        ax.tick_params(axis='x', rotation=90)
+
+        plt.tight_layout()
+
+        path = os.path.join(output, 'GS_pairwise_social_experience_rates_per_cluster.pdf')
+        plt.savefig(path, format='pdf', bbox_inches='tight', dpi=300, transparent=True)
+
+        path = os.path.join(output, 'GS_pairwise_social_experience_rates_per_cluster.png')
+        plt.savefig(path, bbox_inches='tight', dpi=300)
+
+        plt.close()
+
+        print("Saved GS pairwise social-experience deviation stats.")
 
 
 
@@ -1670,6 +2000,162 @@ class ClusterPipeline:
         plt.savefig(path, format='pdf', bbox_inches='tight')
 
         plt.close()
+    
+
+
+        #### METHOD GRID_VIDEOS: GENERATE GRID VIDEOS OF INTERACTION CLUSTERS
+    def grid_videos(self):
+
+        df = self.df
+        cluster_name = self.cluster_name 
+        video_path = self.video_path 
+
+        grid_video_dir = os.path.join(self.directory, "grid_videos")
+        os.makedirs(grid_video_dir, exist_ok=True)
+
+        frames_per_clip = 20
+        dot_radius = 3
+        dot_thickness = -1  # Filled
+        fps = 3
+        crop_size = 400
+        grid_cols = 6
+        grid_rows = 4
+        clips_per_cluster = grid_cols * grid_rows
+
+        # === TRACK VALID CLIPS ===
+        cluster_to_interactions = {}
+
+        for cluster_id in sorted(df[cluster_name].unique()):
+            cluster_df = df[df[cluster_name] == cluster_id].copy()
+            print("Cluster:", cluster_id)
+            print(cluster_df["condition"].value_counts())
+
+            unique_ids = cluster_df['interaction_id'].unique()
+
+            if len(unique_ids) < clips_per_cluster:
+                print(f"⚠️ Skipping cluster {cluster_id} (only {len(unique_ids)} interactions)")
+                continue
+
+            chosen_ids = sample(list(unique_ids), clips_per_cluster)
+            interaction_clips = []
+            final_ids = []
+
+            for inter_id in chosen_ids:
+                inter_df = cluster_df[cluster_df['interaction_id'] == inter_id].sort_values("Frame")
+                start_frame = inter_df["Frame"].iloc[0]
+                end_frame = start_frame + frames_per_clip
+                clip_df = inter_df[(inter_df["Frame"] >= start_frame) & (inter_df["Frame"] < end_frame)]
+
+                if len(clip_df) < frames_per_clip:
+                    continue
+
+                video_file = inter_df['file'].iloc[0]
+                print(f"📼 Interaction {inter_id} comes from file {video_file}")
+                full_video_path = os.path.join(video_path, video_file)
+
+                if not os.path.exists(full_video_path):
+                    print(f"⚠️ Missing video: {full_video_path}")
+                    continue
+
+                # Use midpoint at Normalized Frame = 0
+                center_frame = inter_df[inter_df["Normalized Frame"] == 0]
+                if center_frame.empty:
+                    print(f"⚠️ No center frame for {inter_id}")
+                    continue
+
+                row_center = center_frame.iloc[0]
+                cx = int((row_center['Track_1 x_body'] + row_center['Track_2 x_body']) / 2)
+                cy = int((row_center['Track_1 y_body'] + row_center['Track_2 y_body']) / 2)
+
+                # Crop logic
+                def safe_crop(frame, cx, cy, crop_size):
+                    h, w = frame.shape[:2]
+                    half = crop_size // 2
+                    x_start, y_start = cx - half, cy - half
+                    x_end, y_end = cx + half, cy + half
+                    cropped = np.zeros((crop_size, crop_size, 3), dtype=frame.dtype)
+
+                    x1, y1 = max(0, x_start), max(0, y_start)
+                    x2, y2 = min(w, x_end), min(h, y_end)
+                    dx1, dy1 = x1 - x_start, y1 - y_start
+                    dx2, dy2 = dx1 + (x2 - x1), dy1 + (y2 - y1)
+                    cropped[dy1:dy2, dx1:dx2] = frame[y1:y2, x1:x2]
+                    return cropped
+
+                # Read and annotate frames
+                cap = cv2.VideoCapture(full_video_path)
+                clip_frames = []
+                for _, row in clip_df.iterrows():
+                    frame_idx = int(row['Frame'])
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                    ret, frame = cap.read()
+                    if not ret:
+                        continue
+
+                    x1, y1 = int(row['Track_1 x_body']), int(row['Track_1 y_body'])
+                    x2, y2 = int(row['Track_2 x_body']), int(row['Track_2 y_body'])
+
+                    cv2.circle(frame, (x1, y1), dot_radius, (0, 0, 255), dot_thickness)
+                    cv2.circle(frame, (x2, y2), dot_radius, (255, 0, 0), dot_thickness)
+
+                    cropped = safe_crop(frame, cx, cy, crop_size)
+                    clip_frames.append(cropped)
+
+                cap.release()
+
+                if len(clip_frames) == frames_per_clip:
+                    interaction_clips.append(clip_frames)
+                    final_ids.append(inter_id)
+
+            if len(interaction_clips) < clips_per_cluster:
+                print(f"⚠️ Not enough good clips for cluster {cluster_id}")
+                continue
+
+            cluster_to_interactions[cluster_id] = final_ids
+
+            # === Create grid video ===
+            h, w = interaction_clips[0][0].shape[:2]
+            grid_frames = []
+            for i in range(frames_per_clip):
+                grid_rows_frames = []
+                for row_idx in range(grid_rows):
+                    start = row_idx * grid_cols
+                    end = start + grid_cols
+                    grid_rows_frames.append(
+                        np.hstack([interaction_clips[j][i] for j in range(start, end)])
+                    )
+                grid_frame = np.vstack(grid_rows_frames)
+                grid_frames.append(grid_frame)
+
+            
+            output_path = os.path.join(grid_video_dir, f"cluster_{cluster_id}.mp4")
+
+            out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w * grid_cols, h * grid_rows))
+
+            for frame in grid_frames:
+                out.write(frame)
+            out.release()
+
+            print(f"✅ Saved grid video for cluster {cluster_id} → {output_path}")
+
+
+        # === SAVE CSV OF INTERACTIONS INCLUDED IN GRID VIDEOS ===
+        mapping_records = []
+        for cluster, interactions in cluster_to_interactions.items():
+            for inter_id in interactions:
+                video_file = df[df['interaction_id'] == inter_id]['file'].iloc[0]
+                mapping_records.append({
+                    'cluster': cluster,
+                    'interaction_id': inter_id,
+                    'video_file': video_file
+                })
+
+        mapping_df = pd.DataFrame(mapping_records)
+        mapping_path = os.path.join(grid_video_dir, 'gridmovies_interactions.csv')
+        mapping_df.to_csv(mapping_path, index=False)
+
+
+        print('grid videos generated') 
 
     
     #### METHOD SUMMARY_ANCHOR_PARTNER: SUMMARY QUANTIFICATIONS ANCHOR/PARTNER
@@ -2658,8 +3144,6 @@ class ClusterPipeline:
 
         path = os.path.join(output, "GS_observed_percent_vs_expected.pdf")
         plt.savefig(path, format="pdf", bbox_inches="tight", dpi=300)
-        path = os.path.join(output, "GS_observed_percent_vs_expected.png")
-        plt.savefig(path, bbox_inches="tight", dpi=300)
         plt.close()
 
         # Plot 2: corrected interaction rate per possible pair
@@ -2953,6 +3437,14 @@ class ClusterPipeline:
 
         output = os.path.join(self.directory, "GS_cluster_transition_matrix_by_larva_type")
         os.makedirs(output, exist_ok=True)
+        g_vs_s_output = os.path.join(output, "G_V_S")
+        within_type_output = os.path.join(output, "within_type")
+        mixed_output = os.path.join(output, "mixed")
+        mixed_2_output = os.path.join(output, "mixed_2")
+        os.makedirs(g_vs_s_output, exist_ok=True)
+        os.makedirs(within_type_output, exist_ok=True)
+        os.makedirs(mixed_output, exist_ok=True)
+        os.makedirs(mixed_2_output, exist_ok=True)
 
         # GS only, one row per interaction
         df = df[
@@ -2996,6 +3488,8 @@ class ClusterPipeline:
                 "interaction_id": row["interaction_id"],
                 "track_id": id1,
                 "larva_type": larva_type(id1),
+                "partner_id": id2,
+                "partner_type": larva_type(id2),
                 "time": row["Frame"],
                 "cluster": row["cluster"]
             })
@@ -3005,6 +3499,8 @@ class ClusterPipeline:
                 "interaction_id": row["interaction_id"],
                 "track_id": id2,
                 "larva_type": larva_type(id2),
+                "partner_id": id1,
+                "partner_type": larva_type(id1),
                 "time": row["Frame"],
                 "cluster": row["cluster"]
             })
@@ -3021,11 +3517,21 @@ class ClusterPipeline:
             .groupby(["file", "track_id"])["cluster"]
             .shift(-1)
         )
+        expanded["next_partner_id"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_id"]
+            .shift(-1)
+        )
+        expanded["next_partner_type"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_type"]
+            .shift(-1)
+        )
 
         transitions = expanded.dropna(subset=["next_cluster"]).copy()
         transitions["next_cluster"] = transitions["next_cluster"].astype(int)
 
-        raw_path = os.path.join(output, "GS_cluster_transitions_raw_by_larva_type.csv")
+        raw_path = os.path.join(g_vs_s_output, "GS_cluster_transitions_raw_by_larva_type.csv")
         transitions.to_csv(raw_path, index=False)
 
         if transitions.empty:
@@ -3074,7 +3580,7 @@ class ClusterPipeline:
         counts["transition_probability"] = counts["transition_probability"].fillna(0)
 
         per_video_path = os.path.join(
-            output,
+            g_vs_s_output,
             "GS_cluster_transition_matrix_per_video_by_larva_type.csv"
         )
         counts.to_csv(per_video_path, index=False)
@@ -3093,7 +3599,7 @@ class ClusterPipeline:
         )
 
         summary_path = os.path.join(
-            output,
+            g_vs_s_output,
             "GS_cluster_transition_matrix_summary_by_larva_type.csv"
         )
         summary.to_csv(summary_path, index=False)
@@ -3153,13 +3659,13 @@ class ClusterPipeline:
         cbar.set_label("Mean transition probability")
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_heatmaps_by_larva_type.png"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_heatmaps_by_larva_type.png"),
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_heatmaps_by_larva_type.pdf"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_heatmaps_by_larva_type.pdf"),
             format="pdf",
             dpi=300,
             bbox_inches="tight"
@@ -3344,13 +3850,13 @@ class ClusterPipeline:
         cbar.set_label("Mean transition probability")
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_circlegraphs_by_larva_type.png"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_circlegraphs_by_larva_type.png"),
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_circlegraphs_by_larva_type.pdf"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_circlegraphs_by_larva_type.pdf"),
             format="pdf",
             dpi=300,
             bbox_inches="tight"
@@ -3390,13 +3896,13 @@ class ClusterPipeline:
         plt.tight_layout()
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_difference_G_minus_S.png"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_difference_G_minus_S.png"),
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_difference_G_minus_S.pdf"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_difference_G_minus_S.pdf"),
             format="pdf",
             dpi=300,
             bbox_inches="tight"
@@ -3534,19 +4040,580 @@ class ClusterPipeline:
         cbar.set_label("P(G tracks) − P(S tracks)")
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_difference_circlegraph_G_minus_S.png"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_difference_circlegraph_G_minus_S.png"),
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.savefig(
-            os.path.join(output, "GS_cluster_transition_difference_circlegraph_G_minus_S.pdf"),
+            os.path.join(g_vs_s_output, "GS_cluster_transition_difference_circlegraph_G_minus_S.pdf"),
             format="pdf",
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.close()
+
+        # -------------------------------------------------------
+        # Interaction-history filtered cluster transitions
+        # -------------------------------------------------------
+
+        def plot_probability_circlegraph(M, title, filename_stem, save_dir, prob_max=None, thresh=0.05):
+
+            values = M.to_numpy()
+            finite_values = values[np.isfinite(values)]
+
+            if finite_values.size == 0:
+                print(f"No finite values found for {title}.")
+                return
+
+            if prob_max is None:
+                prob_max = float(np.nanmax(finite_values))
+            if prob_max == 0:
+                prob_max = 1e-6
+
+            prob_cmap = plt.cm.viridis
+            prob_norm = mpl.colors.Normalize(vmin=0, vmax=prob_max)
+
+            G_prob = matrix_to_digraph(M, thresh=thresh)
+            prob_pos = nx.circular_layout(list(M.index))
+
+            def prob_lw(w, min_w=0.3, max_w=6.0):
+                return min_w + (w / prob_max) * (max_w - min_w)
+
+            def prob_alpha(w, min_a=0.15, max_a=0.95):
+                return min_a + (w / prob_max) * (max_a - min_a)
+
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            ax.set_title(title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(
+                G_prob,
+                prob_pos,
+                ax=ax,
+                node_size=700,
+                node_color="lightgray",
+                edgecolors="black"
+            )
+
+            nx.draw_networkx_labels(
+                G_prob,
+                prob_pos,
+                ax=ax,
+                font_size=9
+            )
+
+            for u, v, d in G_prob.edges(data=True):
+
+                w = float(d["weight"])
+                color = prob_cmap(prob_norm(w))
+                lw = prob_lw(w)
+                alpha = prob_alpha(w)
+
+                if u == v:
+                    x, y = prob_pos[u]
+                    vec = np.array([x, y], dtype=float)
+                    r = np.linalg.norm(vec)
+
+                    if r == 0:
+                        continue
+
+                    unit = vec / r
+                    perp = np.array([-unit[1], unit[0]])
+
+                    center = vec + 0.10 * unit
+                    start = center - 0.08 * perp + 0.012 * unit
+                    end = center + 0.08 * perp + 0.012 * unit
+
+                    patch = FancyArrowPatch(
+                        posA=start,
+                        posB=end,
+                        arrowstyle="-|>",
+                        mutation_scale=14,
+                        connectionstyle="arc3,rad=0.8",
+                        linewidth=lw,
+                        color=color,
+                        alpha=alpha,
+                        zorder=2
+                    )
+
+                else:
+                    patch = FancyArrowPatch(
+                        posA=prob_pos[u],
+                        posB=prob_pos[v],
+                        arrowstyle="-|>",
+                        mutation_scale=14,
+                        connectionstyle="arc3,rad=0.12",
+                        linewidth=lw,
+                        color=color,
+                        alpha=alpha,
+                        shrinkA=18,
+                        shrinkB=18,
+                        zorder=1
+                    )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=prob_cmap, norm=prob_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.90, 0.25, 0.015, 0.50])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label("Mean transition probability")
+
+            plt.savefig(
+                os.path.join(save_dir, f"{filename_stem}.pdf"),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        def plot_history_cluster_comparison(
+            comparison_name,
+            comparison_output,
+            group_a_label,
+            group_a_filter,
+            group_b_label,
+            group_b_filter,
+            difference_label,
+            heatmap_title,
+            circle_title
+        ):
+
+            labelled = []
+
+            group_a = transitions[group_a_filter(transitions)].copy()
+            group_a["history_group"] = group_a_label
+            labelled.append(group_a)
+
+            group_b = transitions[group_b_filter(transitions)].copy()
+            group_b["history_group"] = group_b_label
+            labelled.append(group_b)
+
+            history_transitions = pd.concat(labelled, ignore_index=True)
+
+            if history_transitions.empty:
+                print(f"No {comparison_name} cluster transitions found.")
+                return
+
+            history_transitions.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_raw.csv"
+                ),
+                index=False
+            )
+
+            counts_history = (
+                history_transitions
+                .groupby(["file", "history_group", "cluster", "next_cluster"])
+                .size()
+                .reset_index(name="count")
+            )
+
+            present_file_groups = (
+                history_transitions[["file", "history_group"]]
+                .drop_duplicates()
+                .dropna()
+            )
+
+            full_history_index = pd.MultiIndex.from_tuples(
+                [
+                    (row.file, row.history_group, cluster_id, next_cluster_id)
+                    for row in present_file_groups.itertuples(index=False)
+                    for cluster_id in clusters
+                    for next_cluster_id in clusters
+                ],
+                names=["file", "history_group", "cluster", "next_cluster"]
+            )
+
+            counts_history = (
+                counts_history
+                .set_index(["file", "history_group", "cluster", "next_cluster"])
+                .reindex(full_history_index, fill_value=0)
+                .reset_index()
+            )
+
+            counts_history["row_total"] = (
+                counts_history
+                .groupby(["file", "history_group", "cluster"])["count"]
+                .transform("sum")
+            )
+            counts_history["transition_probability"] = (
+                counts_history["count"] / counts_history["row_total"]
+            )
+            counts_history["transition_probability"] = counts_history["transition_probability"].fillna(0)
+
+            counts_history.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_probabilities_per_video.csv"
+                ),
+                index=False
+            )
+
+            history_stats = []
+
+            for cluster_id in clusters:
+                for next_cluster_id in clusters:
+
+                    sub = counts_history[
+                        (counts_history["cluster"] == cluster_id) &
+                        (counts_history["next_cluster"] == next_cluster_id)
+                    ]
+
+                    wide = (
+                        sub.pivot(index="file", columns="history_group", values="transition_probability")
+                        .dropna(subset=[group_a_label, group_b_label])
+                    )
+
+                    a = wide[group_a_label]
+                    b = wide[group_b_label]
+                    diff = a - b
+
+                    if len(diff) >= 2 and not np.allclose(diff, 0):
+                        stat, p = wilcoxon(a, b, alternative="two-sided")
+                    elif len(diff) >= 2 and np.allclose(diff, 0):
+                        stat, p = 0, 1.0
+                    else:
+                        stat, p = np.nan, np.nan
+
+                    history_stats.append({
+                        "cluster": cluster_id,
+                        "next_cluster": next_cluster_id,
+                        "W": stat,
+                        "p": p,
+                        f"{group_a_label}_mean": a.mean(),
+                        f"{group_b_label}_mean": b.mean(),
+                        "mean_diff": diff.mean(),
+                        "n_videos": len(diff)
+                    })
+
+            history_stats = pd.DataFrame(history_stats)
+            mask = history_stats["p"].notna()
+
+            if mask.any():
+                history_stats.loc[mask, "p_adj"] = multipletests(
+                    history_stats.loc[mask, "p"],
+                    method="fdr_bh"
+                )[1]
+            else:
+                history_stats["p_adj"] = np.nan
+
+            history_stats.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_statistics.csv"
+                ),
+                index=False
+            )
+
+            history_summary = (
+                counts_history
+                .groupby(["history_group", "cluster", "next_cluster"])
+                .agg(
+                    mean_probability=("transition_probability", "mean"),
+                    sd_probability=("transition_probability", "std"),
+                    mean_count=("count", "mean"),
+                    sd_count=("count", "std")
+                )
+                .reset_index()
+            )
+
+            history_summary.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_summary.csv"
+                ),
+                index=False
+            )
+
+            M_A = (
+                history_summary[history_summary["history_group"] == group_a_label]
+                .pivot(index="cluster", columns="next_cluster", values="mean_probability")
+                .reindex(index=clusters, columns=clusters)
+                .fillna(0)
+            )
+
+            M_B = (
+                history_summary[history_summary["history_group"] == group_b_label]
+                .pivot(index="cluster", columns="next_cluster", values="mean_probability")
+                .reindex(index=clusters, columns=clusters)
+                .fillna(0)
+            )
+
+            M_A.to_csv(os.path.join(comparison_output, f"GS_cluster_transition_{comparison_name}_probability_{group_a_label}.csv"))
+            M_B.to_csv(os.path.join(comparison_output, f"GS_cluster_transition_{comparison_name}_probability_{group_b_label}.csv"))
+
+            short_group_a_label = group_a_label.replace("_with_", "_").replace("_then_", "_")
+            short_group_b_label = group_b_label.replace("_with_", "_").replace("_then_", "_")
+
+            D_history = (
+                history_stats
+                .pivot(index="cluster", columns="next_cluster", values="mean_diff")
+                .reindex(index=clusters, columns=clusters)
+            )
+
+            D_history.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_difference.csv"
+                )
+            )
+
+            finite_diff_values = D_history.to_numpy()[np.isfinite(D_history.to_numpy())]
+
+            if finite_diff_values.size == 0:
+                print(f"No paired per-video {comparison_name} cluster comparisons found.")
+                return
+
+            M_A_mean = (
+                history_stats
+                .pivot(index="cluster", columns="next_cluster", values=f"{group_a_label}_mean")
+                .reindex(index=clusters, columns=clusters)
+                .fillna(0)
+            )
+
+            M_B_mean = (
+                history_stats
+                .pivot(index="cluster", columns="next_cluster", values=f"{group_b_label}_mean")
+                .reindex(index=clusters, columns=clusters)
+                .fillna(0)
+            )
+
+            prob_max_history = float(np.nanmax([
+                np.nanmax(M_A_mean.to_numpy()),
+                np.nanmax(M_B_mean.to_numpy())
+            ]))
+            if prob_max_history == 0:
+                prob_max_history = 1e-6
+
+            plot_probability_circlegraph(
+                M_A_mean,
+                f"GS cluster transition likelihood: {group_a_label}",
+                f"GS_cluster_transition_{comparison_name}_{short_group_a_label}_circlegraph",
+                comparison_output,
+                prob_max=prob_max_history
+            )
+
+            plot_probability_circlegraph(
+                M_B_mean,
+                f"GS cluster transition likelihood: {group_b_label}",
+                f"GS_cluster_transition_{comparison_name}_{short_group_b_label}_circlegraph",
+                comparison_output,
+                prob_max=prob_max_history
+            )
+
+            D_history = D_history.fillna(0)
+
+            history_lim = float(np.nanmax(np.abs(finite_diff_values)))
+            if history_lim == 0:
+                history_lim = 1e-6
+
+            plt.figure(figsize=(10, 8))
+            sns.heatmap(
+                D_history,
+                cmap="RdBu",
+                center=0,
+                vmin=-history_lim,
+                vmax=history_lim,
+                square=True,
+                cbar_kws={"label": difference_label}
+            )
+
+            plt.xlabel("Next cluster")
+            plt.ylabel("Current cluster")
+            plt.title(heatmap_title)
+            plt.tight_layout()
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_difference_heatmap.png"
+                ),
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_difference_heatmap.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+            history_norm = mpl.colors.TwoSlopeNorm(
+                vmin=-history_lim,
+                vcenter=0,
+                vmax=history_lim
+            )
+
+            G_history = diff_matrix_to_digraph(D_history, thresh=0.05)
+            history_pos = nx.circular_layout(list(D_history.index))
+
+            def history_lw(w, min_w=0.3, max_w=6.0):
+                return min_w + (abs(w) / history_lim) * (max_w - min_w)
+
+            def history_alpha(w, min_a=0.15, max_a=0.95):
+                return min_a + (abs(w) / history_lim) * (max_a - min_a)
+
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            ax.set_title(circle_title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(
+                G_history,
+                history_pos,
+                ax=ax,
+                node_size=700,
+                node_color="lightgray",
+                edgecolors="black"
+            )
+
+            nx.draw_networkx_labels(
+                G_history,
+                history_pos,
+                ax=ax,
+                font_size=9
+            )
+
+            for u, v, d in G_history.edges(data=True):
+
+                w = float(d["weight"])
+                color = diff_cmap(history_norm(w))
+                lw = history_lw(w)
+                alpha = history_alpha(w)
+
+                if u == v:
+                    x, y = history_pos[u]
+                    vec = np.array([x, y], dtype=float)
+                    r = np.linalg.norm(vec)
+
+                    if r == 0:
+                        continue
+
+                    unit = vec / r
+                    perp = np.array([-unit[1], unit[0]])
+
+                    center = vec + 0.10 * unit
+                    start = center - 0.08 * perp + 0.012 * unit
+                    end = center + 0.08 * perp + 0.012 * unit
+
+                    patch = FancyArrowPatch(
+                        posA=start,
+                        posB=end,
+                        arrowstyle="-|>",
+                        mutation_scale=14,
+                        connectionstyle="arc3,rad=0.8",
+                        linewidth=lw,
+                        color=color,
+                        alpha=alpha,
+                        zorder=2
+                    )
+
+                else:
+                    patch = FancyArrowPatch(
+                        posA=history_pos[u],
+                        posB=history_pos[v],
+                        arrowstyle="-|>",
+                        mutation_scale=14,
+                        connectionstyle="arc3,rad=0.12",
+                        linewidth=lw,
+                        color=color,
+                        alpha=alpha,
+                        shrinkA=18,
+                        shrinkB=18,
+                        zorder=1
+                    )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=diff_cmap, norm=history_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.90, 0.25, 0.015, 0.50])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label(difference_label)
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_cluster_transition_{comparison_name}_difference_circlegraph.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        plot_history_cluster_comparison(
+            comparison_name="within_type",
+            comparison_output=within_type_output,
+            group_a_label="G_with_G_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_S_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with G then G) - P(S with S then S)",
+            heatmap_title="GS cluster transition difference: within-type history",
+            circle_title="GS cluster transition likelihood: within-type history"
+        )
+
+        plot_history_cluster_comparison(
+            comparison_name="mixed_type",
+            comparison_output=mixed_output,
+            group_a_label="G_with_S_then_S",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            group_b_label="S_with_G_then_G",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            difference_label="P(G with S then S) - P(S with G then G)",
+            heatmap_title="GS cluster transition difference: mixed-type history",
+            circle_title="GS cluster transition likelihood: mixed-type history"
+        )
+
+        plot_history_cluster_comparison(
+            comparison_name="mixed_2",
+            comparison_output=mixed_2_output,
+            group_a_label="G_with_S_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_G_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with S then G) - P(S with G then S)",
+            heatmap_title="GS cluster transition difference: mixed-2 history",
+            circle_title="GS cluster transition likelihood: mixed-2 history"
+        )
 
 
 
@@ -4946,6 +6013,14 @@ class ClusterPipeline:
 
         output = os.path.join(self.directory, "GS_duration_transition")
         os.makedirs(output, exist_ok=True)
+        g_vs_s_output = os.path.join(output, "G_V_S")
+        within_type_output = os.path.join(output, "within_type")
+        mixed_output = os.path.join(output, "mixed")
+        mixed_2_output = os.path.join(output, "mixed_2")
+        os.makedirs(g_vs_s_output, exist_ok=True)
+        os.makedirs(within_type_output, exist_ok=True)
+        os.makedirs(mixed_output, exist_ok=True)
+        os.makedirs(mixed_2_output, exist_ok=True)
 
         dur_map = {
             1: "medium",
@@ -5000,6 +6075,8 @@ class ClusterPipeline:
                 "interaction_id": row["interaction_id"],
                 "track_id": id1,
                 "larva_type": larva_type(id1),
+                "partner_id": id2,
+                "partner_type": larva_type(id2),
                 "time": row["Frame"],
                 "cluster": row["cluster"]
             })
@@ -5009,6 +6086,8 @@ class ClusterPipeline:
                 "interaction_id": row["interaction_id"],
                 "track_id": id2,
                 "larva_type": larva_type(id2),
+                "partner_id": id1,
+                "partner_type": larva_type(id1),
                 "time": row["Frame"],
                 "cluster": row["cluster"]
             })
@@ -5024,6 +6103,16 @@ class ClusterPipeline:
             .groupby(["file", "track_id"])["cluster"]
             .shift(-1)
         )
+        expanded["next_partner_id"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_id"]
+            .shift(-1)
+        )
+        expanded["next_partner_type"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_type"]
+            .shift(-1)
+        )
 
         transitions = expanded.dropna(subset=["next_cluster"]).copy()
         transitions["next_cluster"] = transitions["next_cluster"].astype(int)
@@ -5037,7 +6126,7 @@ class ClusterPipeline:
         transitions = transitions.dropna(subset=["from_dur", "to_dur"])
 
         transitions.to_csv(
-            os.path.join(output, "GS_duration_transitions_raw.csv"),
+            os.path.join(g_vs_s_output, "GS_duration_transitions_raw.csv"),
             index=False
         )
 
@@ -5071,7 +6160,7 @@ class ClusterPipeline:
         video_probs = pd.DataFrame(video_probs)
 
         video_probs.to_csv(
-            os.path.join(output, "GS_duration_transition_probabilities_per_video.csv"),
+            os.path.join(g_vs_s_output, "GS_duration_transition_probabilities_per_video.csv"),
             index=False
         )
 
@@ -5126,7 +6215,7 @@ class ClusterPipeline:
         )[1]
 
         stats.to_csv(
-            os.path.join(output, "GS_duration_transition_statistics.csv"),
+            os.path.join(g_vs_s_output, "GS_duration_transition_statistics.csv"),
             index=False
         )
 
@@ -5147,10 +6236,139 @@ class ClusterPipeline:
         C_S, P_S = dur_transition_matrix(transitions[transitions["larva_type"] == "S"])
         C_G, P_G = dur_transition_matrix(transitions[transitions["larva_type"] == "G"])
 
-        C_S.to_csv(os.path.join(output, "GS_duration_transition_counts_S_tracks.csv"))
-        C_G.to_csv(os.path.join(output, "GS_duration_transition_counts_G_tracks.csv"))
-        P_S.to_csv(os.path.join(output, "GS_duration_transition_probability_S_tracks.csv"))
-        P_G.to_csv(os.path.join(output, "GS_duration_transition_probability_G_tracks.csv"))
+        C_S.to_csv(os.path.join(g_vs_s_output, "GS_duration_transition_counts_S_tracks.csv"))
+        C_G.to_csv(os.path.join(g_vs_s_output, "GS_duration_transition_counts_G_tracks.csv"))
+        P_S.to_csv(os.path.join(g_vs_s_output, "GS_duration_transition_probability_S_tracks.csv"))
+        P_G.to_csv(os.path.join(g_vs_s_output, "GS_duration_transition_probability_G_tracks.csv"))
+
+        nodes = dur_order
+        pos = nx.circular_layout(nodes)
+
+        def probability_matrix_to_digraph(P, thresh=0.02):
+            G = nx.DiGraph()
+            for c in P.index:
+                G.add_node(c)
+            for i in P.index:
+                for j in P.columns:
+                    w = float(P.loc[i, j])
+                    if w >= thresh:
+                        G.add_edge(i, j, weight=w)
+            return G
+
+        def plot_probability_circlegraph(P, title, colorbar_label, filename_stem, save_dir, prob_lim=None, thresh=0.02):
+            values = P.to_numpy()
+            finite_values = values[np.isfinite(values)]
+
+            if finite_values.size == 0:
+                print(f"No finite values found for {title}.")
+                return
+
+            if prob_lim is None:
+                prob_lim = float(np.nanmax(finite_values))
+            if prob_lim == 0:
+                prob_lim = 1e-6
+
+            prob_norm = mpl.colors.Normalize(vmin=0, vmax=prob_lim)
+            prob_cmap = plt.cm.viridis
+
+            def prob_w_to_lw(w, min_w=0.6, max_w=8.0):
+                return min_w + (w / prob_lim) * (max_w - min_w)
+
+            def prob_w_to_alpha(w, min_a=0.2, max_a=0.95):
+                return min_a + (w / prob_lim) * (max_a - min_a)
+
+            G_prob = probability_matrix_to_digraph(P, thresh=thresh)
+
+            fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+            ax.set_title(title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(G_prob, pos, ax=ax, node_size=1200)
+            nx.draw_networkx_labels(G_prob, pos, ax=ax, font_size=10)
+
+            for u, v, dct in G_prob.edges(data=True):
+
+                w = float(dct["weight"])
+                color = prob_cmap(prob_norm(w))
+                lw = prob_w_to_lw(w)
+                alpha = prob_w_to_alpha(w)
+
+                rad = 0.18 if u != v else 0.45
+
+                patch = FancyArrowPatch(
+                    posA=pos[u],
+                    posB=pos[v],
+                    arrowstyle="-|>",
+                    mutation_scale=16,
+                    connectionstyle=f"arc3,rad={rad}",
+                    linewidth=lw,
+                    color=color,
+                    alpha=alpha,
+                    shrinkA=22,
+                    shrinkB=22
+                )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=prob_cmap, norm=prob_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label(colorbar_label)
+
+            plt.savefig(
+                os.path.join(save_dir, f"{filename_stem}.pdf"),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        P_S_mean = (
+            stats
+            .pivot(index="from_dur", columns="to_dur", values="S_mean")
+            .reindex(index=dur_order, columns=dur_order)
+        )
+
+        P_G_mean = (
+            stats
+            .pivot(index="from_dur", columns="to_dur", values="G_mean")
+            .reindex(index=dur_order, columns=dur_order)
+        )
+
+        if not (
+            np.isfinite(P_S_mean.to_numpy()).any() and
+            np.isfinite(P_G_mean.to_numpy()).any()
+        ):
+            print("No paired per-video G/S duration comparisons found.")
+            return
+
+        prob_lim_main = float(np.nanmax([
+            np.nanmax(P_S_mean.to_numpy()),
+            np.nanmax(P_G_mean.to_numpy())
+        ]))
+        if prob_lim_main == 0:
+            prob_lim_main = 1e-6
+
+        plot_probability_circlegraph(
+            P_S_mean,
+            "GS duration transition likelihood: S tracks",
+            "P(S tracks)",
+            "GS_duration_transition_S_tracks_circlegraph",
+            g_vs_s_output,
+            prob_lim=prob_lim_main
+        )
+
+        plot_probability_circlegraph(
+            P_G_mean,
+            "GS duration transition likelihood: G tracks",
+            "P(G tracks)",
+            "GS_duration_transition_G_tracks_circlegraph",
+            g_vs_s_output,
+            prob_lim=prob_lim_main
+        )
 
         # --------------------------------------------------
         # D = mean per-video G probability - mean per-video S probability
@@ -5163,7 +6381,7 @@ class ClusterPipeline:
         )
 
         D.to_csv(
-            os.path.join(output, "GS_duration_transition_difference_G_minus_S.csv")
+            os.path.join(g_vs_s_output, "GS_duration_transition_difference_G_minus_S.csv")
         )
 
         lim = float(np.nanmax(np.abs(D.to_numpy())))
@@ -5192,13 +6410,13 @@ class ClusterPipeline:
         plt.tight_layout()
 
         plt.savefig(
-            os.path.join(output, "GS_duration_transition_difference_heatmap.png"),
+            os.path.join(g_vs_s_output, "GS_duration_transition_difference_heatmap.png"),
             dpi=300,
             bbox_inches="tight"
         )
 
         plt.savefig(
-            os.path.join(output, "GS_duration_transition_difference_heatmap.pdf"),
+            os.path.join(g_vs_s_output, "GS_duration_transition_difference_heatmap.pdf"),
             format="pdf",
             dpi=300,
             bbox_inches="tight"
@@ -5267,18 +6485,392 @@ class ClusterPipeline:
         cbar.set_label("P(G tracks) - P(S tracks)")
 
         plt.savefig(
-            os.path.join(output, "GS_duration_transition_difference_circlegraph.png"),
-            dpi=300,
-            bbox_inches="tight"
-        )
-
-        plt.savefig(
-            os.path.join(output, "GS_duration_transition_difference_circlegraph.pdf"),
+            os.path.join(g_vs_s_output, "GS_duration_transition_difference_circlegraph.pdf"),
             format="pdf",
             bbox_inches="tight"
         )
 
         plt.close()
+
+        # --------------------------------------------------
+        # INTERACTION-HISTORY FILTERED DURATION TRANSITIONS
+        # --------------------------------------------------
+
+        def plot_history_duration_comparison(
+            comparison_name,
+            comparison_output,
+            group_a_label,
+            group_a_filter,
+            group_b_label,
+            group_b_filter,
+            difference_label,
+            heatmap_title,
+            circle_title
+        ):
+
+            labelled = []
+
+            group_a = transitions[group_a_filter(transitions)].copy()
+            group_a["history_group"] = group_a_label
+            labelled.append(group_a)
+
+            group_b = transitions[group_b_filter(transitions)].copy()
+            group_b["history_group"] = group_b_label
+            labelled.append(group_b)
+
+            history_transitions = pd.concat(labelled, ignore_index=True)
+
+            raw_path = os.path.join(
+                comparison_output,
+                f"GS_duration_transition_{comparison_name}_raw.csv"
+            )
+            history_transitions.to_csv(raw_path, index=False)
+
+            count_summary = (
+                history_transitions
+                .groupby(["history_group", "larva_type", "partner_type", "next_partner_type"])
+                .size()
+                .reset_index(name="n_transitions")
+            )
+            count_summary.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_filter_counts.csv"
+                ),
+                index=False
+            )
+
+            history_video_probs = []
+
+            for (file, history_group), dsub in history_transitions.groupby(["file", "history_group"]):
+
+                C = (
+                    dsub.groupby(["from_dur", "to_dur"])
+                    .size()
+                    .unstack(fill_value=0)
+                    .reindex(index=dur_order, columns=dur_order, fill_value=0)
+                )
+
+                P = C.div(C.sum(axis=1), axis=0).fillna(0)
+
+                for from_dur in dur_order:
+                    for to_dur in dur_order:
+                        history_video_probs.append({
+                            "file": file,
+                            "history_group": history_group,
+                            "from_dur": from_dur,
+                            "to_dur": to_dur,
+                            "probability": P.loc[from_dur, to_dur]
+                        })
+
+            history_video_probs = pd.DataFrame(history_video_probs)
+
+            if history_video_probs.empty:
+                print(f"No {comparison_name} duration transitions found.")
+                return
+
+            history_video_probs.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_probabilities_per_video.csv"
+                ),
+                index=False
+            )
+
+            history_stats = []
+
+            for from_dur in dur_order:
+                for to_dur in dur_order:
+
+                    sub = history_video_probs[
+                        (history_video_probs["from_dur"] == from_dur) &
+                        (history_video_probs["to_dur"] == to_dur)
+                    ]
+
+                    wide = (
+                        sub.pivot(index="file", columns="history_group", values="probability")
+                        .dropna(subset=[group_a_label, group_b_label])
+                    )
+
+                    a = wide[group_a_label]
+                    b = wide[group_b_label]
+                    diff = a - b
+
+                    if len(diff) >= 2 and not np.allclose(diff, 0):
+                        stat, p = wilcoxon(a, b, alternative="two-sided")
+                    elif len(diff) >= 2 and np.allclose(diff, 0):
+                        stat, p = 0, 1.0
+                    else:
+                        stat, p = np.nan, np.nan
+
+                    history_stats.append({
+                        "from_dur": from_dur,
+                        "to_dur": to_dur,
+                        "W": stat,
+                        "p": p,
+                        f"{group_a_label}_mean": a.mean(),
+                        f"{group_b_label}_mean": b.mean(),
+                        "mean_diff": diff.mean(),
+                        "n_videos": len(diff)
+                    })
+
+            history_stats = pd.DataFrame(history_stats)
+            mask = history_stats["p"].notna()
+
+            if mask.any():
+                history_stats.loc[mask, "p_adj"] = multipletests(
+                    history_stats.loc[mask, "p"],
+                    method="fdr_bh"
+                )[1]
+            else:
+                history_stats["p_adj"] = np.nan
+
+            history_stats.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_statistics.csv"
+                ),
+                index=False
+            )
+
+            C_A, P_A = dur_transition_matrix(
+                history_transitions[history_transitions["history_group"] == group_a_label]
+            )
+            C_B, P_B = dur_transition_matrix(
+                history_transitions[history_transitions["history_group"] == group_b_label]
+            )
+
+            C_A.to_csv(os.path.join(comparison_output, f"GS_duration_transition_{comparison_name}_counts_{group_a_label}.csv"))
+            C_B.to_csv(os.path.join(comparison_output, f"GS_duration_transition_{comparison_name}_counts_{group_b_label}.csv"))
+            P_A.to_csv(os.path.join(comparison_output, f"GS_duration_transition_{comparison_name}_probability_{group_a_label}.csv"))
+            P_B.to_csv(os.path.join(comparison_output, f"GS_duration_transition_{comparison_name}_probability_{group_b_label}.csv"))
+
+            short_group_a_label = group_a_label.replace("_with_", "_").replace("_then_", "_")
+            short_group_b_label = group_b_label.replace("_with_", "_").replace("_then_", "_")
+
+            D_history = (
+                history_stats
+                .pivot(index="from_dur", columns="to_dur", values="mean_diff")
+                .reindex(index=dur_order, columns=dur_order)
+            )
+
+            D_history.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_difference.csv"
+                )
+            )
+
+            values = D_history.to_numpy()
+            finite_values = values[np.isfinite(values)]
+
+            if finite_values.size == 0:
+                print(f"No paired per-video {comparison_name} comparisons found.")
+                return
+
+            P_A_mean = (
+                history_stats
+                .pivot(index="from_dur", columns="to_dur", values=f"{group_a_label}_mean")
+                .reindex(index=dur_order, columns=dur_order)
+            )
+
+            P_B_mean = (
+                history_stats
+                .pivot(index="from_dur", columns="to_dur", values=f"{group_b_label}_mean")
+                .reindex(index=dur_order, columns=dur_order)
+            )
+
+            prob_lim_history = float(np.nanmax([
+                np.nanmax(P_A_mean.to_numpy()),
+                np.nanmax(P_B_mean.to_numpy())
+            ]))
+            if prob_lim_history == 0:
+                prob_lim_history = 1e-6
+
+            plot_probability_circlegraph(
+                P_A_mean,
+                f"GS duration transition likelihood: {group_a_label}",
+                f"P({group_a_label})",
+                f"GS_duration_transition_{comparison_name}_{short_group_a_label}_circlegraph",
+                comparison_output,
+                prob_lim=prob_lim_history
+            )
+
+            plot_probability_circlegraph(
+                P_B_mean,
+                f"GS duration transition likelihood: {group_b_label}",
+                f"P({group_b_label})",
+                f"GS_duration_transition_{comparison_name}_{short_group_b_label}_circlegraph",
+                comparison_output,
+                prob_lim=prob_lim_history
+            )
+
+            history_lim = float(np.nanmax(np.abs(finite_values)))
+            if history_lim == 0:
+                history_lim = 1e-6
+
+            history_norm = mpl.colors.TwoSlopeNorm(
+                vmin=-history_lim,
+                vcenter=0,
+                vmax=history_lim
+            )
+
+            plt.figure(figsize=(5, 4))
+            sns.heatmap(
+                D_history,
+                cmap=cmap,
+                center=0,
+                vmin=-history_lim,
+                vmax=history_lim,
+                square=True,
+                annot=True,
+                fmt=".2f",
+                cbar_kws={"label": difference_label}
+            )
+
+            plt.xlabel("Next duration class")
+            plt.ylabel("Current duration class")
+            plt.title(heatmap_title)
+            plt.tight_layout()
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_difference_heatmap.png"
+                ),
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_difference_heatmap.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+            def history_w_to_lw(w, min_w=0.6, max_w=8.0):
+                return min_w + (abs(w) / history_lim) * (max_w - min_w)
+
+            def history_w_to_alpha(w, min_a=0.2, max_a=0.95):
+                return min_a + (abs(w) / history_lim) * (max_a - min_a)
+
+            G_history = diff_matrix_to_digraph_labels(D_history, thresh=0.02)
+
+            fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+            ax.set_title(circle_title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(G_history, pos, ax=ax, node_size=1200)
+            nx.draw_networkx_labels(G_history, pos, ax=ax, font_size=10)
+
+            for u, v, dct in G_history.edges(data=True):
+
+                w = float(dct["weight"])
+                color = cmap(history_norm(w))
+                lw = history_w_to_lw(w)
+                alpha = history_w_to_alpha(w)
+
+                rad = 0.18 if u != v else 0.45
+
+                patch = FancyArrowPatch(
+                    posA=pos[u],
+                    posB=pos[v],
+                    arrowstyle="-|>",
+                    mutation_scale=16,
+                    connectionstyle=f"arc3,rad={rad}",
+                    linewidth=lw,
+                    color=color,
+                    alpha=alpha,
+                    shrinkA=22,
+                    shrinkB=22
+                )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=cmap, norm=history_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label(difference_label)
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_duration_transition_{comparison_name}_difference_circlegraph.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        plot_history_duration_comparison(
+            comparison_name="within_type",
+            comparison_output=within_type_output,
+            group_a_label="G_with_G_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_S_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with G then G) - P(S with S then S)",
+            heatmap_title="GS duration transition difference: within-type history",
+            circle_title="GS duration transition likelihood: within-type history"
+        )
+
+        plot_history_duration_comparison(
+            comparison_name="mixed_type",
+            comparison_output=mixed_output,
+            group_a_label="G_with_S_then_S",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            group_b_label="S_with_G_then_G",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            difference_label="P(G with S then S) - P(S with G then G)",
+            heatmap_title="GS duration transition difference: mixed-type history",
+            circle_title="GS duration transition likelihood: mixed-type history"
+        )
+
+        plot_history_duration_comparison(
+            comparison_name="mixed_2",
+            comparison_output=mixed_2_output,
+            group_a_label="G_with_S_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_G_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with S then G) - P(S with G then S)",
+            heatmap_title="GS duration transition difference: mixed-2 history",
+            circle_title="GS duration transition likelihood: mixed-2 history"
+        )
 
         print("Saved GS duration transition analysis.")
     
@@ -6479,6 +8071,21 @@ class ClusterPipeline:
             return tuple(sorted((id1, id2)))
 
 
+        def get_gs_pair_type(pair):
+
+            if not isinstance(pair, tuple) or len(pair) != 2:
+                return np.nan
+
+            id1, id2 = pair
+
+            if id1 <= 4 and id2 <= 4:
+                return "S-S"
+            elif id1 >= 5 and id2 >= 5:
+                return "G-G"
+            else:
+                return "G-S"
+
+
         def get_social_context(row):
 
             if row["condition"] == "G":
@@ -6491,17 +8098,39 @@ class ClusterPipeline:
 
                 pair = row["parsed_pair"]
 
-                if pair is None or pd.isna(pair):
+                pair_type = get_gs_pair_type(pair)
+
+                if pd.isna(pair_type):
                     return np.nan
 
-                id1, id2 = pair
-
-                if id1 <= 4 and id2 <= 4:
+                if pair_type == "S-S":
                     return "S(GS)"
-                elif id1 >= 5 and id2 >= 5:
+                elif pair_type == "G-G":
                     return "G(GS)"
                 else:
                     return "G-S"
+
+            return np.nan
+
+
+        def get_umap_group_label(row):
+
+            if row["condition"] == "G":
+                return "G"
+
+            if row["condition"] == "GS" and row["gs_pair_type"] in ["G-S", "G-G"]:
+                return "G in GS"
+
+            return np.nan
+
+
+        def get_umap_iso_label(row):
+
+            if row["condition"] == "S":
+                return "S"
+
+            if row["condition"] == "GS" and row["gs_pair_type"] in ["S-S", "G-S"]:
+                return "S in GS"
 
             return np.nan
 
@@ -6604,6 +8233,7 @@ class ClusterPipeline:
         scores = scores.join(metadata)
 
         scores["parsed_pair"] = scores["Interaction Pair"].apply(parse_pair)
+        scores["gs_pair_type"] = scores["parsed_pair"].apply(get_gs_pair_type)
         scores["social_context"] = scores.apply(get_social_context, axis=1)
 
         scores.to_csv(
@@ -6701,12 +8331,31 @@ class ClusterPipeline:
         # Number of principal components to use
         X_umap = pca_scores[:, :n_pcs]
 
+        # Gentle cluster-assisted UMAP for a clearer visualisation of known clusters.
+        # Set cluster_label_weight to 0 for a fully unsupervised UMAP.
+        cluster_label_weight = 1.0
+        if cluster_label_weight > 0:
+            cluster_labels = pd.get_dummies(metadata[cluster_name].astype(str))
+            cluster_labels = cluster_labels.reindex(vector_df.index).to_numpy(dtype=float)
+            X_umap = np.hstack([X_umap, cluster_labels * cluster_label_weight])
+
         reducer = umap.UMAP(
-            n_neighbors=5,
-            min_dist=0.01,
-            random_state=42
+            n_neighbors=15,
+            min_dist=0.02,
+            metric="euclidean",
+            random_state=42,
+            init="spectral",
+            spread=1.2
         )
 
+        # reducer = umap.UMAP(
+        #         n_neighbors=5,
+        #         min_dist=0.001,
+        #         metric="cosine",
+        #         random_state=42,
+        #         init="spectral",
+        #     )
+        
         embedding = reducer.fit_transform(X_umap)
 
         umap_df = pd.DataFrame(
@@ -6718,7 +8367,10 @@ class ClusterPipeline:
         umap_df = umap_df.join(metadata)
 
         umap_df["parsed_pair"] = umap_df["Interaction Pair"].apply(parse_pair)
+        umap_df["gs_pair_type"] = umap_df["parsed_pair"].apply(get_gs_pair_type)
         umap_df["social_context"] = umap_df.apply(get_social_context, axis=1)
+        umap_df["umap_group"] = umap_df.apply(get_umap_group_label, axis=1)
+        umap_df["umap_iso"] = umap_df.apply(get_umap_iso_label, axis=1)
 
         umap_df.to_csv(
             os.path.join(output, "umap_coordinates.csv")
@@ -6771,19 +8423,30 @@ class ClusterPipeline:
         plt.close()
 
 
+        gs_umap_df = umap_df[
+            (umap_df["condition"] == "GS") &
+            (umap_df["gs_pair_type"].notna())
+        ].copy()
+
         plt.figure(figsize=(7,6))
 
         sns.scatterplot(
-            data=umap_df,
+            data=gs_umap_df,
             x="UMAP1",
             y="UMAP2",
-            hue="social_context",
+            hue="gs_pair_type",
+            hue_order=["S-S", "G-S", "G-G"],
+            palette={
+                "S-S": "royalblue",
+                "G-S": "darkorange",
+                "G-G": "mediumseagreen"
+            },
             s=8,
-            alpha=0.4,
+            alpha=0.5,
             linewidth=0
         )
 
-        plt.title(f"UMAP ({n_pcs} PCs) coloured by social context")
+        plt.title(f"UMAP ({n_pcs} PCs) within GS coloured by interaction type")
 
         plt.tight_layout()
 
@@ -6791,6 +8454,105 @@ class ClusterPipeline:
                     format="pdf",
                     transparent=True)
 
+        plt.close()
+
+
+        plt.figure(figsize=(7,6))
+
+        sns.scatterplot(
+            data=umap_df.dropna(subset=["umap_group"]),
+            x="UMAP1",
+            y="UMAP2",
+            hue="umap_group",
+            hue_order=["G", "G in GS"],
+            palette={
+                "G": "mediumseagreen",
+                "G in GS": "darkorange"
+            },
+            s=8,
+            alpha=0.45,
+            linewidth=0
+        )
+
+        plt.title(f"UMAP ({n_pcs} PCs): G condition vs G-including GS interactions")
+
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(output, "umap_group.pdf"),
+                    format="pdf",
+                    transparent=True)
+
+        plt.close()
+
+
+        plt.figure(figsize=(7,6))
+
+        sns.scatterplot(
+            data=umap_df.dropna(subset=["umap_iso"]),
+            x="UMAP1",
+            y="UMAP2",
+            hue="umap_iso",
+            hue_order=["S", "S in GS"],
+            palette={
+                "S": "royalblue",
+                "S in GS": "darkorange"
+            },
+            s=8,
+            alpha=0.45,
+            linewidth=0
+        )
+
+        plt.title(f"UMAP ({n_pcs} PCs): S condition vs S-including GS interactions")
+
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(output, "umap_iso.pdf"),
+                    format="pdf",
+                    transparent=True)
+
+        plt.close()
+    
+
+
+        ## METHOD SPATIAL_CLUSTER: MAP OUT WHERE EACH INTERACTION OCCURED ON THE PETRI DISH
+    def spatial_cluster(self):
+
+        df = self.df
+
+        df = df[df['Normalized Frame'] == 0] 
+
+        output = os.path.join(self.directory, "spatial")
+        os.makedirs(output, exist_ok=True)
+
+        cluster_ids = sorted(df[cluster_name].unique())
+        num_clusters = len(cluster_ids)
+        cols = 4
+        rows = int(np.ceil(num_clusters / cols))
+
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 3), sharex=True, sharey=True)
+        axes = axes.flatten()
+
+        for idx, cluster_id in enumerate(cluster_ids):
+            ax = axes[idx]
+            cluster_df = df[df[cluster_name] == cluster_id].copy()
+
+            cluster_df["mid_x"] = (cluster_df["Track_1 x_body"] + cluster_df["Track_2 x_body"]) / 2
+            cluster_df["mid_y"] = (cluster_df["Track_1 y_body"] + cluster_df["Track_2 y_body"]) / 2
+
+            ax.scatter(cluster_df['mid_x'], cluster_df['mid_y'], s=10, alpha=0.5, edgecolors='none')
+            ax.set_title(f"Cluster {cluster_id}")
+            ax.set_ylim(0, 1400)
+            ax.set_xlim(0, 1400)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        
+        for i in range(len(cluster_ids), len(axes)):
+            axes[i].axis('off')
+
+        plt.suptitle("Normalised Frame per Cluster", fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        save_path = os.path.join(output, "spatial_plot_per_cluster.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
 
 
@@ -6857,11 +8619,13 @@ if __name__ == "__main__":
 
 
     # pipeline.anchor_partner()
+    # pipeline.grid_videos()
     # pipeline.mean_trajectories()
     # pipeline.raw_trajectories()
     # pipeline.barplots()
     # pipeline.barplot_deviation()
     # pipeline.barplot_deviation_GS_social_experience()
+    # pipeline.GS_pairwise_social_experience_deviation_stats()
     # pipeline.GS_social_experience_cluster_proportions_per_video()
     # pipeline.hierarchal_mean_trace_summary()
     # pipeline.summary_anchor_partner()
@@ -6875,16 +8639,9 @@ if __name__ == "__main__":
     # pipeline.GS_social_experience_over_time_by_cluster()
     # pipeline.G_V_S_duration_transition()
     # pipeline.GS_duration_transition()
-    pipeline.correlation_contact_G_vs_S()
+    # pipeline.correlation_contact_G_vs_S()
     # pipeline.GS_directed_movement_over_time()
     # pipeline.social_context_video_proportion()
     # pipeline.social_context_barplot_deviation()
-    # pipeline.umap(n_pcs=5)
-
-
-
-
-
-
-
-
+    pipeline.umap(n_pcs=5)
+    # pipeline.spatial_cluster()

@@ -25,6 +25,7 @@ condition_labels = {
     'T24-C09': 'SETD1A KD', 
     'T24-C01': 'CUL1 KD', 
     'T25-C07': 'TRIP12 KD',
+    'T24-C08': 'TRIO KD'
 }
 
 
@@ -48,6 +49,7 @@ def plot_percent_in_clusters():
         "SETD1A KD": "#52cdfa",
         "TRIP12 KD": "#52cdfa",
         'CUL1 KD': "#52cdfa",
+        'TRIO KD':"#52cdfa",
 
     }
 
@@ -760,10 +762,10 @@ def plot_cluster_size_vs_nearest_neighbour():
 
 plot_percent_in_clusters()
 plot_number_in_clusters()
-plot_number_of_clusters_over_time()
-plot_average_cluster_size_over_time()
-plot_max_cluster_size_over_time()
-plot_depth_difference_food()
-plot_mean_nearest_neighbour_over_time()
-plot_nearest_neighbour_over_time()
-plot_cluster_size_vs_nearest_neighbour()
+# plot_number_of_clusters_over_time()
+# plot_average_cluster_size_over_time()
+# plot_max_cluster_size_over_time()
+# plot_depth_difference_food()
+# plot_mean_nearest_neighbour_over_time()
+# plot_nearest_neighbour_over_time()
+# plot_cluster_size_vs_nearest_neighbour()
