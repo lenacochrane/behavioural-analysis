@@ -70,8 +70,8 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=10)
 
 
-    # analysis.nearest_neighbour()
-    analysis.interactions()
+    analysis.nearest_neighbour()
+    # analysis.interactions()
     # analysis.interaction_types()
     # analysis.interaction_types_closest()
     # analysis.interaction_type_bout()
@@ -84,20 +84,7 @@ def perform_analysis(directory):
     # analysis.GH_SI_interaction_types_closest(threshold=1) # has track id, speed, acceleration, angles etc
     
 
-    ## HEAD-HEAD ANALYSIS
-    # analysis.head_head_interaction_type()
-    # analysis.head_head_interaction_type_over_time()
-    # analysis.interaction_types()
-    # analysis.euclidean_distance()
-    # analysis.trajectory()
-    # analysis.speed()
-    # analysis.acceleration()
-    # analysis.nearest_neighbour()
-    # analysis.contacts()
-    # analysis.movement_direction()
-    # analysis.head_head_approach_angle()
-    # analysis.head_head_first_contact_kinematics()
-    # analysis.head_head_contacts_kinematics_over_time()
+
     
 
         
@@ -148,15 +135,18 @@ if __name__ == "__main__":
         run_gui()    
 
 
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/vic")
+
+
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n1/socially-isolated")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/group-housed")
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
 
 
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
-    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
+    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')

@@ -5588,11 +5588,11 @@ class ClusterPipeline:
 
         counts["total"] = (
             counts
-            .groupby(["file", "cluster", "time_bin"])["count"]
+            .groupby(["file", "social_experience", "time_bin"])["count"]
             .transform("sum")
         )
 
-        counts["fraction"] = (
+        counts["proportion"] = (
             counts["count"] /
             counts["total"]
         ).fillna(0)
@@ -5607,8 +5607,8 @@ class ClusterPipeline:
             counts
             .groupby(["cluster", "social_experience", "time_bin"])
             .agg(
-                mean_fraction=("fraction","mean"),
-                sd_fraction=("fraction","std")
+                mean_proportion=("proportion", "mean"),
+                sd_proportion=("proportion", "std")
             )
             .reset_index()
         )
@@ -5644,7 +5644,7 @@ class ClusterPipeline:
             sns.lineplot(
                 data=plot_df,
                 x="time_bin",
-                y="mean_fraction",
+                y="mean_proportion",
                 hue="social_experience",
                 hue_order=social_order,
                 palette=palette,
@@ -6000,7 +6000,310 @@ class ClusterPipeline:
         plt.close()
 
         print("Saved G vs S duration transition analysis.")
-    
+
+
+
+
+    def G_V_S_apetitive_aversive_transition(self):
+
+        df = self.df.copy()
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "G_V_S_apetitive_aversive_transition")
+        os.makedirs(output, exist_ok=True)
+
+        valence_map = {
+            1: "apetitive",
+            2: "aversive",
+            3: "apetitive",
+            4: "apetitive",
+            5: "aversive",
+            6: "apetitive",
+            7: "apetitive",
+            8: "aversive",
+            9: "apetitive",
+            10: "aversive",
+            11: "aversive",
+            12: "aversive",
+        }
+
+        valence_order = ["apetitive", "aversive"]
+
+        df = df[
+            (df["condition"].isin(["G", "S"])) &
+            (np.isclose(df["Normalized Frame"], 0))
+        ].copy()
+
+        if df.empty:
+            print("No G/S interactions found.")
+            return
+
+
+        df["cluster"] = df[cluster_name].astype(int)
+
+        transitions = (
+            df
+            .sort_values(["condition", "file", "Frame", "interaction_id"])
+            .copy()
+        )
+
+        transitions["next_cluster"] = (
+            transitions
+            .groupby(["condition", "file"])["cluster"]
+            .shift(-1)
+        )
+
+        transitions = transitions.dropna(subset=["next_cluster"]).copy()
+        transitions["next_cluster"] = transitions["next_cluster"].astype(int)
+
+        if transitions.empty:
+            print("No apetitive/aversive transitions found.")
+            return
+
+        transitions["from_val"] = transitions["cluster"].map(valence_map)
+        transitions["to_val"] = transitions["next_cluster"].map(valence_map)
+        transitions = transitions.dropna(subset=["from_val", "to_val"])
+
+        transitions.to_csv(
+            os.path.join(output, "G_vs_S_apetitive_aversive_transitions_raw.csv"),
+            index=False
+        )
+
+
+        # --------------------------------------------------
+        # PER-VIDEO TRANSITION MATRICES
+        # --------------------------------------------------
+
+        video_probs = []
+
+        for (condition, file), dsub in transitions.groupby(["condition", "file"]):
+
+            C = (
+                dsub.groupby(["from_val", "to_val"])
+                .size()
+                .unstack(fill_value=0)
+                .reindex(index=valence_order, columns=valence_order, fill_value=0)
+            )
+
+            P = C.div(C.sum(axis=1), axis=0).fillna(0)
+
+            for from_val in valence_order:
+                for to_val in valence_order:
+
+                    video_probs.append({
+                        "condition": condition,
+                        "file": file,
+                        "from_val": from_val,
+                        "to_val": to_val,
+                        "probability": P.loc[from_val, to_val]
+                    })
+
+        video_probs = pd.DataFrame(video_probs)
+
+        video_probs.to_csv(
+            os.path.join(output, "apetitive_aversive_transition_probabilities_per_video.csv"),
+            index=False
+        )
+
+
+
+        stats = []
+
+        for from_val in valence_order:
+            for to_val in valence_order:
+
+                g = video_probs[
+                    (video_probs["condition"] == "G") &
+                    (video_probs["from_val"] == from_val) &
+                    (video_probs["to_val"] == to_val)
+                ]["probability"]
+
+                s = video_probs[
+                    (video_probs["condition"] == "S") &
+                    (video_probs["from_val"] == from_val) &
+                    (video_probs["to_val"] == to_val)
+                ]["probability"]
+
+                if len(g) > 0 and len(s) > 0:
+
+                    stat, p = mannwhitneyu(
+                        g,
+                        s,
+                        alternative="two-sided"
+                    )
+
+                else:
+                    stat = np.nan
+                    p = np.nan
+
+                stats.append({
+                    "from_val": from_val,
+                    "to_val": to_val,
+                    "U": stat,
+                    "p": p,
+                    "G_mean": g.mean(),
+                    "S_mean": s.mean()
+                })
+
+        stats = pd.DataFrame(stats)
+
+        mask = stats["p"].notna()
+
+        stats.loc[mask, "p_adj"] = multipletests(
+            stats.loc[mask, "p"],
+            method="fdr_bh"
+        )[1]
+
+        stats.to_csv(
+            os.path.join(output, "apetitive_aversive_transition_statistics.csv"),
+            index=False
+        )
+
+
+
+
+        def val_transition_matrix(dsub):
+            C = (
+                dsub.groupby(["from_val", "to_val"])
+                .size()
+                .unstack(fill_value=0)
+                .reindex(index=valence_order, columns=valence_order, fill_value=0)
+            )
+            P = C.div(C.sum(axis=1), axis=0).fillna(0)
+            return C, P
+
+        C_S, P_S = val_transition_matrix(transitions[transitions["condition"] == "S"])
+        C_G, P_G = val_transition_matrix(transitions[transitions["condition"] == "G"])
+
+        C_S.to_csv(os.path.join(output, "apetitive_aversive_transition_counts_S.csv"))
+        C_G.to_csv(os.path.join(output, "apetitive_aversive_transition_counts_G.csv"))
+        P_S.to_csv(os.path.join(output, "apetitive_aversive_transition_probability_S.csv"))
+        P_G.to_csv(os.path.join(output, "apetitive_aversive_transition_probability_G.csv"))
+
+        # D = P_G - P_S
+
+        D = (
+            stats
+            .pivot(index="from_val", columns="to_val", values="G_mean")
+            .reindex(index=valence_order, columns=valence_order)
+            -
+            stats
+            .pivot(index="from_val", columns="to_val", values="S_mean")
+            .reindex(index=valence_order, columns=valence_order)
+        )
+
+
+        D.to_csv(os.path.join(output, "apetitive_aversive_transition_difference_G_minus_S.csv"))
+
+        lim = float(np.nanmax(np.abs(D.to_numpy())))
+        if lim == 0:
+            lim = 1e-6
+
+        cmap = plt.cm.RdBu
+        norm = mpl.colors.TwoSlopeNorm(vmin=-lim, vcenter=0, vmax=lim)
+
+        plt.figure(figsize=(5, 4))
+        sns.heatmap(
+            D,
+            cmap=cmap,
+            center=0,
+            vmin=-lim,
+            vmax=lim,
+            square=True,
+            annot=True,
+            fmt=".2f",
+            cbar_kws={"label": "P(G) - P(S)"}
+        )
+        plt.xlabel("Next valence class")
+        plt.ylabel("Current valence class")
+        plt.title("Apetitive/aversive transition difference: G - S")
+        plt.tight_layout()
+
+        plt.savefig(
+            os.path.join(output, "apetitive_aversive_transition_difference_heatmap.png"),
+            dpi=300,
+            bbox_inches="tight"
+        )
+        plt.savefig(
+            os.path.join(output, "apetitive_aversive_transition_difference_heatmap.pdf"),
+            format="pdf",
+            dpi=300,
+            bbox_inches="tight"
+        )
+        plt.close()
+
+        nodes = valence_order
+        pos = nx.circular_layout(nodes)
+
+        def w_to_lw(w, min_w=0.6, max_w=8.0):
+            return min_w + (abs(w) / lim) * (max_w - min_w)
+
+        def w_to_alpha(w, min_a=0.2, max_a=0.95):
+            return min_a + (abs(w) / lim) * (max_a - min_a)
+
+        def diff_matrix_to_digraph_labels(D, thresh=0.02):
+            G = nx.DiGraph()
+            for c in D.index:
+                G.add_node(c)
+            for i in D.index:
+                for j in D.columns:
+                    w = float(D.loc[i, j])
+                    if abs(w) >= thresh:
+                        G.add_edge(i, j, weight=w)
+            return G
+
+        Gd = diff_matrix_to_digraph_labels(D, thresh=0.02)
+
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        ax.set_title("Apetitive/aversive transition likelihood: G - S")
+        ax.axis("off")
+
+        nx.draw_networkx_nodes(Gd, pos, ax=ax, node_size=1200)
+        nx.draw_networkx_labels(Gd, pos, ax=ax, font_size=10)
+
+        for u, v, dct in Gd.edges(data=True):
+            w = float(dct["weight"])
+            color = cmap(norm(w))
+            lw = w_to_lw(w)
+            alpha = w_to_alpha(w)
+
+            rad = 0.18 if u != v else 0.45
+
+            patch = FancyArrowPatch(
+                posA=pos[u],
+                posB=pos[v],
+                arrowstyle="-|>",
+                mutation_scale=16,
+                connectionstyle=f"arc3,rad={rad}",
+                linewidth=lw,
+                color=color,
+                alpha=alpha,
+                shrinkA=22,
+                shrinkB=22
+            )
+
+            ax.add_patch(patch)
+
+        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+
+        cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+        cbar = fig.colorbar(sm, cax=cax)
+        cbar.set_label("P(G) - P(S)")
+
+        plt.savefig(
+            os.path.join(output, "apetitive_aversive_transition_difference_circlegraph.png"),
+            dpi=300,
+            bbox_inches="tight"
+        )
+        plt.savefig(
+            os.path.join(output, "apetitive_aversive_transition_difference_circlegraph.pdf"),
+            format="pdf",
+            bbox_inches="tight"
+        )
+        plt.close()
+
+        print("Saved G vs S apetitive/aversive transition analysis.")
 
 
 
@@ -6873,7 +7176,884 @@ class ClusterPipeline:
         )
 
         print("Saved GS duration transition analysis.")
-    
+
+
+
+
+    def GS_apetitive_aversive_transition(self):
+
+
+        df = self.df.copy()
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "GS_apetitive_aversive_transition")
+        os.makedirs(output, exist_ok=True)
+        g_vs_s_output = os.path.join(output, "G_V_S")
+        within_type_output = os.path.join(output, "within_type")
+        mixed_output = os.path.join(output, "mixed")
+        mixed_2_output = os.path.join(output, "mixed_2")
+        os.makedirs(g_vs_s_output, exist_ok=True)
+        os.makedirs(within_type_output, exist_ok=True)
+        os.makedirs(mixed_output, exist_ok=True)
+        os.makedirs(mixed_2_output, exist_ok=True)
+
+        valence_map = {
+            1: "apetitive",
+            2: "aversive",
+            3: "apetitive",
+            4: "apetitive",
+            5: "aversive",
+            6: "apetitive",
+            7: "apetitive",
+            8: "aversive",
+            9: "apetitive",
+            10: "aversive",
+            11: "aversive",
+            12: "aversive",
+        }
+
+        valence_order = ["apetitive", "aversive"]
+
+        df = df[
+            (df["condition"] == "GS") &
+            (np.isclose(df["Normalized Frame"], 0))
+        ].copy()
+
+        if df.empty:
+            print("No GS interactions found.")
+            return
+
+        def parse_pair(pair):
+            if pd.isna(pair):
+                return None
+            if isinstance(pair, str):
+                pair = pair.replace("(", "").replace(")", "").replace(" ", "")
+                id1, id2 = pair.split(",")
+                return tuple(sorted((int(id1), int(id2))))
+            id1, id2 = pair
+            return tuple(sorted((int(id1), int(id2))))
+
+        def larva_type(track_id):
+            return "S" if int(track_id) <= 4 else "G"
+
+        df["parsed_pair"] = df["Interaction Pair"].apply(parse_pair)
+        df = df.dropna(subset=["parsed_pair"])
+        df["cluster"] = df[cluster_name].astype(int)
+
+        rows = []
+
+        for _, row in df.iterrows():
+            id1, id2 = row["parsed_pair"]
+
+            rows.append({
+                "file": row["file"],
+                "interaction_id": row["interaction_id"],
+                "track_id": id1,
+                "larva_type": larva_type(id1),
+                "partner_id": id2,
+                "partner_type": larva_type(id2),
+                "time": row["Frame"],
+                "cluster": row["cluster"]
+            })
+
+            rows.append({
+                "file": row["file"],
+                "interaction_id": row["interaction_id"],
+                "track_id": id2,
+                "larva_type": larva_type(id2),
+                "partner_id": id1,
+                "partner_type": larva_type(id1),
+                "time": row["Frame"],
+                "cluster": row["cluster"]
+            })
+
+        expanded = pd.DataFrame(rows)
+
+        expanded = expanded.sort_values(
+            ["file", "track_id", "time", "interaction_id"]
+        )
+
+        expanded["next_cluster"] = (
+            expanded
+            .groupby(["file", "track_id"])["cluster"]
+            .shift(-1)
+        )
+        expanded["next_partner_id"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_id"]
+            .shift(-1)
+        )
+        expanded["next_partner_type"] = (
+            expanded
+            .groupby(["file", "track_id"])["partner_type"]
+            .shift(-1)
+        )
+
+        transitions = expanded.dropna(subset=["next_cluster"]).copy()
+        transitions["next_cluster"] = transitions["next_cluster"].astype(int)
+
+        if transitions.empty:
+            print("No GS apetitive/aversive transitions found.")
+            return
+
+        transitions["from_val"] = transitions["cluster"].map(valence_map)
+        transitions["to_val"] = transitions["next_cluster"].map(valence_map)
+        transitions = transitions.dropna(subset=["from_val", "to_val"])
+
+        transitions.to_csv(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transitions_raw.csv"),
+            index=False
+        )
+
+        # --------------------------------------------------
+        # PER-VIDEO TRANSITION PROBABILITIES
+        # --------------------------------------------------
+
+        video_probs = []
+
+        for (file, larva_type_id), dsub in transitions.groupby(["file", "larva_type"]):
+
+            C = (
+                dsub.groupby(["from_val", "to_val"])
+                .size()
+                .unstack(fill_value=0)
+                .reindex(index=valence_order, columns=valence_order, fill_value=0)
+            )
+
+            P = C.div(C.sum(axis=1), axis=0).fillna(0)
+
+            for from_val in valence_order:
+                for to_val in valence_order:
+                    video_probs.append({
+                        "file": file,
+                        "larva_type": larva_type_id,
+                        "from_val": from_val,
+                        "to_val": to_val,
+                        "probability": P.loc[from_val, to_val]
+                    })
+
+        video_probs = pd.DataFrame(video_probs)
+
+        video_probs.to_csv(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_probabilities_per_video.csv"),
+            index=False
+        )
+
+        # --------------------------------------------------
+        # STATS: paired G tracks vs S tracks within each GS video
+        # --------------------------------------------------
+
+        stats = []
+
+        for from_val in valence_order:
+            for to_val in valence_order:
+
+                sub = video_probs[
+                    (video_probs["from_val"] == from_val) &
+                    (video_probs["to_val"] == to_val)
+                ]
+
+                wide = (
+                    sub.pivot(index="file", columns="larva_type", values="probability")
+                    .dropna(subset=["G", "S"])
+                )
+
+                g = wide["G"]
+                s = wide["S"]
+                diff = g - s
+
+                if len(diff) >= 2 and not np.allclose(diff, 0):
+                    stat, p = wilcoxon(g, s, alternative="two-sided")
+                elif len(diff) >= 2 and np.allclose(diff, 0):
+                    stat, p = 0, 1.0
+                else:
+                    stat, p = np.nan, np.nan
+
+                stats.append({
+                    "from_val": from_val,
+                    "to_val": to_val,
+                    "W": stat,
+                    "p": p,
+                    "G_mean": g.mean(),
+                    "S_mean": s.mean(),
+                    "mean_diff_G_minus_S": diff.mean(),
+                    "n_videos": len(diff)
+                })
+
+        stats = pd.DataFrame(stats)
+
+        mask = stats["p"].notna()
+
+        stats.loc[mask, "p_adj"] = multipletests(
+            stats.loc[mask, "p"],
+            method="fdr_bh"
+        )[1]
+
+        stats.to_csv(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_statistics.csv"),
+            index=False
+        )
+
+        # --------------------------------------------------
+        # POOLED MATRICES, SAVED ONLY
+        # --------------------------------------------------
+
+        def val_transition_matrix(dsub):
+            C = (
+                dsub.groupby(["from_val", "to_val"])
+                .size()
+                .unstack(fill_value=0)
+                .reindex(index=valence_order, columns=valence_order, fill_value=0)
+            )
+            P = C.div(C.sum(axis=1), axis=0).fillna(0)
+            return C, P
+
+        C_S, P_S = val_transition_matrix(transitions[transitions["larva_type"] == "S"])
+        C_G, P_G = val_transition_matrix(transitions[transitions["larva_type"] == "G"])
+
+        C_S.to_csv(os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_counts_S_tracks.csv"))
+        C_G.to_csv(os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_counts_G_tracks.csv"))
+        P_S.to_csv(os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_probability_S_tracks.csv"))
+        P_G.to_csv(os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_probability_G_tracks.csv"))
+
+        nodes = valence_order
+        pos = nx.circular_layout(nodes)
+
+        def probability_matrix_to_digraph(P, thresh=0.02):
+            G = nx.DiGraph()
+            for c in P.index:
+                G.add_node(c)
+            for i in P.index:
+                for j in P.columns:
+                    w = float(P.loc[i, j])
+                    if w >= thresh:
+                        G.add_edge(i, j, weight=w)
+            return G
+
+        def plot_probability_circlegraph(P, title, colorbar_label, filename_stem, save_dir, prob_lim=None, thresh=0.02, prob_cmap=None):
+            values = P.to_numpy()
+            finite_values = values[np.isfinite(values)]
+
+            if finite_values.size == 0:
+                print(f"No finite values found for {title}.")
+                return
+
+            if prob_lim is None:
+                prob_lim = float(np.nanmax(finite_values))
+            if prob_lim == 0:
+                prob_lim = 1e-6
+
+            prob_norm = mpl.colors.Normalize(vmin=0, vmax=prob_lim)
+            if prob_cmap is None:
+                prob_cmap = plt.cm.viridis
+
+            def prob_w_to_lw(w, min_w=0.6, max_w=8.0):
+                return min_w + (w / prob_lim) * (max_w - min_w)
+
+            def prob_w_to_alpha(w, min_a=0.2, max_a=0.95):
+                return min_a + (w / prob_lim) * (max_a - min_a)
+
+            G_prob = probability_matrix_to_digraph(P, thresh=thresh)
+
+            fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+            ax.set_title(title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(G_prob, pos, ax=ax, node_size=1200)
+            nx.draw_networkx_labels(G_prob, pos, ax=ax, font_size=10)
+
+            for u, v, dct in G_prob.edges(data=True):
+
+                w = float(dct["weight"])
+                color = prob_cmap(prob_norm(w))
+                lw = prob_w_to_lw(w)
+                alpha = prob_w_to_alpha(w)
+
+                rad = 0.18 if u != v else 0.45
+
+                patch = FancyArrowPatch(
+                    posA=pos[u],
+                    posB=pos[v],
+                    arrowstyle="-|>",
+                    mutation_scale=16,
+                    connectionstyle=f"arc3,rad={rad}",
+                    linewidth=lw,
+                    color=color,
+                    alpha=alpha,
+                    shrinkA=22,
+                    shrinkB=22
+                )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=prob_cmap, norm=prob_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label(colorbar_label)
+
+            plt.savefig(
+                os.path.join(save_dir, f"{filename_stem}.pdf"),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        P_S_mean = (
+            stats
+            .pivot(index="from_val", columns="to_val", values="S_mean")
+            .reindex(index=valence_order, columns=valence_order)
+        )
+
+        P_G_mean = (
+            stats
+            .pivot(index="from_val", columns="to_val", values="G_mean")
+            .reindex(index=valence_order, columns=valence_order)
+        )
+
+        if not (
+            np.isfinite(P_S_mean.to_numpy()).any() and
+            np.isfinite(P_G_mean.to_numpy()).any()
+        ):
+            print("No paired per-video G/S apetitive/aversive comparisons found.")
+            return
+
+        prob_lim_main = float(np.nanmax([
+            np.nanmax(P_S_mean.to_numpy()),
+            np.nanmax(P_G_mean.to_numpy())
+        ]))
+        if prob_lim_main == 0:
+            prob_lim_main = 1e-6
+
+        plot_probability_circlegraph(
+            P_S_mean,
+            "GS apetitive/aversive transition likelihood: S tracks",
+            "P(S tracks)",
+            "GS_apetitive_aversive_transition_S_tracks_circlegraph",
+            g_vs_s_output,
+            prob_lim=prob_lim_main,
+            prob_cmap=plt.cm.Reds
+        )
+
+        plot_probability_circlegraph(
+            P_G_mean,
+            "GS apetitive/aversive transition likelihood: G tracks",
+            "P(G tracks)",
+            "GS_apetitive_aversive_transition_G_tracks_circlegraph",
+            g_vs_s_output,
+            prob_lim=prob_lim_main,
+            prob_cmap=plt.cm.Blues
+        )
+
+        # --------------------------------------------------
+        # D = mean per-video G probability - mean per-video S probability
+        # --------------------------------------------------
+
+        D = (
+            stats
+            .pivot(index="from_val", columns="to_val", values="mean_diff_G_minus_S")
+            .reindex(index=valence_order, columns=valence_order)
+        )
+
+        D.to_csv(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_difference_G_minus_S.csv")
+        )
+
+        lim = float(np.nanmax(np.abs(D.to_numpy())))
+        if lim == 0:
+            lim = 1e-6
+
+        cmap = plt.cm.RdBu
+        norm = mpl.colors.TwoSlopeNorm(vmin=-lim, vcenter=0, vmax=lim)
+
+        plt.figure(figsize=(5, 4))
+        sns.heatmap(
+            D,
+            cmap=cmap,
+            center=0,
+            vmin=-lim,
+            vmax=lim,
+            square=True,
+            annot=True,
+            fmt=".2f",
+            cbar_kws={"label": "P(G tracks) - P(S tracks)"}
+        )
+
+        plt.xlabel("Next valence class")
+        plt.ylabel("Current valence class")
+        plt.title("GS apetitive/aversive transition difference: G tracks - S tracks")
+        plt.tight_layout()
+
+        plt.savefig(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_difference_heatmap.png"),
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+        plt.savefig(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_difference_heatmap.pdf"),
+            format="pdf",
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+        plt.close()
+
+        nodes = valence_order
+        pos = nx.circular_layout(nodes)
+
+        def w_to_lw(w, min_w=0.6, max_w=8.0):
+            return min_w + (abs(w) / lim) * (max_w - min_w)
+
+        def w_to_alpha(w, min_a=0.2, max_a=0.95):
+            return min_a + (abs(w) / lim) * (max_a - min_a)
+
+        def diff_matrix_to_digraph_labels(D, thresh=0.02):
+            G = nx.DiGraph()
+            for c in D.index:
+                G.add_node(c)
+            for i in D.index:
+                for j in D.columns:
+                    w = float(D.loc[i, j])
+                    if abs(w) >= thresh:
+                        G.add_edge(i, j, weight=w)
+            return G
+
+        Gd = diff_matrix_to_digraph_labels(D, thresh=0.02)
+
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        ax.set_title("GS apetitive/aversive transition likelihood: G tracks - S tracks")
+        ax.axis("off")
+
+        nx.draw_networkx_nodes(Gd, pos, ax=ax, node_size=1200)
+        nx.draw_networkx_labels(Gd, pos, ax=ax, font_size=10)
+
+        for u, v, dct in Gd.edges(data=True):
+
+            w = float(dct["weight"])
+            color = cmap(norm(w))
+            lw = w_to_lw(w)
+            alpha = w_to_alpha(w)
+
+            rad = 0.18 if u != v else 0.45
+
+            patch = FancyArrowPatch(
+                posA=pos[u],
+                posB=pos[v],
+                arrowstyle="-|>",
+                mutation_scale=16,
+                connectionstyle=f"arc3,rad={rad}",
+                linewidth=lw,
+                color=color,
+                alpha=alpha,
+                shrinkA=22,
+                shrinkB=22
+            )
+
+            ax.add_patch(patch)
+
+        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+
+        cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+        cbar = fig.colorbar(sm, cax=cax)
+        cbar.set_label("P(G tracks) - P(S tracks)")
+
+        plt.savefig(
+            os.path.join(g_vs_s_output, "GS_apetitive_aversive_transition_difference_circlegraph.pdf"),
+            format="pdf",
+            bbox_inches="tight"
+        )
+
+        plt.close()
+
+        # --------------------------------------------------
+        # INTERACTION-HISTORY FILTERED APETITIVE/AVERSIVE TRANSITIONS
+        # --------------------------------------------------
+
+        def plot_history_valence_comparison(
+            comparison_name,
+            comparison_output,
+            group_a_label,
+            group_a_filter,
+            group_b_label,
+            group_b_filter,
+            difference_label,
+            heatmap_title,
+            circle_title
+        ):
+
+            labelled = []
+
+            group_a = transitions[group_a_filter(transitions)].copy()
+            group_a["history_group"] = group_a_label
+            labelled.append(group_a)
+
+            group_b = transitions[group_b_filter(transitions)].copy()
+            group_b["history_group"] = group_b_label
+            labelled.append(group_b)
+
+            history_transitions = pd.concat(labelled, ignore_index=True)
+
+            raw_path = os.path.join(
+                comparison_output,
+                f"GS_apetitive_aversive_transition_{comparison_name}_raw.csv"
+            )
+            history_transitions.to_csv(raw_path, index=False)
+
+            count_summary = (
+                history_transitions
+                .groupby(["history_group", "larva_type", "partner_type", "next_partner_type"])
+                .size()
+                .reset_index(name="n_transitions")
+            )
+            count_summary.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_filter_counts.csv"
+                ),
+                index=False
+            )
+
+            history_video_probs = []
+
+            for (file, history_group), dsub in history_transitions.groupby(["file", "history_group"]):
+
+                C = (
+                    dsub.groupby(["from_val", "to_val"])
+                    .size()
+                    .unstack(fill_value=0)
+                    .reindex(index=valence_order, columns=valence_order, fill_value=0)
+                )
+
+                P = C.div(C.sum(axis=1), axis=0).fillna(0)
+
+                for from_val in valence_order:
+                    for to_val in valence_order:
+                        history_video_probs.append({
+                            "file": file,
+                            "history_group": history_group,
+                            "from_val": from_val,
+                            "to_val": to_val,
+                            "probability": P.loc[from_val, to_val]
+                        })
+
+            history_video_probs = pd.DataFrame(history_video_probs)
+
+            if history_video_probs.empty:
+                print(f"No {comparison_name} apetitive/aversive transitions found.")
+                return
+
+            history_video_probs.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_probabilities_per_video.csv"
+                ),
+                index=False
+            )
+
+            history_stats = []
+
+            for from_val in valence_order:
+                for to_val in valence_order:
+
+                    sub = history_video_probs[
+                        (history_video_probs["from_val"] == from_val) &
+                        (history_video_probs["to_val"] == to_val)
+                    ]
+
+                    wide = (
+                        sub.pivot(index="file", columns="history_group", values="probability")
+                        .dropna(subset=[group_a_label, group_b_label])
+                    )
+
+                    a = wide[group_a_label]
+                    b = wide[group_b_label]
+                    diff = a - b
+
+                    if len(diff) >= 2 and not np.allclose(diff, 0):
+                        stat, p = wilcoxon(a, b, alternative="two-sided")
+                    elif len(diff) >= 2 and np.allclose(diff, 0):
+                        stat, p = 0, 1.0
+                    else:
+                        stat, p = np.nan, np.nan
+
+                    history_stats.append({
+                        "from_val": from_val,
+                        "to_val": to_val,
+                        "W": stat,
+                        "p": p,
+                        f"{group_a_label}_mean": a.mean(),
+                        f"{group_b_label}_mean": b.mean(),
+                        "mean_diff": diff.mean(),
+                        "n_videos": len(diff)
+                    })
+
+            history_stats = pd.DataFrame(history_stats)
+            mask = history_stats["p"].notna()
+
+            if mask.any():
+                history_stats.loc[mask, "p_adj"] = multipletests(
+                    history_stats.loc[mask, "p"],
+                    method="fdr_bh"
+                )[1]
+            else:
+                history_stats["p_adj"] = np.nan
+
+            history_stats.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_statistics.csv"
+                ),
+                index=False
+            )
+
+            C_A, P_A = val_transition_matrix(
+                history_transitions[history_transitions["history_group"] == group_a_label]
+            )
+            C_B, P_B = val_transition_matrix(
+                history_transitions[history_transitions["history_group"] == group_b_label]
+            )
+
+            C_A.to_csv(os.path.join(comparison_output, f"GS_apetitive_aversive_transition_{comparison_name}_counts_{group_a_label}.csv"))
+            C_B.to_csv(os.path.join(comparison_output, f"GS_apetitive_aversive_transition_{comparison_name}_counts_{group_b_label}.csv"))
+            P_A.to_csv(os.path.join(comparison_output, f"GS_apetitive_aversive_transition_{comparison_name}_probability_{group_a_label}.csv"))
+            P_B.to_csv(os.path.join(comparison_output, f"GS_apetitive_aversive_transition_{comparison_name}_probability_{group_b_label}.csv"))
+
+            short_group_a_label = group_a_label.replace("_with_", "_").replace("_then_", "_")
+            short_group_b_label = group_b_label.replace("_with_", "_").replace("_then_", "_")
+
+            D_history = (
+                history_stats
+                .pivot(index="from_val", columns="to_val", values="mean_diff")
+                .reindex(index=valence_order, columns=valence_order)
+            )
+
+            D_history.to_csv(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_difference.csv"
+                )
+            )
+
+            values = D_history.to_numpy()
+            finite_values = values[np.isfinite(values)]
+
+            if finite_values.size == 0:
+                print(f"No paired per-video {comparison_name} comparisons found.")
+                return
+
+            P_A_mean = (
+                history_stats
+                .pivot(index="from_val", columns="to_val", values=f"{group_a_label}_mean")
+                .reindex(index=valence_order, columns=valence_order)
+            )
+
+            P_B_mean = (
+                history_stats
+                .pivot(index="from_val", columns="to_val", values=f"{group_b_label}_mean")
+                .reindex(index=valence_order, columns=valence_order)
+            )
+
+            prob_lim_history = float(np.nanmax([
+                np.nanmax(P_A_mean.to_numpy()),
+                np.nanmax(P_B_mean.to_numpy())
+            ]))
+            if prob_lim_history == 0:
+                prob_lim_history = 1e-6
+
+            plot_probability_circlegraph(
+                P_A_mean,
+                f"GS apetitive/aversive transition likelihood: {group_a_label}",
+                f"P({group_a_label})",
+                f"GS_apetitive_aversive_transition_{comparison_name}_{short_group_a_label}_circlegraph",
+                comparison_output,
+                prob_lim=prob_lim_history,
+                prob_cmap=plt.cm.Blues
+            )
+
+            plot_probability_circlegraph(
+                P_B_mean,
+                f"GS apetitive/aversive transition likelihood: {group_b_label}",
+                f"P({group_b_label})",
+                f"GS_apetitive_aversive_transition_{comparison_name}_{short_group_b_label}_circlegraph",
+                comparison_output,
+                prob_lim=prob_lim_history,
+                prob_cmap=plt.cm.Reds
+            )
+
+            history_lim = float(np.nanmax(np.abs(finite_values)))
+            if history_lim == 0:
+                history_lim = 1e-6
+
+            history_norm = mpl.colors.TwoSlopeNorm(
+                vmin=-history_lim,
+                vcenter=0,
+                vmax=history_lim
+            )
+
+            plt.figure(figsize=(5, 4))
+            sns.heatmap(
+                D_history,
+                cmap=cmap,
+                center=0,
+                vmin=-history_lim,
+                vmax=history_lim,
+                square=True,
+                annot=True,
+                fmt=".2f",
+                cbar_kws={"label": difference_label}
+            )
+
+            plt.xlabel("Next valence class")
+            plt.ylabel("Current valence class")
+            plt.title(heatmap_title)
+            plt.tight_layout()
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_difference_heatmap.png"
+                ),
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_difference_heatmap.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+            def history_w_to_lw(w, min_w=0.6, max_w=8.0):
+                return min_w + (abs(w) / history_lim) * (max_w - min_w)
+
+            def history_w_to_alpha(w, min_a=0.2, max_a=0.95):
+                return min_a + (abs(w) / history_lim) * (max_a - min_a)
+
+            G_history = diff_matrix_to_digraph_labels(D_history, thresh=0.02)
+
+            fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+            ax.set_title(circle_title)
+            ax.axis("off")
+
+            nx.draw_networkx_nodes(G_history, pos, ax=ax, node_size=1200)
+            nx.draw_networkx_labels(G_history, pos, ax=ax, font_size=10)
+
+            for u, v, dct in G_history.edges(data=True):
+
+                w = float(dct["weight"])
+                color = cmap(history_norm(w))
+                lw = history_w_to_lw(w)
+                alpha = history_w_to_alpha(w)
+
+                rad = 0.18 if u != v else 0.45
+
+                patch = FancyArrowPatch(
+                    posA=pos[u],
+                    posB=pos[v],
+                    arrowstyle="-|>",
+                    mutation_scale=16,
+                    connectionstyle=f"arc3,rad={rad}",
+                    linewidth=lw,
+                    color=color,
+                    alpha=alpha,
+                    shrinkA=22,
+                    shrinkB=22
+                )
+
+                ax.add_patch(patch)
+
+            sm = mpl.cm.ScalarMappable(cmap=cmap, norm=history_norm)
+            sm.set_array([])
+
+            cax = fig.add_axes([0.95, 0.28, 0.02, 0.45])
+            cbar = fig.colorbar(sm, cax=cax)
+            cbar.set_label(difference_label)
+
+            plt.savefig(
+                os.path.join(
+                    comparison_output,
+                    f"GS_apetitive_aversive_transition_{comparison_name}_difference_circlegraph.pdf"
+                ),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.close()
+
+        plot_history_valence_comparison(
+            comparison_name="within_type",
+            comparison_output=within_type_output,
+            group_a_label="G_with_G_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_S_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with G then G) - P(S with S then S)",
+            heatmap_title="GS apetitive/aversive transition difference: within-type history",
+            circle_title="GS apetitive/aversive transition likelihood: within-type history"
+        )
+
+        plot_history_valence_comparison(
+            comparison_name="mixed_type",
+            comparison_output=mixed_output,
+            group_a_label="G_with_S_then_S",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            group_b_label="S_with_G_then_G",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            difference_label="P(G with S then S) - P(S with G then G)",
+            heatmap_title="GS apetitive/aversive transition difference: mixed-type history",
+            circle_title="GS apetitive/aversive transition likelihood: mixed-type history"
+        )
+
+        plot_history_valence_comparison(
+            comparison_name="mixed_2",
+            comparison_output=mixed_2_output,
+            group_a_label="G_with_S_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="S_with_G_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(G with S then G) - P(S with G then S)",
+            heatmap_title="GS apetitive/aversive transition difference: mixed-2 history",
+            circle_title="GS apetitive/aversive transition likelihood: mixed-2 history"
+        )
+
+        print("Saved GS apetitive/aversive transition analysis.")
+
 
 
 
@@ -8134,6 +9314,21 @@ class ClusterPipeline:
 
             return np.nan
 
+        def get_appetitive_aversive_label(cluster_id):
+
+            if pd.isna(cluster_id):
+                return np.nan
+
+            cluster_id = int(float(cluster_id))
+
+            if cluster_id in [1, 3, 4, 6, 7, 9]:
+                return "appetitive"
+
+            if cluster_id in [2, 5, 8, 10, 11, 12]:
+                return "aversive"
+
+            return np.nan
+
         features = [
             "t1_head-head_t2",
             "track1_speed_head",
@@ -8371,6 +9566,9 @@ class ClusterPipeline:
         umap_df["social_context"] = umap_df.apply(get_social_context, axis=1)
         umap_df["umap_group"] = umap_df.apply(get_umap_group_label, axis=1)
         umap_df["umap_iso"] = umap_df.apply(get_umap_iso_label, axis=1)
+        umap_df["umap_aversive_appetitive"] = umap_df[cluster_name].apply(
+            get_appetitive_aversive_label
+        )
 
         umap_df.to_csv(
             os.path.join(output, "umap_coordinates.csv")
@@ -8511,6 +9709,34 @@ class ClusterPipeline:
                     transparent=True)
 
         plt.close()
+
+
+        plt.figure(figsize=(7,6))
+
+        sns.scatterplot(
+            data=umap_df.dropna(subset=["umap_aversive_appetitive"]),
+            x="UMAP1",
+            y="UMAP2",
+            hue="umap_aversive_appetitive",
+            hue_order=["appetitive", "aversive"],
+            palette={
+                "appetitive": "blue",
+                "aversive": "red"
+            },
+            s=8,
+            alpha=0.8,
+            linewidth=0
+        )
+
+        plt.title(f"UMAP ({n_pcs} PCs) coloured by appetitive/aversive")
+
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(output, "umap_aversive_apeititve.pdf"),
+                    format="pdf",
+                    transparent=True)
+
+        plt.close()
     
 
 
@@ -8636,12 +9862,14 @@ if __name__ == "__main__":
     # pipeline.GS_cluster_transition_matrix()
     # pipeline.cluster_transition_matrix_G_vs_S()
     # pipeline.GS_deviations()
-    # pipeline.GS_social_experience_over_time_by_cluster()
+    pipeline.GS_social_experience_over_time_by_cluster()
     # pipeline.G_V_S_duration_transition()
+    # pipeline.G_V_S_apetitive_aversive_transition()
     # pipeline.GS_duration_transition()
+    # pipeline.GS_apetitive_aversive_transition()
     # pipeline.correlation_contact_G_vs_S()
     # pipeline.GS_directed_movement_over_time()
     # pipeline.social_context_video_proportion()
     # pipeline.social_context_barplot_deviation()
-    pipeline.umap(n_pcs=5)
+    # pipeline.umap(n_pcs=5)
     # pipeline.spatial_cluster()
