@@ -466,7 +466,7 @@ class ClusterPipeline:
             sns.lineplot(data=cluster_df, x='Normalized Frame', y='partner_acceleration_tail', errorbar=('ci', 95), color=partner_base, legend=False, ax=ax2)
 
             ax2.axvline(0, color="gray", ls="--", lw=0.5)
-            ax2.set_ylim(-1, 1)
+            ax2.set_ylim(-0.5, 0.5)
             ax2.set_xticks([])
             # ax1.set_yticks([])
             ax2.set_visible(True)
@@ -574,8 +574,8 @@ class ClusterPipeline:
             ax8.set_xticks([-10, 0, 10])
             ax8.set_visible(True)
 
-            ax8.text(0.55, 0.92, f"pre slope:  {slope_pre:.2f}",  transform=ax8.transAxes, fontsize=8)
-            ax8.text(0.55, 0.76, f"post slope: {slope_post:.2f}", transform=ax8.transAxes, fontsize=8)
+            ax8.text(0.55, 0.92, f"pre slope:  {slope_pre:.2f}",  transform=ax8.transAxes, fontsize=8, clip_on=False, zorder=10)
+            ax8.text(0.55, 0.76, f"post slope: {slope_post:.2f}", transform=ax8.transAxes, fontsize=8, clip_on=False, zorder=10)
 
             for row_idx in range(n_rows):
                 ax = axes_ap[row_idx, column]

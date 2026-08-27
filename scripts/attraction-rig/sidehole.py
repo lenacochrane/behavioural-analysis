@@ -33,13 +33,13 @@ def perform_analysis(directory):
     ####### --- LARVAL BEHAVIOUR --- ######
 
     ## REMOVE DIGGING FROM ANALYSIS 
-    analysis.digging_mask()
+    # analysis.digging_mask()
 
 
     ### PSEUDO POPULATION MODEL
 
     # analysis.pseudo_population_model()
-    # analysis.pseudo_population_model(number_of_iterations=1, number_of_animals=2)
+    analysis.pseudo_population_model(number_of_iterations=10, number_of_animals=5)
 
     ## BEHAVIOURAL DYNAMICS 
 
@@ -70,7 +70,7 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=10)
 
 
-    analysis.nearest_neighbour()
+    # analysis.nearest_neighbour()
     # analysis.interactions()
     # analysis.interaction_types()
     # analysis.interaction_types_closest()

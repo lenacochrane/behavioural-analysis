@@ -40,13 +40,14 @@ import umap
 #### CLASS TO ANALYSE THE CLUSTERS  
 class ClusterPipeline:
 
-    def __init__(self, directory, interactions, clusters, cluster_name, video_path):
-        
+    def __init__(self, directory, interactions, clusters, cluster_name, video_path, tracks_path):
+
         self.directory = directory
-        self.interaction_path = interactions 
+        self.interaction_path = interactions
         self.cluster_path = clusters
         self.cluster_name = cluster_name
         self.video_path = video_path
+        self.tracks_path = tracks_path
 
         self.interactions = None
         self.clusters = None
@@ -2003,6 +2004,219 @@ class ClusterPipeline:
     
 
 
+    def grouped_clusters(self):
+
+        df = self.df.copy()
+        cluster_name = self.cluster_name
+
+        output = os.path.join(self.directory, "grouped_clusters")
+        os.makedirs(output, exist_ok=True)
+
+        mpl.rcParams['pdf.fonttype'] = 42
+        mpl.rcParams['ps.fonttype'] = 42
+
+        # One row per interaction.
+        df = df[np.isclose(df["Normalized Frame"], 0)].copy()
+        df = df.drop_duplicates(subset=["file", "interaction_id"]).copy()
+
+        cluster_groups = {
+            2: "aversive",
+            5: "aversive",
+            8: "uninterested",
+            10: "uninterested",
+            11: "uninterested",
+            12: "uninterested",
+            4: "tailing",
+            7: "tailing",
+            3: "head-head",
+            9: "head-head",
+            1: "general",
+            6: "general"
+        }
+
+        group_order = ["aversive", "uninterested", "tailing", "head-head", "general"]
+        group_palette = {
+            "aversive": "#e60026",
+            "uninterested": "#f28e2b",
+            "tailing": "#1252b0",
+            "head-head": "#28663a",
+            "general": "#bdbdbd"
+        }
+
+        def grouped_cluster_label(cluster_id):
+            if pd.isna(cluster_id):
+                return np.nan
+            try:
+                return cluster_groups.get(int(float(cluster_id)), np.nan)
+            except (TypeError, ValueError):
+                return np.nan
+
+        def parse_pair(pair):
+            if pair is None:
+                return None
+
+            if isinstance(pair, str):
+                if pair.strip() == "" or pair.lower() == "nan":
+                    return None
+                pair = pair.replace("(", "").replace(")", "").replace(" ", "")
+                id1, id2 = pair.split(",")
+                return int(id1), int(id2)
+
+            try:
+                if pd.isna(pair):
+                    return None
+            except ValueError:
+                pass
+
+            id1, id2 = pair
+            return int(id1), int(id2)
+
+        def get_gs_pair_type(pair):
+            parsed = parse_pair(pair)
+            if parsed is None:
+                return np.nan
+
+            id1, id2 = parsed
+
+            if id1 <= 4 and id2 <= 4:
+                return "S-S"
+            if id1 >= 5 and id2 >= 5:
+                return "G-G"
+            return "G-S"
+
+        def make_proportion_table(data, x_col, x_order):
+            counts = (
+                data
+                .groupby([x_col, "grouped_cluster"])
+                .size()
+                .reset_index(name="count")
+            )
+
+            full_index = pd.MultiIndex.from_product(
+                [x_order, group_order],
+                names=[x_col, "grouped_cluster"]
+            )
+
+            counts = (
+                counts
+                .set_index([x_col, "grouped_cluster"])
+                .reindex(full_index, fill_value=0)
+                .reset_index()
+            )
+
+            counts["total"] = counts.groupby(x_col)["count"].transform("sum")
+            counts["proportion"] = counts["count"] / counts["total"]
+            counts["proportion"] = counts["proportion"].fillna(0)
+
+            return counts
+
+        def plot_stacked_proportions(prop_df, x_col, x_order, title, filename_stem):
+            fig, ax = plt.subplots(figsize=(6, 7))
+            bottoms = np.zeros(len(x_order))
+
+            for group in group_order:
+                values = (
+                    prop_df[prop_df["grouped_cluster"] == group]
+                    .set_index(x_col)
+                    .reindex(x_order)["proportion"]
+                    .fillna(0)
+                    .to_numpy()
+                )
+
+                ax.bar(
+                    x_order,
+                    values,
+                    bottom=bottoms,
+                    color=group_palette[group],
+                    edgecolor="white",
+                    linewidth=1.2,
+                    label=group
+                )
+                bottoms += values
+
+            ax.set_ylim(0, 1)
+            ax.set_ylabel("Proportion")
+            ax.set_xlabel("")
+            ax.set_title(title)
+            ax.legend(title="Grouped cluster", bbox_to_anchor=(1.02, 1), loc="upper left")
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.tick_params(axis="x", labelsize=14)
+            ax.tick_params(axis="y", labelsize=14)
+
+            for label in ax.get_xticklabels():
+                label.set_fontweight("bold")
+
+            plt.tight_layout()
+            plt.savefig(
+                os.path.join(output, f"{filename_stem}.png"),
+                dpi=300,
+                bbox_inches="tight"
+            )
+            plt.savefig(
+                os.path.join(output, f"{filename_stem}.pdf"),
+                format="pdf",
+                dpi=300,
+                bbox_inches="tight"
+            )
+            plt.close(fig)
+
+        df["grouped_cluster"] = df[cluster_name].apply(grouped_cluster_label)
+        df = df.dropna(subset=["condition", "grouped_cluster"])
+
+        condition_order = ["G", "S", "GS"]
+        condition_df = df[df["condition"].isin(condition_order)].copy()
+
+        if condition_df.empty:
+            print("No G, S or GS interactions found for grouped cluster proportions.")
+        else:
+            condition_props = make_proportion_table(
+                condition_df,
+                "condition",
+                condition_order
+            )
+            condition_props.to_csv(
+                os.path.join(output, "grouped_cluster_proportions_by_condition.csv"),
+                index=False
+            )
+            plot_stacked_proportions(
+                condition_props,
+                "condition",
+                condition_order,
+                "Grouped cluster proportions by condition",
+                "grouped_cluster_proportions_by_condition"
+            )
+
+        gs_df = df[df["condition"] == "GS"].copy()
+        gs_df["GS_pair_type"] = gs_df["Interaction Pair"].apply(get_gs_pair_type)
+        gs_df = gs_df.dropna(subset=["GS_pair_type"])
+
+        gs_pair_order = ["G-G", "S-S", "G-S"]
+        gs_df = gs_df[gs_df["GS_pair_type"].isin(gs_pair_order)].copy()
+
+        if gs_df.empty:
+            print("No GS interactions found for G-G, S-S and G-S grouped cluster proportions.")
+        else:
+            gs_props = make_proportion_table(
+                gs_df,
+                "GS_pair_type",
+                gs_pair_order
+            )
+            gs_props.to_csv(
+                os.path.join(output, "grouped_cluster_proportions_within_GS.csv"),
+                index=False
+            )
+            plot_stacked_proportions(
+                gs_props,
+                "GS_pair_type",
+                gs_pair_order,
+                "GS grouped cluster proportions by pair type",
+                "grouped_cluster_proportions_within_GS"
+            )
+
+        print(f"Saved grouped cluster proportion plots to: {output}")
+
+
         #### METHOD GRID_VIDEOS: GENERATE GRID VIDEOS OF INTERACTION CLUSTERS
     def grid_videos(self):
 
@@ -3426,7 +3640,156 @@ class ClusterPipeline:
         print(f"Saved raw transitions: {raw_path}")
         print(f"Saved per-video transition matrix: {matrix_path}")
         print(f"Saved summary: {summary_path}")
-    
+
+
+
+
+    #### METHOD LARVAL_PROXIMITY: DISTANCE TO NEAREST THIRD LARVA DURING EACH GS INTERACTION, PER CLUSTER / PAIR TYPE
+    def larval_proximity(self):
+
+        df = self.df.copy()
+        cluster_name = self.cluster_name
+        tracks_path = self.tracks_path
+
+        output = os.path.join(self.directory, "larval_proximity")
+        os.makedirs(output, exist_ok=True)
+
+        mpl.rcParams['pdf.fonttype'] = 42
+        mpl.rcParams['ps.fonttype'] = 42
+
+
+        df = df[df['condition'] == 'GS'].copy()
+
+        if df.empty:
+            print("No GS condition data found.")
+            return
+
+        def parse_pair(pair):
+            if pd.isna(pair):
+                return None
+            if isinstance(pair, str):
+                pair = pair.replace("(", "").replace(")", "").replace(" ", "")
+                id1, id2 = pair.split(",")
+                return int(id1), int(id2)
+            id1, id2 = pair
+            return int(id1), int(id2)
+
+        def larva_type(track_id):
+            return "S" if track_id <= 4 else "G"
+
+        df["parsed_pair"] = df["Interaction Pair"].apply(parse_pair)
+        df = df.dropna(subset=["parsed_pair"])
+        df["id1"], df["id2"] = zip(*df["parsed_pair"])
+
+        df["pair_type"] = np.where(
+            (df["id1"].map(larva_type) == "G") & (df["id2"].map(larva_type) == "G"),
+            "G-G",
+            np.where(
+                (df["id1"].map(larva_type) == "S") & (df["id2"].map(larva_type) == "S"),
+                "S-S",
+                "G-S"
+            )
+        )
+
+        # mm positions of the interacting pair -- same mm_Track_1/2 columns the rest of the class uses
+        df["mid_x"] = (df["mm_Track_1 x_body"] + df["mm_Track_2 x_body"]) / 2
+        df["mid_y"] = (df["mm_Track_1 y_body"] + df["mm_Track_2 y_body"]) / 2
+
+        # === LOAD FULL-TRACK POSITIONS (ALREADY IN MM) FOR EVERY LARVA, EVERY FRAME ===
+
+        track_file = os.path.join(tracks_path, "merged.track.feather")
+
+        if not os.path.exists(track_file):
+            print(f"⚠️ Missing track file: {track_file}")
+            return
+
+        tracks = feather.read_feather(track_file)[['track_id', 'frame', 'file', 'x_body', 'y_body']]
+        tracks['file'] = tracks['file'].str.replace('.tracks.feather', '.mp4', regex=False)
+
+        # expand every interaction against every other larva present at that frame, then take the closest one
+        expanded = df[[
+            'interaction_id', 'file', 'Frame', 'Normalized Frame', cluster_name,
+            'pair_type', 'id1', 'id2', 'mid_x', 'mid_y'
+        ]].merge(
+            tracks, left_on=['file', 'Frame'], right_on=['file', 'frame'], how='left'
+        )
+
+        expanded = expanded[
+            (expanded['track_id'] != expanded['id1']) &
+            (expanded['track_id'] != expanded['id2'])
+        ]
+
+        expanded['distance_to_third_larva_mm'] = np.sqrt(
+            (expanded['x_body'] - expanded['mid_x'])**2 +
+            (expanded['y_body'] - expanded['mid_y'])**2
+        )
+
+        result = (
+            expanded
+            .groupby(['interaction_id', 'file', 'Frame', 'Normalized Frame', cluster_name, 'pair_type'])['distance_to_third_larva_mm']
+            .min()
+            .reset_index()
+        )
+
+        if result.empty:
+            print("No proximity data could be computed (missing track file?).")
+            return
+
+        csv_path = os.path.join(output, "larval_proximity.csv")
+        result.to_csv(csv_path, index=False)
+        print(f"Saved per-frame proximity data: {csv_path}")
+
+        # === SUMMARY + BARPLOT: NEAREST THIRD-LARVA DISTANCE PER CLUSTER, BY PAIR TYPE ===
+
+        social_order = ['S-S', 'G-S', 'G-G']
+
+        summary = (
+            result
+            .groupby([cluster_name, 'pair_type'])['distance_to_third_larva_mm']
+            .agg(['mean', 'std', 'count'])
+            .reset_index()
+        )
+
+        summary_path = os.path.join(output, "larval_proximity_summary.csv")
+        summary.to_csv(summary_path, index=False)
+        print(f"Saved summary: {summary_path}")
+
+        palette = {
+            'S-S': 'C1',
+            'G-S': 'mediumseagreen',
+            'G-G': 'C0'
+        }
+
+        cluster_order = sorted(result[cluster_name].dropna().unique())
+
+        plt.figure(figsize=(12, 6))
+
+        ax = sns.barplot(
+            data=result,
+            x=cluster_name,
+            y='distance_to_third_larva_mm',
+            hue='pair_type',
+            order=cluster_order,
+            hue_order=social_order,
+            palette=palette,
+            errorbar='sd'
+        )
+
+        ax.set_title("Distance to nearest third larva during interaction, by cluster and pair type")
+        ax.set_xlabel("Cluster ID")
+        ax.set_ylabel("Distance to nearest third larva (mm)")
+        ax.tick_params(axis='x', rotation=90)
+
+        plt.tight_layout()
+
+        path = os.path.join(output, 'larval_proximity_barplot.pdf')
+        plt.savefig(path, format='pdf', bbox_inches='tight', dpi=300, transparent=True)
+
+
+        plt.close()
+
+        print(f"Saved barplot to {output}")
+
 
 
 
@@ -3441,10 +3804,14 @@ class ClusterPipeline:
         within_type_output = os.path.join(output, "within_type")
         mixed_output = os.path.join(output, "mixed")
         mixed_2_output = os.path.join(output, "mixed_2")
+        group_output = os.path.join(output, "group")
+        isolated_output = os.path.join(output, "isolated")
         os.makedirs(g_vs_s_output, exist_ok=True)
         os.makedirs(within_type_output, exist_ok=True)
         os.makedirs(mixed_output, exist_ok=True)
         os.makedirs(mixed_2_output, exist_ok=True)
+        os.makedirs(group_output, exist_ok=True)
+        os.makedirs(isolated_output, exist_ok=True)
 
         # GS only, one row per interaction
         df = df[
@@ -4613,6 +4980,46 @@ class ClusterPipeline:
             difference_label="P(G with S then G) - P(S with G then S)",
             heatmap_title="GS cluster transition difference: mixed-2 history",
             circle_title="GS cluster transition likelihood: mixed-2 history"
+        )
+
+        plot_history_cluster_comparison(
+            comparison_name="group",
+            comparison_output=group_output,
+            group_a_label="G_with_S_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="G_with_G_then_G",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            difference_label="P(G with S then G) - P(G with G then G)",
+            heatmap_title="GS cluster transition difference: group tracks, switched vs stayed group",
+            circle_title="GS cluster transition likelihood: group tracks, switched vs stayed group"
+        )
+
+        plot_history_cluster_comparison(
+            comparison_name="isolated",
+            comparison_output=isolated_output,
+            group_a_label="S_with_G_then_S",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "S")
+            ),
+            group_b_label="S_with_S_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(S with G then S) - P(S with S then S)",
+            heatmap_title="GS cluster transition difference: isolated tracks, switched vs stayed isolated",
+            circle_title="GS cluster transition likelihood: isolated tracks, switched vs stayed isolated"
         )
 
 
@@ -6320,10 +6727,14 @@ class ClusterPipeline:
         within_type_output = os.path.join(output, "within_type")
         mixed_output = os.path.join(output, "mixed")
         mixed_2_output = os.path.join(output, "mixed_2")
+        group_output = os.path.join(output, "group")
+        isolated_output = os.path.join(output, "isolated")
         os.makedirs(g_vs_s_output, exist_ok=True)
         os.makedirs(within_type_output, exist_ok=True)
         os.makedirs(mixed_output, exist_ok=True)
         os.makedirs(mixed_2_output, exist_ok=True)
+        os.makedirs(group_output, exist_ok=True)
+        os.makedirs(isolated_output, exist_ok=True)
 
         dur_map = {
             1: "medium",
@@ -7173,6 +7584,46 @@ class ClusterPipeline:
             difference_label="P(G with S then G) - P(S with G then S)",
             heatmap_title="GS duration transition difference: mixed-2 history",
             circle_title="GS duration transition likelihood: mixed-2 history"
+        )
+
+        plot_history_duration_comparison(
+            comparison_name="group",
+            comparison_output=group_output,
+            group_a_label="G_with_S_then_G",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "G")
+            ),
+            group_b_label="G_with_G_then_G",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "G") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "G")
+            ),
+            difference_label="P(G with S then G) - P(G with G then G)",
+            heatmap_title="GS duration transition difference: group tracks, switched vs stayed group",
+            circle_title="GS duration transition likelihood: group tracks, switched vs stayed group"
+        )
+
+        plot_history_duration_comparison(
+            comparison_name="isolated",
+            comparison_output=isolated_output,
+            group_a_label="S_with_G_then_S",
+            group_a_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "G") &
+                (d["next_partner_type"] == "S")
+            ),
+            group_b_label="S_with_S_then_S",
+            group_b_filter=lambda d: (
+                (d["larva_type"] == "S") &
+                (d["partner_type"] == "S") &
+                (d["next_partner_type"] == "S")
+            ),
+            difference_label="P(S with G then S) - P(S with S then S)",
+            heatmap_title="GS duration transition difference: isolated tracks, switched vs stayed isolated",
+            circle_title="GS duration transition likelihood: isolated tracks, switched vs stayed isolated"
         )
 
         print("Saved GS duration transition analysis.")
@@ -9818,9 +10269,10 @@ if __name__ == "__main__":
     clusters = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/F15_KMAX3_DMAX4_NMIN1500--/pca-data3-F15-mcmodels4-Kmax3-Dmax4-Nmin1500-05-2026.csv"
     cluster_name = "Yhat.idt.pca"   # or whatever your cluster column is
     video_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/clustered-interactions_pt2/videos_original"
+    tracks_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated"
 
     # Create instance
-    pipeline = ClusterPipeline(directory, interactions, clusters, cluster_name, video_path)
+    pipeline = ClusterPipeline(directory, interactions, clusters, cluster_name, video_path, tracks_path)
 
     # Run methods
     pipeline.loading_data()
@@ -9849,6 +10301,7 @@ if __name__ == "__main__":
     # pipeline.mean_trajectories()
     # pipeline.raw_trajectories()
     # pipeline.barplots()
+    # pipeline.grouped_clusters()
     # pipeline.barplot_deviation()
     # pipeline.barplot_deviation_GS_social_experience()
     # pipeline.GS_pairwise_social_experience_deviation_stats()
@@ -9859,10 +10312,11 @@ if __name__ == "__main__":
     # pipeline.contact_percentage_per_cluster()
     # pipeline.GS_pair_availability_normalised_interactions()
     # pipeline.GS_partner_type_transition_matrix()
+    # pipeline.larval_proximity()
     # pipeline.GS_cluster_transition_matrix()
     # pipeline.cluster_transition_matrix_G_vs_S()
     # pipeline.GS_deviations()
-    pipeline.GS_social_experience_over_time_by_cluster()
+    # pipeline.GS_social_experience_over_time_by_cluster()
     # pipeline.G_V_S_duration_transition()
     # pipeline.G_V_S_apetitive_aversive_transition()
     # pipeline.GS_duration_transition()
@@ -9873,3 +10327,5 @@ if __name__ == "__main__":
     # pipeline.social_context_barplot_deviation()
     # pipeline.umap(n_pcs=5)
     # pipeline.spatial_cluster()
+    # pipeline.larval_proximity()
+    pipeline.grouped_clusters()

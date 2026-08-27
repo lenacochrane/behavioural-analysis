@@ -16,14 +16,14 @@ import shapely.wkt
 # %% DETERMINE COLOUR OF TRACK DEPENDING ON BOOLEAN VARIABLE 
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/test.csv')
-original_video = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/2025-03-03_14-03-34_td4.mp4'
-output = '/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/testing-methods/test-digging-2/n2/2025-03-03_14-03-34_td4_digging.mp4'
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/dig-delete/digging.csv')
+original_video = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/dig-delete/2026-04-14_14-44-34_td19_33300.mp4'
+output = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/dig-delete/2026-04-14_14-44-34_td19_33300_digging.mp4'
 
 
 
-mm_to_pixel = ['y_body', 'x_body']
-df[mm_to_pixel] = df[mm_to_pixel] * (1046/90)
+# mm_to_pixel = ['y_body', 'x_body']
+# df[mm_to_pixel] = df[mm_to_pixel] * (1032/90)
 
 
 # Set the im= age size
@@ -85,13 +85,13 @@ video_output.release()
 
 
 df = pd.read_csv('/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/test.csv')
-original_video = '/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/2025-02-25_14-25-25_td11_holes.mp4'
-output = '/Users/cochral/Desktop/SLAEP/TRain/testing-nemo-down/2025-02-25_14-25-25_td11_holes_DIGGING.mp4'
+original_video = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/dig-delete/2026-04-14_14-44-34_td19_33300.mp4'
+output = '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/dig-delete/2026-04-14_14-44-34_td19_33300_digging.mp4'
 
 
 
-mm_to_pixel = ['y_body', 'x_body']
-df[mm_to_pixel] = df[mm_to_pixel] * (1046/90)
+# mm_to_pixel = ['y_body', 'x_body']
+# df[mm_to_pixel] = df[mm_to_pixel] * (1046/90)
 
 
 # Set the im= age size

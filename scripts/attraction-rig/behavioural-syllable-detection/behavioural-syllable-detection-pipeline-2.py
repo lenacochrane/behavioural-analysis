@@ -1282,6 +1282,11 @@ def behavioural_states(track_df):
     ] = "forward_run"
 
     df.loc[
+    df["behaviour"] == "forward_run|changing_direction",
+    "behaviour"
+    ] = "forward_run"
+
+    df.loc[
         df["behaviour"] == "forward_run|large_bend",
         "behaviour"
     ] = "sharp_turn"
@@ -1362,12 +1367,22 @@ def process_experiment_directory(directory):
 
 
 """ GROUPED AND ISOLATED ANALYSIS """
-directories = [
-    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed',
-    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated',
-    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated',
-]
+# directories = [
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated',
+#     '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated',
+# ]
 
+
+""" SENSORY-MUTANT ANALYSIS """
+directories = [
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/9047',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/23129',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/33300',
+    '/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/wiii8',
+
+]
 
 for directory in directories:
     process_experiment_directory(directory)

@@ -12,9 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved/2026-05-12_14-58-32_td17.csv')
+df = pd.read_csv('/Users/cochral/Desktop/SLAEP/vic/2026-07-21_11-38-58_td6_23129.tracks.000_2026-07-21_11-38-58_td6_23129.analysis.csv')
 print(df['track'].unique())
-
 
 
 track_gaps = {}
@@ -74,7 +73,7 @@ print(jumped_tracks)
 
 # %% PRINT FRAMES OF CERTAIN TRACK
 
-print(df[df['track'] == 'track_21']['frame_idx'])
+print(df[df['track'] == 'track_19']['frame_idx'])
 
 
 ######################
@@ -112,9 +111,7 @@ print(df.head())
 # %% CSV -> FEATHER AND SLP
 
 
-df.to_feather('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved/2026-05-12_14-58-32_td17.tracks.feather')
-
-
+df.to_feather('/Users/cochral/Desktop/SLAEP/vic/2026-07-21_11-38-58_td6_23129.tracks.feather')
 
 
 

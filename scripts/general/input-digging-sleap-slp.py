@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
 
@@ -80,6 +81,45 @@ def get_track(labels: sleap.Labels, track_name: str) -> Track:
     if len(labels.tracks) > 20:
         available += ", ..."
     raise ValueError(f"Could not find track {track_name!r}. Available: {available}")
+
+
+def restore_track_order(labels: sleap.Labels, original_tracks: Iterable[Track]) -> bool:
+    """Restore SLEAP track order so viewer colors stay stable after frame edits."""
+    original_track_ids = [id(track) for track in original_tracks]
+    current_track_ids = [id(track) for track in labels.tracks]
+    if current_track_ids == original_track_ids:
+        return False
+
+    original_track_id_set = set(original_track_ids)
+    current_tracks_by_id = {id(track): track for track in labels.tracks}
+    ordered_original_tracks = [
+        current_tracks_by_id[track_id]
+        for track_id in original_track_ids
+        if track_id in current_tracks_by_id
+    ]
+    new_tracks = [
+        track for track in labels.tracks if id(track) not in original_track_id_set
+    ]
+
+    labels.tracks = ordered_original_tracks + new_tracks
+    return [id(track) for track in labels.tracks] != current_track_ids
+
+
+def natural_name_key(name: str) -> Tuple:
+    """Sort names like track_2 before track_10."""
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part.lower())
+        for part in re.split(r"(\d+)", name)
+    )
+
+
+def sort_tracks_naturally(labels: sleap.Labels) -> bool:
+    """Repair track order after SLEAP has sorted track_10 before track_2."""
+    current_track_ids = [id(track) for track in labels.tracks]
+    labels.tracks = sorted(
+        labels.tracks, key=lambda track: natural_name_key(track.name or "")
+    )
+    return [id(track) for track in labels.tracks] != current_track_ids
 
 
 def get_video(labels: sleap.Labels, video_index: int):
@@ -273,11 +313,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List videos, skeleton nodes, tracks, and frame range, then exit.",
     )
+    parser.add_argument(
+        "--fix-track-order",
+        action="store_true",
+        help=(
+            "Only repair track ordering, e.g. track_0, track_1, track_2, ... "
+            "This fixes SLEAP viewer colors in files already affected by "
+            "alphabetical ordering."
+        ),
+    )
     return parser
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if args.list:
+    if args.list or args.fix_track_order:
         return
 
     missing = [
@@ -316,8 +365,35 @@ def main() -> None:
             list_file_contents(labels)
             return
 
+        if args.fix_track_order:
+            output_path = (
+                Path(args.output).expanduser().resolve()
+                if args.output
+                else edited_path_for(slp_path)
+            )
+            if output_path.exists() and not args.force and not args.dry_run:
+                raise FileExistsError(
+                    f"{output_path} already exists. Use --force or choose --output."
+                )
+
+            reordered = sort_tracks_naturally(labels)
+            if reordered:
+                print("Reordered tracks into natural numeric order.")
+            else:
+                print("Track order already looks natural; no reorder needed.")
+
+            if args.dry_run:
+                print("Dry run only: no file saved.")
+                return
+
+            os.makedirs(output_path.parent, exist_ok=True)
+            labels.save(str(output_path))
+            print(f"Saved track-order-fixed SLEAP file to: {output_path}")
+            return
+
         video = get_video(labels, args.video_index)
         skeleton = get_skeleton(labels, args.skeleton_index)
+        original_track_order = list(labels.tracks)
         track = get_track(labels, args.track)
 
         if args.source_frame is not None:
@@ -367,6 +443,8 @@ def main() -> None:
             labels.add_instance(labeled_frame, new_instance)
             edited += 1
 
+        restored_track_order = restore_track_order(labels, original_track_order)
+
         print(
             f"Prepared {edited} frame(s) for {track.name!r} using {source_text}. "
             f"Visible nodes per frame: {visible_points}."
@@ -377,6 +455,8 @@ def main() -> None:
             print(f"Skipped {skipped} frame(s) because --keep-existing was used.")
         if created_frames:
             print(f"Created {created_frames} missing labeled frame(s).")
+        if restored_track_order:
+            print("Restored original track order so SLEAP viewer colors stay consistent.")
 
         if args.dry_run:
             print("Dry run only: no file saved.")

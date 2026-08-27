@@ -536,10 +536,10 @@ class FedStarvedAnalysis:
 
                     speed_value = distance / time 
 
-                    data.append({'time': time2, 'speed': speed_value, 'file': track_file})
+                    data.append({'time': time2, 'speed': speed_value, 'file': track_file, 'track': track})
     
         speed_over_time = pd.DataFrame(data)
-        speed_over_time = speed_over_time.sort_values(by=['time'], ascending=True)
+        speed_over_time = speed_over_time.sort_values(by=['file', 'track', 'time'], ascending=True)
 
         if self.shorten and self.shorten_duration is not None:
             suffix = f"_{self.shorten_duration}"
@@ -1499,10 +1499,765 @@ class FedStarvedAnalysis:
         )
         return summary
 
+    def trajectory_figures(self, proximity_threshold=1, window=10):
 
-    def trajectory_2(self, proximity_threshold=1, window=15):
+        output_dir = "/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/fed-starved/trajectories/poster"
+        os.makedirs(output_dir, exist_ok=True)
 
-        output_dir = os.path.join(self.directory, "trajectories")
+        path_parts = os.path.normpath(self.directory).split(os.sep)
+        condition_label = "-".join(path_parts[-2:])
+        condition = os.path.basename(os.path.normpath(self.directory))
+
+        parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(parts, parts))
+        colours = {
+            0: "#1f77b4",
+            1: "#7b2cbf",
+        }
+
+        if condition == "fed-fed":
+            colours = {
+                0: "#0B5D2A", #2F5597
+                1: "#0B5D2A", #2F5597
+            }
+
+        if condition == "starved-starved":
+            colours = {
+                0: "#edb700", #9E2F35
+                1: "#edb700", #9E2F35
+            }
+
+        if condition == "fed-starved":
+            colours = {
+                0: "#edb700", #F3D00E 
+                1: "#0B5D2A", #0B5D2A
+            }
+
+        def compute_min_distance(row_a, row_b):
+            coords_a = {p: np.array([row_a[f'x_{p}'], row_a[f'y_{p}']], dtype=float) for p in parts}
+            coords_b = {p: np.array([row_b[f'x_{p}'], row_b[f'y_{p}']], dtype=float) for p in parts}
+
+            min_dist = np.inf
+            min_pair = None
+
+            for p1, p2 in interaction_pairs:
+                dist = np.linalg.norm(coords_a[p1] - coords_b[p2])
+                if dist < min_dist:
+                    min_dist = dist
+                    min_pair = (p1, p2)
+
+            return min_dist, min_pair
+
+        def first_no_contact_frame(df_a, df_b, common_frames, interaction_frame):
+            for f in common_frames:
+                if f <= interaction_frame:
+                    continue
+
+                row_a = df_a[df_a['frame'] == f]
+                row_b = df_b[df_b['frame'] == f]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                min_dist, _ = compute_min_distance(row_a.iloc[0], row_b.iloc[0])
+                if min_dist > proximity_threshold:
+                    return f
+
+            return None
+
+        def rotate_points(points, angle):
+            rotation = np.array([
+                [np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)]
+            ])
+            return points @ rotation.T
+
+        def first_valid_point(points):
+            points = np.asarray(points, dtype=float).copy()
+            valid = np.isfinite(points).all(axis=1)
+
+            if valid.any():
+                return points[np.where(valid)[0][0]]
+
+            return None
+
+        def register_to_origin(points, origin):
+            points = np.asarray(points, dtype=float).copy()
+
+            if origin is not None:
+                points -= origin
+
+            return points
+
+        def temporal_colours(colour, n):
+            base = np.array(plt.matplotlib.colors.to_rgb(colour))
+            white = np.array([1, 1, 1], dtype=float)
+            shades = []
+
+            for i in range(n):
+                fade = 0 if n == 1 else i / (n - 1)
+                shade = (base * (1 - fade * 0.55)) + (white * fade * 0.55)
+                shades.append(shade)
+
+            return shades
+
+        def plot_clean_axes(ax):
+            ax.grid(False)
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(True)
+            ax.spines['bottom'].set_visible(True)
+
+        def plot_temporal_path(ax, xy, colour, linewidth=2.5, dot_size=40, alpha=0.9, zorder=2):
+            xy = np.asarray(xy, dtype=float)
+            valid = np.isfinite(xy).all(axis=1)
+            xy = xy[valid]
+
+            if len(xy) == 0:
+                return
+
+            dot_colours = temporal_colours(colour, len(xy))
+
+            if len(xy) > 1:
+                points = xy.reshape(-1, 1, 2)
+                segments = np.concatenate([points[:-1], points[1:]], axis=1)
+                line = LineCollection(
+                    segments,
+                    colors=temporal_colours(colour, len(segments)),
+                    linewidths=linewidth,
+                    alpha=alpha,
+                    zorder=zorder
+                )
+                ax.add_collection(line)
+
+            ax.scatter(
+                xy[:, 0],
+                xy[:, 1],
+                color=dot_colours,
+                s=dot_size,
+                alpha=alpha,
+                edgecolors='none',
+                zorder=zorder + 1
+            )
+
+        def transform_trajectory(rows_by_track, track_ids):
+            start_rows = [
+                rows_by_track[track_id].iloc[0]
+                for track_id in track_ids
+                if not rows_by_track[track_id].empty
+            ]
+
+            if len(start_rows) != 2:
+                return None
+
+            start_heads = np.array([
+                [row['x_head'], row['y_head']]
+                for row in start_rows
+            ], dtype=float)
+            origin = np.nanmean(start_heads, axis=0)
+
+            early_vectors = []
+            for track_id in track_ids:
+                rows = rows_by_track[track_id].sort_values('frame').head(4)
+                head_xy = rows[['x_head', 'y_head']].to_numpy(dtype=float)
+                if len(head_xy) > 1:
+                    steps = head_xy[1:] - head_xy[:-1]
+                    early_vectors.extend(steps[np.isfinite(steps).all(axis=1)])
+
+            if early_vectors:
+                mean_vector = np.nanmean(np.array(early_vectors), axis=0)
+            else:
+                mean_vector = np.array([0, 0], dtype=float)
+
+            if np.linalg.norm(mean_vector) > 0:
+                angle = (np.pi / 2) - np.arctan2(mean_vector[1], mean_vector[0])
+            else:
+                angle = 0
+
+            transformed = {}
+
+            for track_id in track_ids:
+                rows = rows_by_track[track_id].sort_values('frame').copy()
+
+                head_xy = rows[['x_head', 'y_head']].to_numpy(dtype=float) - origin
+
+                head_xy = rotate_points(head_xy, angle)
+
+                transformed[track_id] = {
+                    'head': head_xy,
+                }
+
+            track_0 = 0 if 0 in transformed else track_ids[0]
+            track_0_head = transformed[track_0]['head']
+            track_0_head = track_0_head[np.isfinite(track_0_head).all(axis=1)]
+
+            if len(track_0_head) > 0 and track_0_head[0, 0] > 0:
+                for track_id in transformed:
+                    transformed[track_id]['head'][:, 0] *= -1
+
+            head_by_track = {}
+
+            for track_id in track_ids:
+                head_origin = first_valid_point(transformed[track_id]['head'])
+                head_by_track[track_id] = register_to_origin(transformed[track_id]['head'], head_origin)
+
+            return head_by_track
+
+        first_trajectories = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].sort_values('frame')
+
+            track_ids = sorted(df['track_id'].unique())
+            if len(track_ids) != 2:
+                continue
+
+            df_a = df[df['track_id'] == track_ids[0]]
+            df_b = df[df['track_id'] == track_ids[1]]
+
+            common_frames = sorted(set(df_a['frame']).intersection(df_b['frame']))
+            if not common_frames:
+                continue
+
+            interaction_number = 0
+            next_allowed_frame = -np.inf
+
+            for frame in common_frames:
+                if frame < next_allowed_frame:
+                    continue
+
+                row_a = df_a[df_a['frame'] == frame]
+                row_b = df_b[df_b['frame'] == frame]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                min_dist, min_pair = compute_min_distance(row_a.iloc[0], row_b.iloc[0])
+
+                if min_dist < proximity_threshold and set(min_pair) == {'head'}:
+                    no_contact_frame = first_no_contact_frame(
+                        df_a,
+                        df_b,
+                        common_frames,
+                        frame
+                    )
+
+                    if no_contact_frame is None:
+                        continue
+
+                    interaction_number += 1
+                    next_allowed_frame = no_contact_frame + window + 1
+                    plot_frames = range(no_contact_frame, no_contact_frame + window + 1)
+
+                    rows_by_track = {}
+                    for track_id in track_ids:
+                        rows = df[
+                            (df['track_id'] == track_id) &
+                            (df['frame'].isin(plot_frames))
+                        ].copy()
+                        rows_by_track[track_id] = rows
+
+                    trajectory = transform_trajectory(rows_by_track, track_ids)
+                    if trajectory is None:
+                        continue
+
+                    if interaction_number == 1 and frame < 1200:
+                        first_trajectories.append({
+                            'track_ids': track_ids,
+                            'head': trajectory,
+                        })
+
+        def add_empty_page(pdf, title):
+            fig, ax = plt.subplots(figsize=(4, 4))
+            ax.axis("off")
+            ax.text(0.5, 0.5, title, ha="center", va="center", fontsize=9)
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        def mean_track_head(items, track_id):
+            max_len = window + 1
+            xs = []
+            ys = []
+
+            for item in items:
+                if track_id not in item['head']:
+                    continue
+
+                xy = item['head'][track_id]
+                x = np.full(max_len, np.nan)
+                y = np.full(max_len, np.nan)
+                n = min(len(xy), max_len)
+
+                if n > 0:
+                    x[:n] = xy[:n, 0]
+                    y[:n] = xy[:n, 1]
+
+                xs.append(x)
+                ys.append(y)
+
+            if not xs:
+                return None
+
+            mean_xy = np.column_stack((
+                np.nanmean(np.array(xs), axis=0),
+                np.nanmean(np.array(ys), axis=0)
+            ))
+            return register_to_origin(mean_xy, first_valid_point(mean_xy))
+
+        pdf_path = os.path.join(output_dir, f"{condition_label}.pdf")
+
+        with PdfPages(pdf_path) as pdf:
+            if not first_trajectories:
+                add_empty_page(pdf, "No first head trajectories found")
+            else:
+                fig, ax = plt.subplots(figsize=(4.8, 4.8))
+                track_ids = sorted({
+                    track_id
+                    for item in first_trajectories
+                    for track_id in item['track_ids']
+                })
+                legend_handles = []
+
+                for track_id in track_ids:
+                    colour = colours.get(track_id, "#333333")
+
+                    for item in first_trajectories:
+                        if track_id not in item['head']:
+                            continue
+
+                        xy = np.asarray(item['head'][track_id], dtype=float)
+                        xy = xy[np.isfinite(xy).all(axis=1)]
+                        if len(xy) == 0:
+                            continue
+
+                        ax.plot(
+                            xy[:, 0],
+                            xy[:, 1],
+                            color=colour,
+                            linewidth=1,
+                            alpha=0.3,
+                            zorder=1
+                        )
+
+                    mean_xy = mean_track_head(first_trajectories, track_id)
+                    if mean_xy is None:
+                        continue
+
+                    plot_temporal_path(ax, mean_xy, colour)
+                    legend_handles.append(Line2D(
+                        [0],
+                        [0],
+                        color=colour,
+                        marker='o',
+                        linewidth=2.5,
+                        markersize=5,
+                        label=f"track {track_id} head mean"
+                    ))
+
+                ax.set_xlim(-15, 15)
+                ax.set_ylim(-15, 15)
+                ax.set_aspect('equal', adjustable='box')
+                plot_clean_axes(ax)
+                ax.set_xlabel("x, rotated and registered")
+                ax.set_ylabel("y, rotated and registered")
+                ax.set_title(f"first head mean trajectories with traces\nn = {len(first_trajectories)}", fontsize=9)
+                ax.legend(handles=legend_handles, fontsize=7, loc="upper right", frameon=False)
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+        return None
+
+
+    def trajectories_before_figures(self, proximity_threshold=1.5, window=60):
+
+        output_dir = "/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/fed-starved/trajectories"
+        os.makedirs(output_dir, exist_ok=True)
+
+        path_parts = os.path.normpath(self.directory).split(os.sep)
+        condition_label = "-".join(path_parts[-2:])
+        condition = os.path.basename(os.path.normpath(self.directory))
+
+        parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(parts, parts))
+        colours = {
+            0: "#1f77b4",
+            1: "#7b2cbf",
+        }
+
+        if condition == "fed-fed":
+            colours = {
+                0: "#2F5597",
+                1: "#2F5597",
+            }
+
+        if condition == "starved-starved":
+            colours = {
+                0: "#9E2F35",
+                1: "#9E2F35",
+            }
+
+        if condition == "fed-starved":
+            colours = {
+                0: "#F3D00E", #FDDA0D
+                1: "#0B5D2A",
+            }
+
+        def compute_min_distance(row_a, row_b):
+            coords_a = {p: np.array([row_a[f'x_{p}'], row_a[f'y_{p}']], dtype=float) for p in parts}
+            coords_b = {p: np.array([row_b[f'x_{p}'], row_b[f'y_{p}']], dtype=float) for p in parts}
+
+            min_dist = np.inf
+            min_pair = None
+
+            for p1, p2 in interaction_pairs:
+                dist = np.linalg.norm(coords_a[p1] - coords_b[p2])
+                if dist < min_dist:
+                    min_dist = dist
+                    min_pair = (p1, p2)
+
+            return min_dist, min_pair
+
+        def first_no_contact_frame(df_a, df_b, common_frames, interaction_frame):
+            for f in common_frames:
+                if f <= interaction_frame:
+                    continue
+
+                row_a = df_a[df_a['frame'] == f]
+                row_b = df_b[df_b['frame'] == f]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                min_dist, _ = compute_min_distance(row_a.iloc[0], row_b.iloc[0])
+                if min_dist > proximity_threshold:
+                    return f
+
+            return None
+
+        def rotate_points(points, angle):
+            rotation = np.array([
+                [np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)]
+            ])
+            return points @ rotation.T
+
+        def first_valid_point(points):
+            points = np.asarray(points, dtype=float).copy()
+            valid = np.isfinite(points).all(axis=1)
+
+            if valid.any():
+                return points[np.where(valid)[0][0]]
+
+            return None
+
+        def last_valid_point(points):
+            points = np.asarray(points, dtype=float).copy()
+            valid = np.isfinite(points).all(axis=1)
+
+            if valid.any():
+                return points[np.where(valid)[0][-1]]
+
+            return None
+
+        def register_to_origin(points, origin):
+            points = np.asarray(points, dtype=float).copy()
+
+            if origin is not None:
+                points -= origin
+
+            return points
+
+        def temporal_colours(colour, n):
+            base = np.array(plt.matplotlib.colors.to_rgb(colour))
+            white = np.array([1, 1, 1], dtype=float)
+            shades = []
+
+            for i in range(n):
+                fade = 0 if n == 1 else i / (n - 1)
+                shade = (base * (1 - fade * 0.7)) + (white * fade * 0.7)
+                shades.append(shade)
+
+            return shades
+
+        def plot_clean_axes(ax):
+            ax.grid(False)
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(True)
+            ax.spines['bottom'].set_visible(True)
+
+        def plot_temporal_path(ax, xy, colour, linewidth=2.5, dot_size=10, alpha=0.9, zorder=2):
+            xy = np.asarray(xy, dtype=float)
+            valid = np.isfinite(xy).all(axis=1)
+            xy = xy[valid]
+
+            if len(xy) == 0:
+                return
+
+            dot_colours = temporal_colours(colour, len(xy))
+
+            if len(xy) > 1:
+                points = xy.reshape(-1, 1, 2)
+                segments = np.concatenate([points[:-1], points[1:]], axis=1)
+                line = LineCollection(
+                    segments,
+                    colors=temporal_colours(colour, len(segments)),
+                    linewidths=linewidth,
+                    alpha=alpha,
+                    zorder=zorder
+                )
+                ax.add_collection(line)
+
+            ax.scatter(
+                xy[:, 0],
+                xy[:, 1],
+                color=dot_colours,
+                s=dot_size,
+                alpha=alpha,
+                edgecolors='none',
+                zorder=zorder + 1
+            )
+
+        def transform_trajectory(rows_by_track, track_ids):
+            start_rows = [
+                rows_by_track[track_id].iloc[0]
+                for track_id in track_ids
+                if not rows_by_track[track_id].empty
+            ]
+
+            if len(start_rows) != 2:
+                return None
+
+            start_heads = np.array([
+                [row['x_head'], row['y_head']]
+                for row in start_rows
+            ], dtype=float)
+            origin = np.nanmean(start_heads, axis=0)
+
+            early_vectors = []
+            for track_id in track_ids:
+                rows = rows_by_track[track_id].sort_values('frame').head(4)
+                head_xy = rows[['x_head', 'y_head']].to_numpy(dtype=float)
+                if len(head_xy) > 1:
+                    steps = head_xy[1:] - head_xy[:-1]
+                    early_vectors.extend(steps[np.isfinite(steps).all(axis=1)])
+
+            if early_vectors:
+                mean_vector = np.nanmean(np.array(early_vectors), axis=0)
+            else:
+                mean_vector = np.array([0, 0], dtype=float)
+
+            if np.linalg.norm(mean_vector) > 0:
+                angle = (np.pi / 2) - np.arctan2(mean_vector[1], mean_vector[0])
+            else:
+                angle = 0
+
+            transformed = {}
+
+            for track_id in track_ids:
+                rows = rows_by_track[track_id].sort_values('frame').copy()
+                head_xy = rows[['x_head', 'y_head']].to_numpy(dtype=float) - origin
+                head_xy = rotate_points(head_xy, angle)
+                transformed[track_id] = {
+                    'head': head_xy,
+                }
+
+            track_0 = 0 if 0 in transformed else track_ids[0]
+            track_0_head = transformed[track_0]['head']
+            track_0_head = track_0_head[np.isfinite(track_0_head).all(axis=1)]
+
+            if len(track_0_head) > 0 and track_0_head[0, 0] > 0:
+                for track_id in transformed:
+                    transformed[track_id]['head'][:, 0] *= -1
+
+            head_by_track = {}
+
+            for track_id in track_ids:
+                head_origin = last_valid_point(transformed[track_id]['head'])
+                head_by_track[track_id] = register_to_origin(transformed[track_id]['head'], head_origin)
+
+            return head_by_track
+
+        first_trajectories = []
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].sort_values('frame')
+
+            track_ids = sorted(df['track_id'].unique())
+            if len(track_ids) != 2:
+                continue
+
+            df_a = df[df['track_id'] == track_ids[0]]
+            df_b = df[df['track_id'] == track_ids[1]]
+
+            common_frames = sorted(set(df_a['frame']).intersection(df_b['frame']))
+            if not common_frames:
+                continue
+
+            interaction_number = 0
+            next_allowed_frame = -np.inf
+
+            for frame in common_frames:
+                if frame < next_allowed_frame:
+                    continue
+
+                row_a = df_a[df_a['frame'] == frame]
+                row_b = df_b[df_b['frame'] == frame]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                min_dist, min_pair = compute_min_distance(row_a.iloc[0], row_b.iloc[0])
+
+                if min_dist < proximity_threshold and set(min_pair) == {'head'}:
+                    no_contact_frame = first_no_contact_frame(
+                        df_a,
+                        df_b,
+                        common_frames,
+                        frame
+                    )
+
+                    if no_contact_frame is None:
+                        continue
+
+                    interaction_number += 1
+                    next_allowed_frame = no_contact_frame + 1
+                    plot_frames = range(frame - window, frame + 1)
+
+                    rows_by_track = {}
+                    for track_id in track_ids:
+                        rows = df[
+                            (df['track_id'] == track_id) &
+                            (df['frame'].isin(plot_frames))
+                        ].copy()
+                        rows_by_track[track_id] = rows
+
+                    trajectory = transform_trajectory(rows_by_track, track_ids)
+                    if trajectory is None:
+                        continue
+
+                    if interaction_number == 1 and frame < 1200:
+                        first_trajectories.append({
+                            'track_ids': track_ids,
+                            'head': trajectory,
+                        })
+
+        def add_empty_page(pdf, title):
+            fig, ax = plt.subplots(figsize=(4, 4))
+            ax.axis("off")
+            ax.text(0.5, 0.5, title, ha="center", va="center", fontsize=9)
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        def mean_track_head(items, track_id):
+            max_len = window + 1
+            xs = []
+            ys = []
+
+            for item in items:
+                if track_id not in item['head']:
+                    continue
+
+                xy = item['head'][track_id]
+                x = np.full(max_len, np.nan)
+                y = np.full(max_len, np.nan)
+                n = min(len(xy), max_len)
+
+                if n > 0:
+                    x[:n] = xy[:n, 0]
+                    y[:n] = xy[:n, 1]
+
+                xs.append(x)
+                ys.append(y)
+
+            if not xs:
+                return None
+
+            mean_xy = np.column_stack((
+                np.nanmean(np.array(xs), axis=0),
+                np.nanmean(np.array(ys), axis=0)
+            ))
+            return register_to_origin(mean_xy, last_valid_point(mean_xy))
+
+        pdf_path = os.path.join(output_dir, f"before_{condition_label}.pdf")
+
+        with PdfPages(pdf_path) as pdf:
+            if not first_trajectories:
+                add_empty_page(pdf, "No first head trajectories before contact found")
+            else:
+                fig, ax = plt.subplots(figsize=(4.8, 4.8))
+                track_ids = sorted({
+                    track_id
+                    for item in first_trajectories
+                    for track_id in item['track_ids']
+                })
+                legend_handles = []
+
+                for track_id in track_ids:
+                    colour = colours.get(track_id, "#333333")
+
+                    for item in first_trajectories:
+                        if track_id not in item['head']:
+                            continue
+
+                        xy = np.asarray(item['head'][track_id], dtype=float)
+                        xy = xy[np.isfinite(xy).all(axis=1)]
+                        if len(xy) == 0:
+                            continue
+
+                        ax.plot(
+                            xy[:, 0],
+                            xy[:, 1],
+                            color=colour,
+                            linewidth=1,
+                            alpha=0.5,
+                            zorder=1
+                        )
+
+                    mean_xy = mean_track_head(first_trajectories, track_id)
+                    if mean_xy is None:
+                        continue
+
+                    plot_temporal_path(ax, mean_xy, colour)
+                    legend_handles.append(Line2D(
+                        [0],
+                        [0],
+                        color=colour,
+                        marker='o',
+                        linewidth=2.5,
+                        markersize=5,
+                        label=f"track {track_id} head mean"
+                    ))
+
+                # ax.set_xlim(-60, 60) # gh
+                # ax.set_ylim(-60, 60) # gh
+                ax.set_xlim(-80, 80) # si
+                ax.set_ylim(-80, 80) # si
+                ax.set_aspect('equal', adjustable='box')
+                plot_clean_axes(ax)
+                ax.set_xlabel("x, rotated and registered")
+                ax.set_ylabel("y, rotated and registered")
+                ax.set_title(f"first head mean trajectories before contact\nn = {len(first_trajectories)}", fontsize=9)
+                ax.legend(handles=legend_handles, fontsize=7, loc="upper right", frameon=False)
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+        return None
+
+
+    def trajectory_2(
+        self,
+        proximity_threshold=1,
+        window=15,
+        output_dir=None
+    ):
+
+        if output_dir is None:
+            output_dir = os.path.join(self.directory, "trajectories")
         os.makedirs(output_dir, exist_ok=True)
 
         parts = ['head', 'body', 'tail']
@@ -1996,6 +2751,7 @@ class FedStarvedAnalysis:
             index=False
         )
         return summary
+
 
 
     def trajectory_before(self, proximity_threshold=1, window=15):
@@ -5225,20 +5981,20 @@ class FedStarvedAnalysis:
 if __name__ == "__main__":
 
     directories = [
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-fed",
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved",
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/starved-starved",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-fed",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/starved-starved",
         # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-fed",
         # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-starved",
         # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/starved-starved",
 
 
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-fed",
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-starved",
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/starved-starved",
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-fed",
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-starved",
-        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/starved-starved",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-fed",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-starved",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/starved-starved",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-fed",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/fed-starved",
+        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/socially-isolated/starved-starved",
 
     ]
 
@@ -5271,18 +6027,21 @@ if __name__ == "__main__":
         # analysis.head_head_contacts_kinematics_over_time_nocontacts(proximity_threshold=1.5, window=60) # better than above i believe 
         # analysis.head_approach_angle()
         # analysis.nearest_neighbour()
-        analysis.interaction_type_bout() 
+        # analysis.interaction_type_bout() 
         # analysis.pairwise_approach_probability()
         # analysis.individual_approach_probability()  
         # analysis.prob_contact()
         # analysis.trajectory(window=20)
         # analysis.trajectory(proximity_threshold=1.5, window=10)
-        # analysis.trajectory_2(proximity_threshold=1.5, window=10)
         # analysis.trajectory(proximity_threshold=1.5, window=30)
         # analysis.trajectory(proximity_threshold=1.5, window=60)
         # analysis.trajectory_before(proximity_threshold=1.5, window=10)
         # analysis.trajectory_before(proximity_threshold=1.5, window=30)
         # analysis.trajectory_before(proximity_threshold=1.5, window=60)
+
+
+        analysis.trajectory_figures(proximity_threshold=1.5, window=10)
+        # analysis.trajectories_before_figures(proximity_threshold=1.5, window=60)
 
 
 

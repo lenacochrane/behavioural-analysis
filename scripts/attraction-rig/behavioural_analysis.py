@@ -1422,7 +1422,7 @@ class HoleAnalysis:
         summary_path = os.path.join(self.directory, "summary.csv")
         summary_df.to_csv(summary_path, index=False)
 
-    # METHOD PSEUDO_POPULATION_MODEL:
+    # METHOD PSEUDO_POPULATION_MODEL: ->  RUN ON FILES WITH ONE LARVAE
 
     def pseudo_population_model(self, number_of_iterations, number_of_animals):
 

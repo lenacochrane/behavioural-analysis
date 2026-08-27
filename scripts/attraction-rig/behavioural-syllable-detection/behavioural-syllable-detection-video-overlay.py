@@ -7,9 +7,9 @@ import numpy as np
 # paths
 # =============================================================================
 
-csv_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/behavioural-detection-testing/another-video/2026-02-18_10-40-54_td16_behaviour.csv"
-video_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/behavioural-detection-testing/another-video/2026-02-18_10-40-54_td16.mp4"
-save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/behavioural-detection-testing/another-video/track_videos"
+csv_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic/behaviour_detection.csv"
+video_path = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic/2026-07-06_12-34-22_td8_anosmic.mp4"
+save_dir = "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic/behaviour-overlay"
 
 os.makedirs(save_dir, exist_ok=True)
 
@@ -18,6 +18,9 @@ os.makedirs(save_dir, exist_ok=True)
 # =============================================================================
 
 df = pd.read_csv(csv_path)
+
+df = df[df['file'] == '2026-07-06_12-34-22_td8_anosmic']
+
 
 
 pixel_columns = ['x_tail', 'y_tail', 'x_body', 'y_body', 'x_head', 'y_head', 'y_head_corrected', 'x_head_corrected', 'y_tail_corrected', 'x_tail_corrected']
