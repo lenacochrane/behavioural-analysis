@@ -17,7 +17,7 @@ PALETTE = {
     "GH": 'steelblue',     
     "PSEUDO": 'skyblue'}
 
-HUE_ORDER = ["GH", "PSEUDO"]
+HUE_ORDER = ["PSEUDO", "GH"]   # first entry draws on top; GH sits underneath
 
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/closest_contacts_1mm.csv')
@@ -29,9 +29,25 @@ df2['condition'] = 'PSEUDO'
 
 df = pd.concat([df1, df2], ignore_index=True)
 
-# Sum across all frame bins per file + interaction type
+# Explode interaction pairs so each row is one larva (track)
+pairs_long = (
+    df[['condition', 'file', 'frame', 'Interaction Pair', 'Closest Interaction Type']]
+    .assign(
+        track=lambda d: (
+            d['Interaction Pair']
+            .astype(str)
+            .str.replace(r'[\(\)\[\]\s]', '', regex=True)   # remove (), [], spaces
+            .str.split(',')                                 # -> ['0','1']
+        )
+    )
+    .explode('track')
+)
+
+pairs_long['track'] = pairs_long['track'].astype(int)
+
+# Sum across all frame bins per larva + interaction type
 grouped = (
-    df.groupby(['file', 'condition', 'Closest Interaction Type'])
+    pairs_long.groupby(['file', 'condition', 'track', 'Closest Interaction Type'])
     .size()
     .reset_index(name='count')
 )
@@ -95,41 +111,56 @@ star_map = dict(
 
 
 
-plt.figure(figsize=(12,8))
-ax = sns.barplot(data=grouped, x='Closest Interaction Type', y='count', hue='condition', hue_order = HUE_ORDER, edgecolor='black', linewidth=2, errorbar='sd', palette=PALETTE, alpha=0.8)
+# order: least-occurring overall first (nearest y=0)
+SWAP_PAIR = ('head_head', 'body_head')   # these two are swapped in the order
 
-plt.xlabel('Interaction Type', fontsize=12, fontweight='bold')
-plt.ylabel('Total Contact Time (s)', fontsize=12, fontweight='bold')
+order = (
+    grouped.groupby('Closest Interaction Type')['count']
+    .sum()
+    .sort_values()
+    .index.tolist()
+)
+
+a, b = SWAP_PAIR
+if a in order and b in order:
+    i, j = order.index(a), order.index(b)
+    order[i], order[j] = order[j], order[i]
+else:
+    print(f"WARNING: {SWAP_PAIR} not both present in {order}")
+
+plt.figure(figsize=(8,10))
+ax = sns.barplot(data=grouped, y='Closest Interaction Type', x='count', order=order, hue='condition', hue_order = HUE_ORDER, edgecolor='black', linewidth=2, errorbar='sd', palette=PALETTE, alpha=0.8)
+
+plt.ylabel('Interaction Type', fontsize=12, fontweight='bold')
+plt.xlabel('Total Contact Time (s)', fontsize=12, fontweight='bold')
 
 sns.despine()
-ax.legend(frameon=False, title=None, loc="upper right")
+ax.legend(frameon=False, title=None, loc="lower right")
 
 # plt.title('Interaction Type (Closest Node)', fontsize=16, fontweight='bold')
 
 plt.tight_layout()
 
-plt.ylim(0, 1000)
-
-plt.xticks(rotation=45)
+plt.xlim(0, 200)
 
 # --- ADD STARS HERE (TRULY ROBUST) ---
-# make a dict: category_label -> x_position (tick center)
-tick_x = {t.get_text(): x for t, x in zip(ax.get_xticklabels(), ax.get_xticks())}
+# make a dict: category_label -> y_position (tick center)
+tick_y = {t.get_text(): y for t, y in zip(ax.get_yticklabels(), ax.get_yticks())}
 
-# collect bar centers + heights
+# collect bar centers + widths
 bar_info = []
 for p in ax.patches:
-    x_center = p.get_x() + p.get_width() / 2
-    bar_info.append((x_center, p.get_height()))
+    y_center = p.get_y() + p.get_height() / 2
+    bar_info.append((y_center, p.get_width()))
 
-# for each category, find the two bars closest to its tick center, take max height, place star at tick center
-for label, x in tick_x.items():
+# for each category, find the two bars closest to its tick center, take max width, place star at tick center
+for label, y in tick_y.items():
     stars = star_map.get(label, "")
     if not stars:
         continue
 
     # distance from each bar center to this category tick
-    dists = [(abs(bx - x), h) for bx, h in bar_info]
+    dists = [(abs(by - y), w) for by, w in bar_info]
 
     # take the TWO closest bars (GH + PSEUDO)
     dists.sort(key=lambda t: t[0])
@@ -139,19 +170,18 @@ for label, x in tick_x.items():
     if len(closest_two) == 0:
         continue
 
-    max_height = max(h for _, h in closest_two)
+    max_width = max(w for _, w in closest_two)
 
     ax.text(
-        x,                    # ALWAYS centered on the category tick
-        max_height * 1.06,    # slightly above tallest bar in that category
+        max_width * 1.06,     # slightly right of longest bar in that category
+        y,                    # ALWAYS centered on the category tick
         stars,
-        ha="center",
-        va="bottom",
+        ha="left",
+        va="center",
         fontsize=14,
         fontweight="bold",
         zorder=10
     )
-# --- END STARS ---
 
 
 
@@ -159,7 +189,8 @@ for label, x in tick_x.items():
 
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/interaction_type-closestnode_n10.pdf', 
+
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/interaction_type-closestnode_n10.pdf', 
             format='pdf', bbox_inches='tight')
 plt.show()
 

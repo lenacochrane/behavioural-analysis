@@ -20,6 +20,7 @@ from itertools import combinations
 from joblib import Parallel, delayed
 from itertools import product
 import itertools
+from collections import defaultdict, Counter
 
 class PseudoAnalysis:
 
@@ -1682,6 +1683,365 @@ class PseudoAnalysis:
             os.path.join(self.directory, f'individual_approach_responses_consistent_angle_{threshold}.csv'),
             index=False
         )   
+    
+
+    # METHOD PROBABILITY_OF_CONTACT: DOES A CLOSE APPROACH TURN INTO CONTACT
+
+    def probability_of_contact(self):
+
+        """
+        Probability that a close approach turns into physical contact.
+
+        An encounter OPENS on the frame the focal larva's head first comes
+        within ENCOUNTER_RADIUS of any node of another larva. It is scored a
+        contact if the two larvae reach CONTACT_THRESHOLD (minimum node-node
+        distance) at any point before the focal head leaves the radius again.
+        Once open, that pair cannot open a second encounter until the focal
+        head has been outside the radius for EXIT_FRAMES consecutive frames.
+
+        Encounters are directed - they describe one larva approaching another -
+        so the approach angle and the resulting probability both belong to the
+        focal animal. A single physical approach can appear twice, once per
+        larva; they are not independent observations of the same event.
+
+        The approach angle is the angle between the focal's body->head vector
+        and its head->(other's body) vector, in degrees. 0 = the focal is
+        pointing straight at the other larva.
+
+        One row per encounter. 'end_reason' says how it finished:
+            exit         - focal head left the radius (a complete encounter)
+            gap          - tracking gap longer than MAX_FRAME_GAP
+            end_of_file  - recording ended with the encounter still open
+        Incomplete encounters are kept so the decision to drop them is made at
+        analysis time. Note that digging_mask() removes rows, so a larva that
+        starts digging mid-encounter also shows up as 'gap'.
+
+        Distances are in mm once conversion() has been run.
+        """
+
+        ENCOUNTER_RADIUS = 10.0    # mm, focal head to nearest node of the other
+        CONTACT_THRESHOLD = 1.0    # mm, minimum node-node distance
+        EXIT_FRAMES = 2            # consecutive frames outside the radius to unlock
+        ANGLE_THRESHOLD = 35.0     # degrees, focal counts as facing the other
+        MAX_FRAME_GAP = 2          # frames, a larger gap ends the encounter
+
+        parts = ['head', 'body', 'tail']
+        encounters = []
+
+        for track_file in self.pseudo_files:
+
+            df = self.pseudo_data[track_file]
+            df = df.dropna(subset=['frame', 'track_id'])
+            df = df.drop_duplicates(subset=['frame', 'track_id'])
+
+            tracks = np.sort(df['track_id'].unique())
+            if len(tracks) < 2:
+                print(f"Fewer than two larvae in {track_file}, skipping")
+                continue
+
+            # (n_frames x n_tracks) grid of every node coordinate
+            X, Y = {}, {}
+            for part in parts:
+                X[part] = df.pivot(index='frame', columns='track_id', values=f'x_{part}').reindex(columns=tracks)
+                Y[part] = df.pivot(index='frame', columns='track_id', values=f'y_{part}').reindex(columns=tracks)
+
+            all_frames = X['head'].index.to_numpy()
+            X = {p: v.to_numpy(float) for p, v in X.items()}
+            Y = {p: v.to_numpy(float) for p, v in Y.items()}
+
+            for i, focal in enumerate(tracks):
+                for j, other in enumerate(tracks):
+
+                    if i == j:
+                        continue
+
+                    # the nine node-node distances between the two larvae
+                    D = np.vstack([
+                        np.hypot(X[p_focal][:, i] - X[p_other][:, j],
+                                 Y[p_focal][:, i] - Y[p_other][:, j])
+                        for p_focal in parts for p_other in parts
+                    ])
+
+                    # frames where both larvae are tracked
+                    keep = ~np.isnan(D).all(axis=0)
+                    if not keep.any():
+                        continue
+
+                    D = D[:, keep]
+                    frame = all_frames[keep]
+
+                    # closest approach of any node pair
+                    node = np.nanmin(D, axis=0)
+
+                    # rows 0-2 are the focal head against the other's head, body, tail
+                    head = np.where(
+                        np.isnan(D[:3]).all(axis=0),
+                        np.nan,
+                        np.nanmin(np.where(np.isnan(D[:3]), np.inf, D[:3]), axis=0)
+                    )
+
+                    # approach angle: focal body->head vs focal head->other body
+                    v1_x = (X['head'][:, i] - X['body'][:, i])[keep]
+                    v1_y = (Y['head'][:, i] - Y['body'][:, i])[keep]
+                    v2_x = (X['body'][:, j] - X['head'][:, i])[keep]
+                    v2_y = (Y['body'][:, j] - Y['head'][:, i])[keep]
+
+                    dot = v1_x * v2_x + v1_y * v2_y
+                    mag = np.hypot(v1_x, v1_y) * np.hypot(v2_x, v2_y)
+                    with np.errstate(invalid='ignore', divide='ignore'):
+                        cos = np.clip(np.where(mag > 0, dot / mag, np.nan), -1, 1)
+                    angle = np.degrees(np.arccos(cos))
+
+                    inside = head < ENCOUNTER_RADIUS   # NaN -> False
+
+                    def summarise(a_k, b_k, end_reason):
+
+                        sl = slice(a_k, b_k + 1)
+                        a, h, n = angle[sl], head[sl], node[sl]
+
+                        contact = np.where(n < CONTACT_THRESHOLD)[0]
+                        facing = a < ANGLE_THRESHOLD
+
+                        return {
+                            'file': track_file,
+                            'focal_id': focal,
+                            'other_id': other,
+                            'start_frame': frame[a_k],
+                            'end_frame': frame[b_k],
+                            'duration': frame[b_k] - frame[a_k] + 1,
+                            'n_frames': b_k - a_k + 1,
+                            'start_angle': a[0],
+                            'facing_at_start': bool(facing[0]),
+                            'min_angle': np.nanmin(a) if not np.isnan(a).all() else np.nan,
+                            'frac_frames_facing': facing.sum() / len(a),
+                            'min_head_to_other': np.nanmin(h) if not np.isnan(h).all() else np.nan,
+                            'min_node_dist': np.nanmin(n) if not np.isnan(n).all() else np.nan,
+                            'contacted': len(contact) > 0,
+                            'contact_frame': frame[a_k + contact[0]] if len(contact) else np.nan,
+                            'latency': frame[a_k + contact[0]] - frame[a_k] if len(contact) else np.nan,
+                            'end_reason': end_reason,
+                        }
+
+                    open_bout = False
+                    start_k = None
+                    last_inside_k = None
+                    outside_run = 0
+
+                    for k in range(len(frame)):
+
+                        gap = frame[k] - frame[k - 1] if k > 0 else 0
+
+                        # a tracking gap breaks an open encounter
+                        if open_bout and gap > MAX_FRAME_GAP:
+                            encounters.append(summarise(start_k, last_inside_k, 'gap'))
+                            open_bout = False
+                            outside_run = 0
+
+                        # locked until the pair is apart again, then a new encounter can open
+                        if not open_bout:
+                            if inside[k]:
+                                open_bout = True
+                                start_k = k
+                                last_inside_k = k
+                                outside_run = 0
+                            continue
+
+                        if inside[k]:
+                            last_inside_k = k
+                            outside_run = 0
+                        else:
+                            outside_run += 1
+                            if outside_run >= EXIT_FRAMES:
+                                encounters.append(summarise(start_k, last_inside_k, 'exit'))
+                                open_bout = False
+                                outside_run = 0
+
+                    if open_bout:
+                        encounters.append(summarise(start_k, last_inside_k, 'end_of_file'))
+
+        df = pd.DataFrame(encounters)
+
+        if self.use_shorten and self.shorten_duration is not None:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"probability_of_contact{suffix}.csv"
+        df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        # summary over complete encounters only
+        if len(df):
+            complete = df[df['end_reason'] == 'exit']
+            print(f"\n{len(df)} encounters ({len(complete)} complete) within {ENCOUNTER_RADIUS} mm")
+            if len(complete):
+                facing = complete[complete['facing_at_start']]['contacted']
+                away = complete[~complete['facing_at_start']]['contacted']
+                print(f"  P(contact)                   = {complete['contacted'].mean():.3f}  (n = {len(complete)})")
+                if len(facing):
+                    print(f"  P(contact | angle < {ANGLE_THRESHOLD:.0f})     = {facing.mean():.3f}  (n = {len(facing)})")
+                if len(away):
+                    print(f"  P(contact | angle >= {ANGLE_THRESHOLD:.0f})    = {away.mean():.3f}  (n = {len(away)})")
+        else:
+            print("No encounters detected")
+
+        return df
+    
+
+
+    def interaction_type_bout(self):
+
+        threshold = 1.0           # must hit this to START a bout
+        continue_threshold = 1.5  # once started, can CONTINUE while min_dist < this
+
+        def unify_interaction_type(part1, part2):
+            return '_'.join(sorted([part1, part2]))
+
+        body_parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(body_parts, body_parts))
+
+        unified_types = [
+            'head_head', 'tail_tail', 'body_body',
+            'body_head', 'body_tail', 'head_tail'
+        ]
+
+        bouts = []
+
+        for track_file in self.pseudo_files:
+            df = self.pseudo_data[track_file].copy()
+            df.sort_values(by='frame', inplace=True)
+
+            active_bouts = {}  # key: (id1, id2) -> bout dict
+            bout_counter = 0
+
+            for frame in df['frame'].unique():
+                frame_data = df[df['frame'] == frame]
+                track_ids = frame_data['track_id'].unique()
+
+                # Build coordinate lookups for each part
+                coords = {
+                    part: {
+                        row['track_id']: np.array([row[f'x_{part}'], row[f'y_{part}']])
+                        for _, row in frame_data.iterrows()
+                    }
+                    for part in body_parts
+                }
+
+                # pairs with any <1mm contacts this frame (used to START bouts + log real interactions)
+                interacting_pairs = {}  # pair_key -> list of interaction types (<1mm)
+
+                # pairs with min distance <1.5mm this frame (used to CONTINUE bouts)
+                close_pairs = {}        # pair_key -> closest_type (min-distance type)
+
+                for id1, id2 in itertools.combinations(track_ids, 2):
+
+                    interactions = []
+                    min_dist = float('inf')
+                    closest_type = None
+
+                    for part1, part2 in interaction_pairs:
+                        coord1 = coords[part1].get(id1)
+                        coord2 = coords[part2].get(id2)
+                        if coord1 is None or coord2 is None:
+                            continue
+
+                        dist = np.linalg.norm(coord1 - coord2)
+
+                        # track minimum distance + its type
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_type = unify_interaction_type(part1, part2)
+
+                        # record all true contact types (<1mm)
+                        if dist < threshold:
+                            interactions.append(unify_interaction_type(part1, part2))
+
+                    pair_key = tuple(sorted((id1, id2)))
+
+                    # continuation condition: within 1.5mm
+                    if closest_type is not None and min_dist < continue_threshold:
+                        close_pairs[pair_key] = closest_type
+
+                    # start/true-contact condition: any <1mm
+                    if interactions:
+                        interacting_pairs[pair_key] = interactions
+
+                current_close = set(close_pairs.keys())
+
+                # 1) END bouts that are no longer within 1.5mm
+                for pair in list(active_bouts.keys()):
+                    if pair not in current_close:
+                        bout = active_bouts.pop(pair)
+                        interactions_all = bout['interactions']
+                        if interactions_all:
+                            type_counts = Counter(interactions_all)
+                            bout_data = {
+                                'file': track_file,
+                                'bout_id': bout['bout_id'],
+                                'track_1': pair[0],
+                                'track_2': pair[1],
+                                'start_frame': bout['start_frame'],
+                                'end_frame': bout['end_frame'],
+                                'duration': bout['end_frame'] - bout['start_frame'] + 1,
+                                'initial_type': interactions_all[0],
+                                'predominant_type': Counter(interactions_all).most_common(1)[0][0],
+                            }
+                            for t in unified_types:
+                                bout_data[t] = type_counts.get(t, 0)
+                            bouts.append(bout_data)
+
+                # 2) UPDATE existing bouts that are still within 1.5mm
+                for pair in list(active_bouts.keys()):
+                    # (pair must be in close_pairs here)
+                    active_bouts[pair]['end_frame'] = frame
+
+                    if pair in interacting_pairs:
+                        # real interactions (<1mm)
+                        active_bouts[pair]['interactions'].extend(interacting_pairs[pair])
+                    else:
+                        # between 1.0 and 1.5mm: filler closest type
+                        active_bouts[pair]['interactions'].append(close_pairs[pair])
+
+
+                # 3) START new bouts ONLY if they hit <1mm this frame
+                for pair, interactions in interacting_pairs.items():
+                    if pair in active_bouts:
+                        continue
+                    active_bouts[pair] = {
+                        'bout_id': bout_counter,
+                        'start_frame': frame,
+                        'end_frame': frame,
+                        'interactions': interactions.copy(),
+                    }
+                    bout_counter += 1
+
+            # Finalize remaining bouts at end of file
+            for pair, bout in active_bouts.items():
+                interactions_all = bout['interactions']
+                if interactions_all:
+                    type_counts = Counter(interactions_all)
+                    bout_data = {
+                        'file': track_file,
+                        'bout_id': bout['bout_id'],
+                        'track_1': pair[0],
+                        'track_2': pair[1],
+                        'start_frame': bout['start_frame'],
+                        'end_frame': bout['end_frame'],
+                        'duration': bout['end_frame'] - bout['start_frame'] + 1,
+                        'initial_type': interactions_all[0],
+                        'predominant_type': Counter(interactions_all).most_common(1)[0][0],
+                    }
+                    for t in unified_types:
+                        bout_data[t] = type_counts.get(t, 0)
+                    bouts.append(bout_data)
+
+        bout_df = pd.DataFrame(bouts).sort_values(by=['file', 'bout_id'])
+        bout_df.to_csv(os.path.join(self.directory, "interaction_type_bout.csv"), index=False)
+        return bout_df
+
+
+
+
+
 
 
 
@@ -1744,7 +2104,10 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses(9)
     # analysis.individual_approach_responses(10)
 
-    analysis.individual_approach_responses_consistent_approach_angle(10)
+    # analysis.individual_approach_responses_consistent_approach_angle(10)
+    # analysis.probability_of_contact()
+
+    analysis.interaction_type_bout()
 
 
     print(f"Analysis complete for {directory}")

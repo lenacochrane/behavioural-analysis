@@ -33,13 +33,13 @@ def perform_analysis(directory):
     ####### --- LARVAL BEHAVIOUR --- ######
 
     ## REMOVE DIGGING FROM ANALYSIS 
-    # analysis.digging_mask()
+    analysis.digging_mask()
 
 
     ### PSEUDO POPULATION MODEL
 
     # analysis.pseudo_population_model()
-    analysis.pseudo_population_model(number_of_iterations=10, number_of_animals=5)
+    # analysis.pseudo_population_model(number_of_iterations=10, number_of_animals=5)
 
     ## BEHAVIOURAL DYNAMICS 
 
@@ -68,6 +68,8 @@ def perform_analysis(directory):
 
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=5)
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=10)
+
+    analysis.probability_of_contact()
 
 
     # analysis.nearest_neighbour()
@@ -144,9 +146,9 @@ if __name__ == "__main__":
     # perform_analysis("/Volumes/lab-windingm/home/users/cochral/AttractionRig/analysis/social-isolation/n2/socially-isolated")
 
 
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
-    # perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
-    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
+    perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
+    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')

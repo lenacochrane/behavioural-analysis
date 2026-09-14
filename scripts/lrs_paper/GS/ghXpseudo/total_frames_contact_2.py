@@ -102,8 +102,10 @@ for label in ax.get_xticklabels():
 
 
 
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GHxPSEUDO/total_contact_frames_perlarva.pdf', 
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/total_contact_frames_perlarva.pdf', 
             format='pdf', bbox_inches='tight')
 
-plt.close()
+
+
+plt.show()
 

@@ -4,6 +4,7 @@ import random
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import itertools
 
 """
 
@@ -44,10 +45,10 @@ cap.release()
 # BGR -> RGB for matplotlib
 frame_rgb = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)
 
-black_thresh = 60  # 0–255
+# black_thresh = 60  # 0–255
 
-mask = np.all(frame_rgb < black_thresh, axis=2)
-frame_rgb[mask] = [255, 255, 255]
+# mask = np.all(frame_rgb < black_thresh, axis=2)
+# frame_rgb[mask] = [255, 255, 255]
 # plt.figure(figsize=(8, 8)) 
 # plt.imshow(frame_rgb)
 plt.figure(figsize=(6, 6), dpi=600)          # 14*100 = 1400 px
@@ -121,6 +122,15 @@ def rgba_to_bgr(rgba):
     r, g, b, a = rgba
     return (int(b*255), int(g*255), int(r*255))  # OpenCV wants BGR
 
+CONTACT_MM  = 1.0
+CONVERSION  = 90 / 1032      # mm per pixel
+CONTACT_PX  = CONTACT_MM / CONVERSION
+DOT_RADIUS  = 8
+PARTS       = ['head', 'body', 'tail']
+
+contact_points = []
+in_contact = set()           # pairs touching last frame -> one dot per encounter
+
 last_xy = {}
 
 vals = np.linspace(0, 1, len(track_ids))
@@ -144,6 +154,25 @@ for i, frame in enumerate(frames):
             cv2.line(canvas, (x_prev, y_prev), (xb_i, yb_i), color, 6)
         last_xy[tid] = (xb_i, yb_i)
 
+    # red dot at the onset of each close-range contact (<1mm, as in interaction_type_bout)
+    pos = {}
+    for tid, sub in fdf.groupby("track_id"):
+        pts = {pt: np.array([sub[f"x_{pt}"].iloc[0], sub[f"y_{pt}"].iloc[0]]) for pt in PARTS}
+        if not np.isnan(np.concatenate(list(pts.values()))).any():
+            pos[tid] = pts
+
+    still = set()
+    for id1, id2 in itertools.combinations(sorted(pos), 2):
+        d = min(np.linalg.norm(pos[id1][p1] - pos[id2][p2]) for p1 in PARTS for p2 in PARTS)
+        if d < CONTACT_PX:
+            still.add((id1, id2))
+            if (id1, id2) not in in_contact:
+                contact_points.append((pos[id1]['body'] + pos[id2]['body']) / 2)
+    in_contact = still
+
+
+for cx, cy in contact_points:
+    cv2.circle(canvas, (int(cx), int(cy)), DOT_RADIUS, (0, 0, 255), -1)
 
 out_pdf_path = f"{output}/tracks.pdf"
 fig, ax = plt.subplots(figsize=(2, 2), dpi=600)  # 14*100 = 1400 px

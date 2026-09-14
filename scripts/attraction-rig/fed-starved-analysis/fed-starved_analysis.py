@@ -5315,663 +5315,207 @@ class FedStarvedAnalysis:
     
 
 
+    # METHOD PROBABILITY_OF_CONTACT: DOES A CLOSE APPROACH TURN INTO CONTACT
 
+    def probability_of_contact(self):
 
+        """
+        Probability that a close approach turns into physical contact.
 
-    def prob_contact(
-        self,
-        contact_threshold=1.0,
-        max_distance=10,
-        distance_bin_size=1,
-        angle_bin_size=30
-    ):
+        An encounter OPENS on the frame the focal larva's head first comes
+        within ENCOUNTER_RADIUS of any node of another larva. It is scored a
+        contact if the two larvae reach CONTACT_THRESHOLD (minimum node-node
+        distance) at any point before the focal head leaves the radius again.
+        Once open, that pair cannot open a second encounter until the focal
+        head has been outside the radius for EXIT_FRAMES consecutive frames.
+
+        Encounters are directed - they describe one larva approaching another -
+        so the approach angle and the resulting probability both belong to the
+        focal animal. A single physical approach can appear twice, once per
+        larva; they are not independent observations of the same event.
+
+        The approach angle is the angle between the focal's body->head vector
+        and its head->(other's body) vector, in degrees. 0 = the focal is
+        pointing straight at the other larva.
+
+        One row per encounter. 'end_reason' says how it finished:
+            exit         - focal head left the radius (a complete encounter)
+            gap          - tracking gap longer than MAX_FRAME_GAP
+            end_of_file  - recording ended with the encounter still open
+        Incomplete encounters are kept so the decision to drop them is made at
+        analysis time. Note that digging_mask() removes rows, so a larva that
+        starts digging mid-encounter also shows up as 'gap'.
+
+        Distances are in mm once conversion() has been run.
+        """
+
+        ENCOUNTER_RADIUS = 10.0    # mm, focal head to nearest node of the other
+        CONTACT_THRESHOLD = 1.0    # mm, minimum node-node distance
+        EXIT_FRAMES = 2            # consecutive frames outside the radius to unlock
+        ANGLE_THRESHOLD = 35.0     # degrees, focal counts as facing the other
+        MAX_FRAME_GAP = 2          # frames, a larger gap ends the encounter
 
         parts = ['head', 'body', 'tail']
+        encounters = []
 
-        raw_columns = [
-            'file',
-            'episode_id',
-            'episode_start_frame',
-            'episode_end_frame',
-            'frame',
-            'focal_id',
-            'stim_id',
-            'nearest_node',
-            'head_distance',
-            'distance_bin',
-            'approach_angle',
-            'angle_bin',
-            'contact_during_episode',
-            'contact_within_window'
-        ]
+        for track_file in self.track_files:
 
-        summary_columns = [
-            'file',
-            'distance_bin',
-            'angle_bin',
-            'nearest_node',
-            'n_observations',
-            'n_contacts',
-            'prob_contact'
-        ]
+            df = self.track_data[track_file]
+            df = df.dropna(subset=['frame', 'track_id'])
+            df = df.drop_duplicates(subset=['frame', 'track_id'])
 
-        def head_to_other_distance(row_focal, row_stim):
+            tracks = np.sort(df['track_id'].unique())
+            if len(tracks) < 2:
+                print(f"Fewer than two larvae in {track_file}, skipping")
+                continue
 
-            hx = row_focal['x_head']
-            hy = row_focal['y_head']
-
-            if pd.isna(hx) or pd.isna(hy):
-                return np.nan, None
-
-            min_dist = np.inf
-            nearest_node = None
-
+            # (n_frames x n_tracks) grid of every node coordinate
+            X, Y = {}, {}
             for part in parts:
-                x = row_stim[f'x_{part}']
-                y = row_stim[f'y_{part}']
+                X[part] = df.pivot(index='frame', columns='track_id', values=f'x_{part}').reindex(columns=tracks)
+                Y[part] = df.pivot(index='frame', columns='track_id', values=f'y_{part}').reindex(columns=tracks)
 
-                if pd.isna(x) or pd.isna(y):
-                    continue
+            all_frames = X['head'].index.to_numpy()
+            X = {p: v.to_numpy(float) for p, v in X.items()}
+            Y = {p: v.to_numpy(float) for p, v in Y.items()}
 
-                dist = np.hypot(hx - x, hy - y)
+            for i, focal in enumerate(tracks):
+                for j, other in enumerate(tracks):
 
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest_node = part
-
-            if nearest_node is None:
-                return np.nan, None
-
-            return float(min_dist), nearest_node
-
-        def approach_angle(row_focal, row_stim, nearest_node):
-
-            hx = row_focal['x_head']
-            hy = row_focal['y_head']
-            bx = row_focal['x_body']
-            by = row_focal['y_body']
-
-            heading = np.array([hx - bx, hy - by], dtype=float)
-
-            if np.isnan(heading).any() or np.linalg.norm(heading) == 0:
-                return np.nan
-
-            tx = row_stim[f'x_{nearest_node}']
-            ty = row_stim[f'y_{nearest_node}']
-
-            if pd.isna(tx) or pd.isna(ty):
-                return np.nan
-
-            target = np.array([tx - hx, ty - hy], dtype=float)
-
-            if np.isnan(target).any() or np.linalg.norm(target) == 0:
-                return np.nan
-
-            cosang = np.dot(heading, target) / (
-                np.linalg.norm(heading) * np.linalg.norm(target)
-            )
-            cosang = np.clip(cosang, -1, 1)
-
-            return float(np.degrees(np.arccos(cosang)))
-
-        def min_node_distance(row_a, row_b):
-
-            min_dist = np.inf
-
-            for part_a in parts:
-                coord_a = np.array([
-                    row_a[f'x_{part_a}'],
-                    row_a[f'y_{part_a}']
-                ], dtype=float)
-
-                if np.isnan(coord_a).any():
-                    continue
-
-                for part_b in parts:
-                    coord_b = np.array([
-                        row_b[f'x_{part_b}'],
-                        row_b[f'y_{part_b}']
-                    ], dtype=float)
-
-                    if np.isnan(coord_b).any():
+                    if i == j:
                         continue
 
-                    dist = np.linalg.norm(coord_a - coord_b)
-
-                    if dist < min_dist:
-                        min_dist = dist
-
-            return min_dist
-
-        distance_edges = np.arange(
-            0,
-            max_distance + distance_bin_size,
-            distance_bin_size
-        )
-        angle_edges = np.arange(
-            0,
-            180 + angle_bin_size,
-            angle_bin_size
-        )
-
-        distance_labels = [
-            f'{distance_edges[i]:g}-{distance_edges[i + 1]:g}'
-            for i in range(len(distance_edges) - 1)
-        ]
-        angle_labels = [
-            f'{angle_edges[i]:g}-{angle_edges[i + 1]:g}'
-            for i in range(len(angle_edges) - 1)
-        ]
-
-        def label_bin(value, edges, labels):
-
-            if pd.isna(value):
-                return np.nan
-
-            for i in range(len(labels)):
-                if i == 0 and edges[i] <= value <= edges[i + 1]:
-                    return labels[i]
-                if edges[i] < value <= edges[i + 1]:
-                    return labels[i]
-
-            return np.nan
-
-        data = []
-
-        for match in self.matching_pairs:
-
-            track_file = match['track_file']
-            df = self.track_data[track_file].copy()
-            df = df.sort_values(['frame', 'track_id'])
-
-            frame_groups = {
-                frame: frame_df
-                for frame, frame_df in df.groupby('frame')
-            }
-
-            frames = sorted(frame_groups.keys())
-            all_track_ids = sorted(df['track_id'].dropna().unique())
-            episode_counter = 0
-
-            for id1, id2 in combinations(all_track_ids, 2):
-
-                i = 0
-
-                while i < len(frames):
-
-                    frame = frames[i]
-                    frame_df = frame_groups[frame]
-                    row1 = frame_df[frame_df['track_id'] == id1]
-                    row2 = frame_df[frame_df['track_id'] == id2]
-
-                    if row1.empty or row2.empty:
-                        i += 1
-                        continue
-
-                    row1 = row1.iloc[0]
-                    row2 = row2.iloc[0]
-                    pair_distance = min_node_distance(row1, row2)
-
-                    if (
-                        not np.isfinite(pair_distance)
-                        or pair_distance > max_distance
-                    ):
-                        i += 1
-                        continue
-
-                    episode_counter += 1
-                    episode_id = f'{track_file}_episode_{episode_counter}'
-                    episode_start_frame = frame
-                    episode_end_frame = frame
-                    episode_rows = []
-                    seen_distance_bins = {
-                        id1: set(),
-                        id2: set()
-                    }
-                    contacted = False
-
-                    while i < len(frames):
-
-                        frame = frames[i]
-                        frame_df = frame_groups[frame]
-                        row1 = frame_df[frame_df['track_id'] == id1]
-                        row2 = frame_df[frame_df['track_id'] == id2]
-
-                        if row1.empty or row2.empty:
-                            break
-
-                        row1 = row1.iloc[0]
-                        row2 = row2.iloc[0]
-                        pair_distance = min_node_distance(row1, row2)
-
-                        if (
-                            not np.isfinite(pair_distance)
-                            or pair_distance > max_distance
-                        ):
-                            break
-
-                        episode_end_frame = frame
-
-                        if pair_distance < contact_threshold:
-                            contacted = True
-                            i += 1
-                            break
-
-                        for focal_id, stim_id, focal, stim in [
-                            (id1, id2, row1, row2),
-                            (id2, id1, row2, row1)
-                        ]:
-                            head_distance, nearest_node = head_to_other_distance(
-                                focal,
-                                stim
-                            )
-
-                            if (
-                                nearest_node is None
-                                or pd.isna(head_distance)
-                                or head_distance <= 0
-                                or head_distance > max_distance
-                            ):
-                                continue
-
-                            distance_bin = label_bin(
-                                head_distance,
-                                distance_edges,
-                                distance_labels
-                            )
-
-                            if pd.isna(distance_bin):
-                                continue
-
-                            if distance_bin in seen_distance_bins[focal_id]:
-                                continue
-
-                            angle = approach_angle(focal, stim, nearest_node)
-
-                            if pd.isna(angle):
-                                continue
-
-                            angle_bin = label_bin(
-                                angle,
-                                angle_edges,
-                                angle_labels
-                            )
-
-                            if pd.isna(angle_bin):
-                                continue
-
-                            seen_distance_bins[focal_id].add(distance_bin)
-                            episode_rows.append({
-                                'file': track_file,
-                                'episode_id': episode_id,
-                                'episode_start_frame': episode_start_frame,
-                                'episode_end_frame': episode_end_frame,
-                                'frame': frame,
-                                'focal_id': focal_id,
-                                'stim_id': stim_id,
-                                'nearest_node': nearest_node,
-                                'head_distance': head_distance,
-                                'distance_bin': distance_bin,
-                                'approach_angle': angle,
-                                'angle_bin': angle_bin,
-                            })
-
-                        i += 1
-
-                    for row in episode_rows:
-                        row['episode_end_frame'] = episode_end_frame
-                        row['contact_during_episode'] = contacted
-                        row['contact_within_window'] = contacted
-                        data.append(row)
-
-                    if contacted:
-                        while i < len(frames):
-                            frame_df = frame_groups[frames[i]]
-                            row1 = frame_df[frame_df['track_id'] == id1]
-                            row2 = frame_df[frame_df['track_id'] == id2]
-
-                            if row1.empty or row2.empty:
-                                break
-
-                            pair_distance = min_node_distance(
-                                row1.iloc[0],
-                                row2.iloc[0]
-                            )
-
-                            if (
-                                not np.isfinite(pair_distance)
-                                or pair_distance > max_distance
-                            ):
-                                break
-
-                            i += 1
-
-                    elif i < len(frames):
-                        i += 1
-
-        raw_df = pd.DataFrame(data, columns=raw_columns)
-
-        if raw_df.empty:
-            summary_df = pd.DataFrame(columns=summary_columns)
-        else:
-            summary_df = (
-                raw_df
-                .dropna(subset=['distance_bin', 'angle_bin'])
-                .groupby(
-                    ['file', 'distance_bin', 'angle_bin', 'nearest_node'],
-                    observed=True
-                )
-                .agg(
-                    n_observations=('contact_during_episode', 'size'),
-                    n_contacts=('contact_during_episode', 'sum')
-                )
-                .reset_index()
-            )
-            summary_df['prob_contact'] = (
-                summary_df['n_contacts']
-                / summary_df['n_observations']
-            )
-            summary_df = summary_df[summary_columns]
-
-        raw_df.to_csv(
-            os.path.join(self.directory, 'prob_contact_raw.csv'),
-            index=False
-        )
-        summary_df.to_csv(
-            os.path.join(self.directory, 'prob_contact_summary.csv'),
-            index=False
-        )
-
-        return raw_df, summary_df
-
-
-
-
-
-    def pairwise_approach_probability(self, threshold=10):
-
-        parts = ['head', 'body', 'tail']
-
-        data = []
-
-        def min_node_distance(row_a, row_b):
-
-            min_dist = np.inf
-
-            for part_a in parts:
-                coord_a = np.array([
-                    row_a[f'x_{part_a}'],
-                    row_a[f'y_{part_a}']
-                ])
-
-                for part_b in parts:
-                    coord_b = np.array([
-                        row_b[f'x_{part_b}'],
-                        row_b[f'y_{part_b}']
+                    # the nine node-node distances between the two larvae
+                    D = np.vstack([
+                        np.hypot(X[p_focal][:, i] - X[p_other][:, j],
+                                 Y[p_focal][:, i] - Y[p_other][:, j])
+                        for p_focal in parts for p_other in parts
                     ])
 
-                    dist = np.linalg.norm(coord_a - coord_b)
-
-                    if dist < min_dist:
-                        min_dist = dist
-
-            return min_dist
-
-        for match in self.matching_pairs:
-
-            track_file = match['track_file']
-            df = self.track_data[track_file].copy()
-
-            frame_groups = {
-                frame: frame_df
-                for frame, frame_df in df.groupby('frame')
-            }
-
-            frames = sorted(frame_groups.keys())
-
-            for i in range(len(frames) - 1):
-
-                frame = frames[i]
-                next_frame = frames[i + 1]
-
-                current_df = frame_groups[frame]
-                next_df = frame_groups[next_frame]
-
-                current_tracks = set(current_df['track_id'])
-                next_tracks = set(next_df['track_id'])
-
-                common_tracks = current_tracks.intersection(next_tracks)
-
-                if len(common_tracks) < 2:
-                    continue
-
-                for id1, id2 in combinations(sorted(common_tracks), 2):
-
-                    row1_now = current_df[current_df['track_id'] == id1]
-                    row2_now = current_df[current_df['track_id'] == id2]
-
-                    row1_next = next_df[next_df['track_id'] == id1]
-                    row2_next = next_df[next_df['track_id'] == id2]
-
-                    if (
-                        row1_now.empty or row2_now.empty
-                        or row1_next.empty or row2_next.empty
-                    ):
+                    # frames where both larvae are tracked
+                    keep = ~np.isnan(D).all(axis=0)
+                    if not keep.any():
                         continue
 
-                    row1_now = row1_now.iloc[0]
-                    row2_now = row2_now.iloc[0]
+                    D = D[:, keep]
+                    frame = all_frames[keep]
 
-                    row1_next = row1_next.iloc[0]
-                    row2_next = row2_next.iloc[0]
+                    # closest approach of any node pair
+                    node = np.nanmin(D, axis=0)
 
-                    distance_now = min_node_distance(row1_now, row2_now)
+                    # rows 0-2 are the focal head against the other's head, body, tail
+                    head = np.where(
+                        np.isnan(D[:3]).all(axis=0),
+                        np.nan,
+                        np.nanmin(np.where(np.isnan(D[:3]), np.inf, D[:3]), axis=0)
+                    )
 
-                    if distance_now <= 0 or distance_now > threshold:
-                        continue
+                    # approach angle: focal body->head vs focal head->other body
+                    v1_x = (X['head'][:, i] - X['body'][:, i])[keep]
+                    v1_y = (Y['head'][:, i] - Y['body'][:, i])[keep]
+                    v2_x = (X['body'][:, j] - X['head'][:, i])[keep]
+                    v2_y = (Y['body'][:, j] - Y['head'][:, i])[keep]
 
-                    distance_next = min_node_distance(row1_next, row2_next)
+                    dot = v1_x * v2_x + v1_y * v2_y
+                    mag = np.hypot(v1_x, v1_y) * np.hypot(v2_x, v2_y)
+                    with np.errstate(invalid='ignore', divide='ignore'):
+                        cos = np.clip(np.where(mag > 0, dot / mag, np.nan), -1, 1)
+                    angle = np.degrees(np.arccos(cos))
 
-                    delta_distance = distance_next - distance_now
+                    inside = head < ENCOUNTER_RADIUS   # NaN -> False
 
-                    data.append({
-                        'file': track_file,
-                        'frame': frame,
-                        'track_1': id1,
-                        'track_2': id2,
-                        'distance': distance_now,
-                        'next_distance': distance_next,
-                        'delta_distance': delta_distance,
-                        'approach': delta_distance < 0
-                    })
+                    def summarise(a_k, b_k, end_reason):
 
-        result = pd.DataFrame(data)
+                        sl = slice(a_k, b_k + 1)
+                        a, h, n = angle[sl], head[sl], node[sl]
 
-        result.to_csv(
-            os.path.join(
-                self.directory,
-                f'pairwise_approach_probability.csv'
-            ),
-            index=False
-        )
+                        contact = np.where(n < CONTACT_THRESHOLD)[0]
+                        facing = a < ANGLE_THRESHOLD
 
-        return result
-    
-
-
-    def individual_approach_probability(self, threshold=10):
-
-        parts = ['head', 'body', 'tail']
-
-        data = []
-
-        def head_to_other_distance(row_focal, row_stim):
-
-            hx = row_focal['x_head']
-            hy = row_focal['y_head']
-
-            min_dist = np.inf
-            nearest_node = None
-
-            for part in parts:
-                x = row_stim[f'x_{part}']
-                y = row_stim[f'y_{part}']
-
-                if pd.isna(x) or pd.isna(y):
-                    continue
-
-                dist = np.hypot(hx - x, hy - y)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest_node = part
-
-            return min_dist, nearest_node
-
-        def approach_angle(row_focal, row_stim, nearest_node):
-
-            hx = row_focal['x_head']
-            hy = row_focal['y_head']
-            bx = row_focal['x_body']
-            by = row_focal['y_body']
-
-            v_heading = np.array([hx - bx, hy - by], dtype=float)
-
-            if np.linalg.norm(v_heading) == 0:
-                return np.nan
-
-            tx = row_stim[f'x_{nearest_node}']
-            ty = row_stim[f'y_{nearest_node}']
-
-            if pd.isna(tx) or pd.isna(ty):
-                return np.nan
-
-            v_target = np.array([tx - hx, ty - hy], dtype=float)
-
-            if np.linalg.norm(v_target) == 0:
-                return np.nan
-
-            cosang = np.dot(v_heading, v_target) / (
-                np.linalg.norm(v_heading) * np.linalg.norm(v_target)
-            )
-
-            cosang = np.clip(cosang, -1, 1)
-
-            return float(np.degrees(np.arccos(cosang)))
-
-        def body_speed(row_now, row_next):
-
-            return float(np.hypot(
-                row_next['x_body'] - row_now['x_body'],
-                row_next['y_body'] - row_now['y_body']
-            ))
-
-        for match in self.matching_pairs:
-
-            track_file = match['track_file']
-            df = self.track_data[track_file].copy()
-
-            frame_groups = {
-                frame: frame_df
-                for frame, frame_df in df.groupby('frame')
-            }
-
-            frames = sorted(frame_groups.keys())
-
-            for i in range(len(frames) - 1):
-
-                frame = frames[i]
-                next_frame = frames[i + 1]
-
-                current_df = frame_groups[frame]
-                next_df = frame_groups[next_frame]
-
-                current_tracks = set(current_df['track_id'])
-                next_tracks = set(next_df['track_id'])
-
-                common_tracks = current_tracks.intersection(next_tracks)
-
-                if len(common_tracks) < 2:
-                    continue
-
-                for focal_id in sorted(common_tracks):
-                    for stim_id in sorted(common_tracks):
-
-                        if focal_id == stim_id:
-                            continue
-
-                        focal_now = current_df[current_df['track_id'] == focal_id]
-                        stim_now = current_df[current_df['track_id'] == stim_id]
-
-                        focal_next = next_df[next_df['track_id'] == focal_id]
-                        stim_next = next_df[next_df['track_id'] == stim_id]
-
-                        if (
-                            focal_now.empty or stim_now.empty
-                            or focal_next.empty or stim_next.empty
-                        ):
-                            continue
-
-                        focal_now = focal_now.iloc[0]
-                        stim_now = stim_now.iloc[0]
-
-                        focal_next = focal_next.iloc[0]
-                        stim_next = stim_next.iloc[0]
-
-                        distance_now, nearest_node = head_to_other_distance(
-                            focal_now,
-                            stim_now
-                        )
-
-                        if nearest_node is None:
-                            continue
-
-                        if distance_now <= 0 or distance_now > threshold:
-                            continue
-
-                        distance_next, next_nearest_node = head_to_other_distance(
-                            focal_next,
-                            stim_next
-                        )
-
-                        delta_distance = distance_next - distance_now
-
-                        angle = approach_angle(
-                            focal_now,
-                            stim_now,
-                            nearest_node
-                        )
-
-                        focal_speed = body_speed(focal_now, focal_next)
-                        stim_speed = body_speed(stim_now, stim_next)
-
-                        data.append({
+                        return {
                             'file': track_file,
-                            'frame': frame,
-                            'focal_id': focal_id,
-                            'stim_id': stim_id,
-                            'nearest_node': nearest_node,
-                            'next_nearest_node': next_nearest_node,
-                            'distance': distance_now,
-                            'next_distance': distance_next,
-                            'delta_distance': delta_distance,
-                            'approach': delta_distance < 0,
-                            'approach_angle': angle,
-                            'focal_speed': focal_speed,
-                            'stim_speed': stim_speed
-                        })
+                            'focal_id': focal,
+                            'other_id': other,
+                            'start_frame': frame[a_k],
+                            'end_frame': frame[b_k],
+                            'duration': frame[b_k] - frame[a_k] + 1,
+                            'n_frames': b_k - a_k + 1,
+                            'start_angle': a[0],
+                            'facing_at_start': bool(facing[0]),
+                            'min_angle': np.nanmin(a) if not np.isnan(a).all() else np.nan,
+                            'frac_frames_facing': facing.sum() / len(a),
+                            'min_head_to_other': np.nanmin(h) if not np.isnan(h).all() else np.nan,
+                            'min_node_dist': np.nanmin(n) if not np.isnan(n).all() else np.nan,
+                            'contacted': len(contact) > 0,
+                            'contact_frame': frame[a_k + contact[0]] if len(contact) else np.nan,
+                            'latency': frame[a_k + contact[0]] - frame[a_k] if len(contact) else np.nan,
+                            'end_reason': end_reason,
+                        }
 
-        result = pd.DataFrame(data)
+                    open_bout = False
+                    start_k = None
+                    last_inside_k = None
+                    outside_run = 0
 
-        result.to_csv(
-            os.path.join(
-                self.directory,
-                f'individual_approach_probability.csv'
-            ),
-            index=False
-        )
+                    for k in range(len(frame)):
 
-        return result
+                        gap = frame[k] - frame[k - 1] if k > 0 else 0
+
+                        # a tracking gap breaks an open encounter
+                        if open_bout and gap > MAX_FRAME_GAP:
+                            encounters.append(summarise(start_k, last_inside_k, 'gap'))
+                            open_bout = False
+                            outside_run = 0
+
+                        # locked until the pair is apart again, then a new encounter can open
+                        if not open_bout:
+                            if inside[k]:
+                                open_bout = True
+                                start_k = k
+                                last_inside_k = k
+                                outside_run = 0
+                            continue
+
+                        if inside[k]:
+                            last_inside_k = k
+                            outside_run = 0
+                        else:
+                            outside_run += 1
+                            if outside_run >= EXIT_FRAMES:
+                                encounters.append(summarise(start_k, last_inside_k, 'exit'))
+                                open_bout = False
+                                outside_run = 0
+
+                    if open_bout:
+                        encounters.append(summarise(start_k, last_inside_k, 'end_of_file'))
+
+        df = pd.DataFrame(encounters)
+
+        if self.use_shorten and self.shorten_duration is not None:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"probability_of_contact{suffix}.csv"
+        df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        # summary over complete encounters only
+        if len(df):
+            complete = df[df['end_reason'] == 'exit']
+            print(f"\n{len(df)} encounters ({len(complete)} complete) within {ENCOUNTER_RADIUS} mm")
+            if len(complete):
+                facing = complete[complete['facing_at_start']]['contacted']
+                away = complete[~complete['facing_at_start']]['contacted']
+                print(f"  P(contact)                   = {complete['contacted'].mean():.3f}  (n = {len(complete)})")
+                if len(facing):
+                    print(f"  P(contact | angle < {ANGLE_THRESHOLD:.0f})     = {facing.mean():.3f}  (n = {len(facing)})")
+                if len(away):
+                    print(f"  P(contact | angle >= {ANGLE_THRESHOLD:.0f})    = {away.mean():.3f}  (n = {len(away)})")
+        else:
+            print("No encounters detected")
+
+        return df
+
     
 
     
@@ -5984,9 +5528,9 @@ if __name__ == "__main__":
         "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-fed",
         "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/fed-starved",
         "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/group-housed/starved-starved",
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-fed",
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-starved",
-        # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/starved-starved",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-fed",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/fed-starved",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/agarose-plates/socially-isolated/starved-starved",
 
 
         # "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/head-head/2/food-plates/group-housed/fed-fed",
@@ -6020,6 +5564,7 @@ if __name__ == "__main__":
         analysis.filtering_files()
 
 
+        analysis.probability_of_contact() 
         # analysis.interaction_types_closest() 
         # analysis.head_head_first_contact() # do i rly need this given i can do first and other below - think get rid off - get rid 
         # analysis.head_head_contacts_kinematics_over_time() 
@@ -6027,10 +5572,8 @@ if __name__ == "__main__":
         # analysis.head_head_contacts_kinematics_over_time_nocontacts(proximity_threshold=1.5, window=60) # better than above i believe 
         # analysis.head_approach_angle()
         # analysis.nearest_neighbour()
-        # analysis.interaction_type_bout() 
-        # analysis.pairwise_approach_probability()
-        # analysis.individual_approach_probability()  
-        # analysis.prob_contact()
+        # analysis.interaction_type_bout()
+        
         # analysis.trajectory(window=20)
         # analysis.trajectory(proximity_threshold=1.5, window=10)
         # analysis.trajectory(proximity_threshold=1.5, window=30)
@@ -6040,7 +5583,7 @@ if __name__ == "__main__":
         # analysis.trajectory_before(proximity_threshold=1.5, window=60)
 
 
-        analysis.trajectory_figures(proximity_threshold=1.5, window=10)
+        # analysis.trajectory_figures(proximity_threshold=1.5, window=10)
         # analysis.trajectories_before_figures(proximity_threshold=1.5, window=60)
 
 
