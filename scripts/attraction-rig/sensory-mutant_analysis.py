@@ -571,14 +571,25 @@ class SensoryMutantAnalysis:
                 dt = group['frame'].diff()
                 return dist / dt.replace(0, np.nan)
 
-            df['speed'] = (
+            df['speed_body'] = (
                 df.groupby('track_id')
                 .apply(lambda g: speed(g, 'x_body', 'y_body'))
                 .reset_index(level=0, drop=True)
             )
 
-            df['acceleration'] = (
-                df.groupby('track_id')['speed'].diff()
+            df['acceleration_body'] = (
+                df.groupby('track_id')['speed_body'].diff()
+                / df.groupby('track_id')['frame'].diff()
+            )
+
+            df['speed_tail'] = (
+                df.groupby('track_id')
+                .apply(lambda g: speed(g, 'x_tail', 'y_tail'))
+                .reset_index(level=0, drop=True)
+            )
+
+            df['acceleration_tail'] = (
+                df.groupby('track_id')['speed_tail'].diff()
                 / df.groupby('track_id')['frame'].diff()
             )
 
@@ -1104,7 +1115,7 @@ class SensoryMutantAnalysis:
         Distances are in mm once conversion() has been run.
         """
 
-        ENCOUNTER_RADIUS = 10.0    # mm, focal head to nearest node of the other
+        ENCOUNTER_RADIUS = 5.0    # mm, focal head to nearest node of the other
         CONTACT_THRESHOLD = 1.0    # mm, minimum node-node distance
         EXIT_FRAMES = 2            # consecutive frames outside the radius to unlock
         ANGLE_THRESHOLD = 35.0     # degrees, focal counts as facing the other
@@ -1278,11 +1289,11 @@ if __name__ == "__main__":
 
     directories = [
       
-        "/Volumes/lab-windingm-1/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/9047",
-        "/Volumes/lab-windingm-1/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/wiii8",
-        "/Volumes/lab-windingm-1/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic",
-        "/Volumes/lab-windingm-1/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/33300",
-        "/Volumes/lab-windingm-1/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/23129",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/9047",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/wiii8",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/anosmic",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/33300",
+        "/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/23129",
     ]
 
 
@@ -1302,9 +1313,9 @@ if __name__ == "__main__":
         # analysis.euclidean_distance()
         # analysis.speed()
         # analysis.distance_travelled()
-        # analysis.nearest_neighbour()
+        analysis.nearest_neighbour()
         # analysis.interaction_type_bout() 
-        analysis.probability_of_contact()
+        # analysis.probability_of_contact()
         # analysis.distance_travelled()
         # analysis.distance_from_centre()
 

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-df = pd.read_csv('/Users/cochral/Desktop/SLAEP/vic/2026-07-21_11-38-58_td6_23129.tracks.000_2026-07-21_11-38-58_td6_23129.analysis.csv')
+df = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/23129/2026-06-26_15-28-01_td8_23129.csv')
 print(df['track'].unique())
 
 
@@ -111,7 +111,7 @@ print(df.head())
 # %% CSV -> FEATHER AND SLP
 
 
-df.to_feather('/Users/cochral/Desktop/SLAEP/vic/2026-07-21_11-38-58_td6_23129.tracks.feather')
+df.to_feather('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/sensory/23129/2026-06-26_15-28-01_td8_23129.tracks.feather')
 
 
 

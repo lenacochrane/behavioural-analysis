@@ -43,7 +43,7 @@ df['angle_bin'] = pd.cut(df['approach_angle'], angle_edges, include_lowest=True,
 
 baseline = (
     df.loc[df["closest_node_distance"].between(10, 20, inclusive="both")]
-      .groupby(["condition", "filename"])["speed"]
+      .groupby(["condition", "filename"])["speed_tail"]
       .mean()
       .rename("mean_speed_10_20")
       .reset_index()
@@ -54,9 +54,9 @@ df = df.merge(baseline, on=["condition", "filename"], how="left")
 # drop files that don't have any baseline data in 10–20 mm
 df = df.dropna(subset=["mean_speed_10_20"]).copy()
 # normalize
-df["speed_norm"] = df["speed"] / df["mean_speed_10_20"]
+df["speed_norm"] = df["speed_tail"] / df["mean_speed_10_20"]
 
-df = df[df['bin_right'] <= 15].copy()
+df = df[df['bin_right'] <= 10].copy()
 
 for binned_angle in df['angle_bin'].dropna().unique():
     df_sub = df[df['angle_bin'] == binned_angle]
@@ -88,7 +88,7 @@ for binned_angle in df['angle_bin'].dropna().unique():
     plt.title(f'Approach Angle {binned_angle}')
 
     plt.tight_layout(rect=[0, 0, 0.95, 0.93])
-    plt.savefig(f'/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/approach_angle-{binned_angle.left:.0f}–{binned_angle.right:.0f}.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig(f'/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/FIGURE-1/ghXpseudo/approach_angle-{binned_angle.left:.0f}–{binned_angle.right:.0f}.pdf', format='pdf', bbox_inches='tight')
     plt.close()
 
 

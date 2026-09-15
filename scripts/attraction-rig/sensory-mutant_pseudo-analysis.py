@@ -51,16 +51,29 @@ def compute_nearest_neighbour(track_file, df):
         dt = group['frame'].diff()
         return dist / dt.replace(0, np.nan)
 
-    df['speed'] = (
+    df['speed_body'] = (
         df.groupby('track_id')
         .apply(lambda g: speed(g, 'x_body', 'y_body'))
         .reset_index(level=0, drop=True)
     )
 
-    df['acceleration'] = (
-        df.groupby('track_id')['speed'].diff()
+    df['acceleration_body'] = (
+        df.groupby('track_id')['speed_body'].diff()
         / df.groupby('track_id')['frame'].diff()
     )
+
+    df['speed_tail'] = (
+        df.groupby('track_id')
+        .apply(lambda g: speed(g, 'x_tail', 'y_tail'))
+        .reset_index(level=0, drop=True)
+    )
+
+    df['acceleration_tail'] = (
+        df.groupby('track_id')['speed_tail'].diff()
+        / df.groupby('track_id')['frame'].diff()
+    )
+
+
 
     # --------------------------------------------------
     # BODY ANGLE (UNCHANGED)
@@ -845,6 +858,117 @@ class SensoryMutantAnalysis:
         except Exception as error:
             print(f"Feather write failed ({error}) - falling back to csv.")
             data.to_csv(os.path.join(self.directory, filename.replace('.feather', '.csv')), index=False)
+        
+
+    
+    def interaction_types_closest(self, threshold=1):
+
+        """
+        Frame-level closest-contact detection (no bouts).
+        For each larval pair per frame:
+        - compute all 9 node-node distances
+        - keep only the minimum distance + its node-node type
+        - only log frames where min distance < threshold
+        Output: one row per (file, frame, pair) contact frame
+        """
+
+        data = []
+        no_contacts = []
+
+        parts = ['head', 'body', 'tail']
+        interaction_pairs = list(itertools.product(parts, parts))
+
+        def unify_interaction_type(part1, part2):
+            return '_'.join(sorted([part1, part2]))
+
+        def process_track_pair(track_a, track_b, df, track_file):
+            results = []
+            track_a_data = df[df['track_id'] == track_a]
+            track_b_data = df[df['track_id'] == track_b]
+
+            common_frames = sorted(set(track_a_data['frame']).intersection(track_b_data['frame']))
+            if not common_frames:
+                return results
+
+            for frame in common_frames:
+                row_a = track_a_data[track_a_data['frame'] == frame]
+                row_b = track_b_data[track_b_data['frame'] == frame]
+                if row_a.empty or row_b.empty:
+                    continue
+
+                # build coords
+                coords_a = {p: row_a[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+                coords_b = {p: row_b[[f'x_{p}', f'y_{p}']].to_numpy().flatten() for p in parts}
+
+                # compute all 9 distances, keep minimum
+                min_dist = float('inf')
+            #   min_type = None
+                min_part_a = None
+                min_part_b = None
+                for part1, part2 in interaction_pairs:
+                    dist = np.linalg.norm(coords_a[part1] - coords_b[part2])
+                    if dist < min_dist:
+                        min_dist = dist
+                        min_part_a = part1
+                        min_part_b = part2
+                        # min_type = unify_interaction_type(part1, part2)
+
+                if min_dist < threshold:
+                    results.append({
+                        'file': track_file,
+                        'frame': frame,
+                        'Interaction Pair': tuple(sorted((track_a, track_b))),
+                        'track_0': track_a,
+                        'track_1': track_b,
+                        'track_0_node': min_part_a,
+                        'track_1_node': min_part_b,
+                        'Distance': min_dist,
+                        'Closest Interaction Type': unify_interaction_type(min_part_a, min_part_b)
+                    })
+
+            return results
+
+        for match in self.matching_pairs:
+            track_file = match['track_file']
+            df = self.track_data[track_file].sort_values(by='frame')
+
+            track_ids = sorted(df['track_id'].unique()) # 0 always first
+            track_combinations = list(combinations(track_ids, 2))
+
+            all_results = Parallel(n_jobs=-1)(
+                delayed(process_track_pair)(track_a, track_b, df, track_file)
+                for track_a, track_b in track_combinations
+            )
+
+            flattened_results = [item for sublist in all_results for item in sublist]
+            if not flattened_results:
+                print(f"No closest-contact frames for {track_file}")
+                no_contacts.append(track_file)
+                continue
+
+            data.append(pd.DataFrame(flattened_results))
+
+        # placeholders for files with none
+        for file in no_contacts:
+            data.append(pd.DataFrame([{
+                'file': file,
+                'frame': np.nan,
+                'Interaction Pair': None,
+                'Distance': np.nan,
+                'Closest Interaction Type': None
+            }]))
+
+        closest_df = pd.concat(data, ignore_index=True)
+
+        if self.shorten and self.shorten_duration is not None:
+            suffix = f"_{self.shorten_duration}"
+        else:
+            suffix = ""
+
+        filename = f"closest_contacts_{threshold}mm{suffix}.csv"
+        closest_df.to_csv(os.path.join(self.directory, filename), index=False)
+
+        return closest_df
 
     
 
@@ -894,4 +1018,5 @@ for directory in pseudo_directories:
     analysis = SensoryMutantAnalysis(directory)
     # analysis.interaction_type_bout()
     analysis.nearest_neighbour()
+    analysis.interaction_types_closest()
     

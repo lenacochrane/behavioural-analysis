@@ -532,6 +532,7 @@ class HoleAnalysis:
 
         return ax # ax = probability_density() to modify graph when called
     
+    
     # METHOD SPEED: CALCULATES SPEED: 1) SPEED VALUES 2) SPEED OVER TIME 
 
     def speed(self):
@@ -549,7 +550,7 @@ class HoleAnalysis:
                     row = track_unique.iloc[i]
                     next_row = track_unique.iloc[i+1]
 
-                    distance = np.sqrt((row['x_body'] - next_row['x_body'])**2 + (row['y_body'] - next_row['y_body'])**2)
+                    distance = np.sqrt((row['x_tail'] - next_row['x_tail'])**2 + (row['y_tail'] - next_row['y_tail'])**2)
 
                     time1 = row['frame']
                     time2 = next_row['frame']
@@ -577,6 +578,8 @@ class HoleAnalysis:
 
         return speed_over_time
     
+
+
 
 
     # METHOD ACCELERATION: 
@@ -2258,193 +2261,6 @@ class HoleAnalysis:
 
 
 
-        
-
-
-
-
-
-        # METHOD INITIAL_HOLE_FORMATION: TIME AT WHICH THE FIRST LARVAE BEGINS DIGGING
-        # EXTRACTED FROM THE ABOVE !
-
-#### old
-
-    ### METHOD CORRELATIONS: QUANTIFY RELATIONSHIPS BETWEEN NEAREST NEIGHOUR DISTANCE AND SPEED ETC 
-    # def nearest_neighbour(self):
-
-    #     dfs = []
-        
-    #     for match in self.matching_pairs:
-    #         track_file = match['track_file']
-    #         df = self.track_data[track_file]
-
-    #         df = df.sort_values(by='frame', ascending=True)
-    #         df['filename'] = track_file
-            
-    #         # df here with speed, acceleration, angles and distance to nearest larva
-
-    #         def speed(group, x, y):
-    #             dx = group[x].diff()
-    #             dy = group[y].diff()
-    #             distance = np.sqrt(dx**2 + dy**2)
-    #             dt = group['frame'].diff()
-    #             speed = distance / dt.replace(0, np.nan) # Avoid division by zero
-    #             return speed
-
-    #         df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
-    #         df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
-       
-
-    #         def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
-    #             dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
-    #             magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
-    #             magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
-
-    #             # Avoid division by zero
-    #             cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
-    #             cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
-                
-    #             return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
-            
-    #         df['v1_x'] = df['x_head'] - df['x_body']
-    #         df['v1_y'] = df['y_head'] - df['y_body']
-    #         df['v2_x'] = df['x_tail'] - df['x_body']
-    #         df['v2_y'] = df['y_tail'] - df['y_body']
-
-    #         # Apply function correctly
-    #         df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
-
-
-    #         node_list = ['head', 'body', 'tail']
-
-    #         for frame in df['frame'].unique():
-    #             frame_data = df[df['frame'] == frame]
-    #             if len(frame_data) < 2:
-    #                 continue
-
-    #             n = len(frame_data)
-    #             track_ids = frame_data['track_id'].to_numpy()
-    #             index = frame_data.index.to_numpy()
-                
-    #             ### these are blank 
-    #             min_dists = np.full(n, np.inf)
-    #             best_pairs = np.empty(n, dtype=object)
-    #             contact_ids = np.full(n, np.nan)
-
-    #             for part1, part2 in product(node_list, repeat=2):
-    #                 coords1 = frame_data[[f'x_{part1}', f'y_{part1}']].to_numpy()
-    #                 coords2 = frame_data[[f'x_{part2}', f'y_{part2}']].to_numpy()
-
-    #                 dist_matrix = cdist(coords1, coords2)
-    #                 np.fill_diagonal(dist_matrix, np.inf)
-
-    #                 min_idx = np.argmin(dist_matrix, axis=1)
-    #                 min_val = np.min(dist_matrix, axis=1)
-
-    #                 # Update only where this pairing is the best so far
-    #                 update_mask = min_val < min_dists # this is boolean masking 
-    #                 min_dists[update_mask] = min_val[update_mask]
-    #                 num_updates = np.sum(update_mask)
-    #                 best_pairs[update_mask] = [f"{part1}-{part2}"] * num_updates
-    #                 contact_ids[update_mask] = track_ids[min_idx[update_mask]]
-
-    #             # Save to main df
-    #             df.loc[index, 'node_distance'] = min_dists
-    #             df.loc[index, 'node-node'] = best_pairs
-    #             df.loc[index, 'contact_track'] = contact_ids
-
-
-    #         dfs.append(df)
-    #             # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
-        
-    #     data = pd.concat(dfs, ignore_index=True)
-
-    #     if self.shorten and self.shorten_duration is not None:
-    #         suffix = f"_{self.shorten_duration}"
-    #     else:
-    #         suffix = ""
-
-    #     filename = f"nearest_neighbour{suffix}.csv"
-    #     data.to_csv(os.path.join(self.directory, filename), index=False)
-
-
-
-
-    # def nearest_neighbour(self):
-
-    #     dfs = []
-
-        
-    #     for match in self.matching_pairs:
-    #         track_file = match['track_file']
-    #         df = self.track_data[track_file]
-
-    #         df = df.sort_values(by='frame', ascending=True)
-    #         df['filename'] = track_file
-            
-    #         # df here with speed, acceleration, angles and distance to nearest larva
-
-    #         def speed(group, x, y):
-    #             dx = group[x].diff()
-    #             dy = group[y].diff()
-    #             distance = np.sqrt(dx**2 + dy**2)
-    #             dt = group['frame'].diff()
-    #             speed = distance / dt.replace(0, np.nan) # Avoid division by zero
-    #             return speed
-
-    #         df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
-    #         df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
-       
-
-    #         def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
-    #             dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
-    #             magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
-    #             magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
-
-    #             # Avoid division by zero
-    #             cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
-    #             cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
-                
-    #             return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
-            
-    #         df['v1_x'] = df['x_head'] - df['x_body']
-    #         df['v1_y'] = df['y_head'] - df['y_body']
-    #         df['v2_x'] = df['x_tail'] - df['x_body']
-    #         df['v2_y'] = df['y_tail'] - df['y_body']
-
-    #         # Apply function correctly
-    #         df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
-
-    #         df['body-body'] = np.nan 
-
-
-    #         for frame in df['frame'].unique():
-    #             unique_frame =  df[df['frame'] == frame]
-    #             if len(unique_frame) < 2:
-    #                 continue
-
-    #             body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-    #             distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-    #             np.fill_diagonal(distance, np.nan)
-
-    #             # unique_frame['body-body'] = np.nanmin(distance, axis=1)
-    #             df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
-
-
-    #         dfs.append(df)
-    #             # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
-        
-    #     data = pd.concat(dfs, ignore_index=True)
-
-    #     if self.shorten and self.shorten_duration is not None:
-    #         suffix = f"_{self.shorten_duration}"
-    #     else:
-    #         suffix = ""
-
-    #     filename = f"nearest_neighbour{suffix}.csv"
-    #     data.to_csv(os.path.join(self.directory, filename), index=False)
-
-
 
 
 
@@ -2474,14 +2290,25 @@ class HoleAnalysis:
                 dt = group['frame'].diff()
                 return dist / dt.replace(0, np.nan)
 
-            df['speed'] = (
+            df['speed_body'] = (
                 df.groupby('track_id')
                 .apply(lambda g: speed(g, 'x_body', 'y_body'))
                 .reset_index(level=0, drop=True)
             )
 
-            df['acceleration'] = (
-                df.groupby('track_id')['speed'].diff()
+            df['acceleration_body'] = (
+                df.groupby('track_id')['speed_body'].diff()
+                / df.groupby('track_id')['frame'].diff()
+            )
+
+            df['speed_tail'] = (
+                df.groupby('track_id')
+                .apply(lambda g: speed(g, 'x_tail', 'y_tail'))
+                .reset_index(level=0, drop=True)
+            )
+
+            df['acceleration_tail'] = (
+                df.groupby('track_id')['speed_tail'].diff()
                 / df.groupby('track_id')['frame'].diff()
             )
 

@@ -31,17 +31,16 @@ plt.figure(figsize=(1.5,3))
 
 df = pd.concat([df1, df2], ignore_index=True)
 
-ax = sns.barplot(data=df, x='condition', y='speed', errorbar='sd', palette=PALETTE, order=HUE_ORDER, linewidth=2, edgecolor='black')
+grouped = df.groupby(['condition', 'file'], as_index=False)['speed'].mean()
+
+sns.barplot(data=grouped, x='condition', y='speed', errorbar='sd', palette=PALETTE, order=HUE_ORDER, linewidth=2, edgecolor='black')
 
 
 plt.ylabel('Probability', fontsize=12, fontweight='bold', labelpad=15)
 plt.xlabel('Speed (mm/s)', fontsize=12, fontweight='bold', labelpad=15)
 
 sns.despine()
-ax.legend(frameon=False, title=None, fontsize=11, loc="upper right")
 
-for label in ax.get_xticklabels() + ax.get_yticklabels():
-    label.set_fontweight('bold')
 
 plt.ylim(0, None)
 
@@ -49,7 +48,7 @@ plt.ylim(0, None)
 
 plt.tight_layout(rect=[1, 1, 1, 1])
 plt.xticks(fontweight='bold')
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/speed_bar.pdf', format='pdf', bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/speed_bar.pdf', format='pdf', bbox_inches='tight')
 
 # Show the plot
 plt.show()

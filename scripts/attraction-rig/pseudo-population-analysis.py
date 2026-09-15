@@ -283,7 +283,7 @@ class PseudoAnalysis:
                     row = track_unique.iloc[i]
                     next_row = track_unique.iloc[i+1]
 
-                    distance = np.sqrt((row['x_body'] - next_row['x_body'])**2 + (row['y_body'] - next_row['y_body'])**2)
+                    distance = np.sqrt((row['x_tail'] - next_row['x_tail'])**2 + (row['y_tail'] - next_row['y_tail'])**2)
 
                     time1 = row['frame']
                     time2 = next_row['frame']
@@ -675,71 +675,7 @@ class PseudoAnalysis:
         interaction_data.to_csv(os.path.join(self.directory, filename), index=False)
 
 
-    # def nearest_neighbour(self):
-
-    #         dfs = []
-
-    #         for file in self.pseudo_files:
-    #             df = self.pseudo_data[file]
-    #             df = df.sort_values(by='frame', ascending=True)
-    #             df['filename'] = file
-            
-
-    #             def speed(group, x, y):
-    #                 dx = group[x].diff()
-    #                 dy = group[y].diff()
-    #                 distance = np.sqrt(dx**2 + dy**2)
-    #                 dt = group['frame'].diff()
-    #                 speed = distance / dt.replace(0, np.nan) # Avoid division by zero
-    #                 return speed
-
-    #             df['speed'] = df.groupby('track_id').apply(lambda group: speed(group, 'x_body', 'y_body')).reset_index(level=0, drop=True)
-    #             df['acceleration'] = df.groupby('track_id')['speed'].diff() / df.groupby('track_id')['frame'].diff()
-        
-
-    #             def calculate_angle(df, v1_x, v1_y, v2_x, v2_y):
-    #                 dot_product = (df[v1_x] * df[v2_x]) + (df[v1_y] * df[v2_y])
-    #                 magnitude_v1 = np.hypot(df[v1_x], df[v1_y])  # Same as sqrt(x^2 + y^2
-    #                 magnitude_v2 = np.hypot(df[v2_x], df[v2_y])
-
-    #                 # Avoid division by zero
-    #                 cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
-    #                 cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Ensure values are in valid range for arccos
-                    
-    #                 return np.degrees(np.arccos(cos_theta))  # Convert radians to degrees
-                
-    #             df['v1_x'] = df['x_head'] - df['x_body']
-    #             df['v1_y'] = df['y_head'] - df['y_body']
-    #             df['v2_x'] = df['x_tail'] - df['x_body']
-    #             df['v2_y'] = df['y_tail'] - df['y_body']
-
-    #             # Apply function correctly
-    #             df['angle'] = calculate_angle(df, 'v1_x', 'v1_y', 'v2_x', 'v2_y')
-
-    #             for frame in df['frame'].unique():
-    #                 unique_frame =  df[df['frame'] == frame]
-    #                 if len(unique_frame) < 2:
-    #                     continue
-
-    #                 body_coordinates = unique_frame[['x_body', 'y_body']].to_numpy()
-    #                 distance = cdist(body_coordinates, body_coordinates, 'euclidean')
-    #                 np.fill_diagonal(distance, np.nan)
-
-    #                 # unique_frame['body-body'] = np.nanmin(distance, axis=1)
-    #                 df.loc[unique_frame.index, 'body-body'] = np.nanmin(distance, axis=1)
-
-    #             dfs.append(df)
-    #                 # df.to_csv(os.path.join(self.directory, 'df.csv'), index=False)
-            
-    #         data = pd.concat(dfs, ignore_index=True)
-
-    #         if self.shorten and self.shorten_duration is not None:
-    #             suffix = f"_{self.shorten_duration}"
-    #         else:
-    #             suffix = ""
-
-    #         filename = f"nearest_neighbour{suffix}.csv"
-    #         data.to_csv(os.path.join(self.directory, filename), index=False)
+  
 
 
     def nearest_neighbour(self):
@@ -767,14 +703,25 @@ class PseudoAnalysis:
                 dt = group['frame'].diff()
                 return dist / dt.replace(0, np.nan)
 
-            df['speed'] = (
+            df['speed_body'] = (
                 df.groupby('track_id')
                 .apply(lambda g: speed(g, 'x_body', 'y_body'))
                 .reset_index(level=0, drop=True)
             )
 
-            df['acceleration'] = (
-                df.groupby('track_id')['speed'].diff()
+            df['acceleration_body'] = (
+                df.groupby('track_id')['speed_body'].diff()
+                / df.groupby('track_id')['frame'].diff()
+            )
+
+            df['speed_tail'] = (
+                df.groupby('track_id')
+                .apply(lambda g: speed(g, 'x_tail', 'y_tail'))
+                .reset_index(level=0, drop=True)
+            )
+
+            df['acceleration_tail'] = (
+                df.groupby('track_id')['speed_tail'].diff()
                 / df.groupby('track_id')['frame'].diff()
             )
 
@@ -2080,13 +2027,13 @@ def perform_analysis(directory):
 
     # analysis.distance_from_centre()
     # analysis.euclidean_distance()
-    # analysis.speed()
+    analysis.speed()
     # analysis.acceleration()
     # analysis.ensemble_msd()
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
-    # analysis.nearest_neighbour()
+    analysis.nearest_neighbour()
     # analysis.interaction_types()
     # analysis.interaction_types_closest()
     # analysis.individual_approach_responses()
@@ -2107,7 +2054,7 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses_consistent_approach_angle(10)
     # analysis.probability_of_contact()
 
-    analysis.interaction_type_bout()
+    # analysis.interaction_type_bout()
 
 
     print(f"Analysis complete for {directory}")

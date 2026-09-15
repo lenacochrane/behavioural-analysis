@@ -44,7 +44,7 @@ df['angle_bin'] = df['angle_bin'].astype(str)
 
 baseline = (
     df.loc[df["closest_node_distance"].between(10, 20, inclusive="both")]
-      .groupby(["condition", "filename"])["speed"]
+      .groupby(["condition", "filename"])["speed_tail"]
       .mean()
       .rename("mean_speed_10_20")
       .reset_index()
@@ -52,7 +52,7 @@ baseline = (
 
 df = df.merge(baseline, on=["condition", "filename"], how="left")
 df = df.dropna(subset=["mean_speed_10_20"]).copy()
-df["speed_norm"] = df["speed"] / df["mean_speed_10_20"]
+df["speed_norm"] = df["speed_tail"] / df["mean_speed_10_20"]
 
 
 df = df[(df["closest_node_distance"] > 1) & (df["closest_node_distance"] <= 5)].copy()
@@ -145,7 +145,7 @@ results["p_value"] = (
 
 print(results)
 
-results.to_csv('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/bootstrap_results.csv', index=False)
+results.to_csv('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/bootstrap_results.csv', index=False)
 
 
 
@@ -164,7 +164,7 @@ mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['font.sans-serif'] = ['Arial']
 
-results = pd.read_csv('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/bootstrap_results.csv')
+results = pd.read_csv('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/bootstrap_results.csv')
 
 # --- angle centres ---
 def angle_center(label):
@@ -249,7 +249,7 @@ ax.set_title(
 )
 
 plt.tight_layout()
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/roseplot.pdf',
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/roseplot.pdf',
             format='pdf', bbox_inches='tight')
 plt.show()
 

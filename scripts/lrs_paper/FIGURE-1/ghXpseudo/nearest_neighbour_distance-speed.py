@@ -14,8 +14,8 @@ mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['font.sans-serif'] = ['Arial']
 
 PALETTE = {
-    "Group Housed": 'steelblue',     
-    "Pseudo Control": 'skyblue'
+    "Group Housed": '#63859c',     
+    "Pseudo Control": '#b3b3b3'
 }
 
 HUE_ORDER = ["Group Housed", "Pseudo Control"]
@@ -36,20 +36,22 @@ df['bin_right'] = df['bin'].apply(lambda x: x.right).astype(float)
 
 baseline = (
     df[(df['bin_right'] >= 10) & (df['bin_right'] < 20)]
-      .groupby(['condition', 'filename'], as_index=False)['speed']
+      .groupby(['condition', 'filename'], as_index=False)['speed_tail']
       .mean()
-      .rename(columns={'speed': 'mean_speed_10_20'})
+      .rename(columns={'speed_tail': 'mean_speed_10_20'})
 )
 
 df = df.merge(baseline, on=['condition', 'filename'], how='left')
 df = df.dropna(subset=['mean_speed_10_20']).copy()
-df['speed_norm'] = df['speed'] / df['mean_speed_10_20']
+df['speed_norm'] = df['speed_tail'] / df['mean_speed_10_20']
 
 
 df_plot = (
     df.groupby(['condition', 'filename', 'bin_right'], as_index=False)['speed_norm']
       .mean()
 )
+
+df_plot = df_plot[df_plot['bin_right'] <= 10]  # Filter to only include bins up to 10
 
 
 plt.figure(figsize=(3, 3))
@@ -80,6 +82,6 @@ for label in ax.get_xticklabels() + ax.get_yticklabels():
 
 
 sns.despine()
-plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/ghXpseudo/head_min_dist-speed.pdf', dpi=300, bbox_inches='tight')
+plt.savefig('/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/GS/ghXpseudo/head_min_dist-speed.pdf',  bbox_inches='tight')
 
-plt.close()
+plt.show()
