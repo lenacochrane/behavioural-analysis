@@ -24,7 +24,7 @@ HUE_ORDER = ["GH", "PSEUDO"]
 
 df1 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed/nearest_neighbour.csv')
 df1['condition'] = 'GH'
-df2 = pd.read_csv('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/pseudo-n10/group-housed/nearest_neighbour.csv')
+df2 = pd.read_feather('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed-pseudo/nearest_neighbour.feather')
 df2['condition'] = 'PSEUDO'
 
 

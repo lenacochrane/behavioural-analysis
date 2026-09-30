@@ -45,7 +45,7 @@ def perform_analysis(directory):
 
     # analysis.trajectory()
     # analysis.time_average_msd(list(range(1, 101, 1)))
-    analysis.speed()
+    # analysis.speed()
     # analysis.ensemble_msd()
     # analysis.acceleration()
     # analysis.euclidean_distance()
@@ -59,6 +59,9 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses(threshold=2)
     # analysis.individual_approach_responses_consistent_approach_angle(threshold=5)
     # analysis.probability_of_contact()
+
+
+    analysis.probability_of_contact()
 
 
     # analysis.nearest_neighbour()
@@ -135,7 +138,7 @@ if __name__ == "__main__":
 
     perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/group-housed")
     perform_analysis("/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/socially-isolated")
-    perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
+    # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/n10/grouped+isolated')
 
 
     # perform_analysis('/Volumes/lab-windingm/home/users/cochral/LRS/AttractionRig/analysis/social-isolation/holes/N10-1-HOLE/GROUP-HOUSED')

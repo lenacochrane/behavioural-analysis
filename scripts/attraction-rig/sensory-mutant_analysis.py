@@ -942,6 +942,9 @@ class SensoryMutantAnalysis:
                         # min_type = unify_interaction_type(part1, part2)
 
                 if min_dist < threshold:
+                    # position of the contact: midpoint of the two closest nodes
+                    contact_x, contact_y = (coords_a[min_part_a] + coords_b[min_part_b]) / 2
+
                     results.append({
                         'file': track_file,
                         'frame': frame,
@@ -950,6 +953,8 @@ class SensoryMutantAnalysis:
                         'track_1': track_b,
                         'track_0_node': min_part_a,
                         'track_1_node': min_part_b,
+                        'x_contact': contact_x,
+                        'y_contact': contact_y,
                         'Distance': min_dist,
                         'Closest Interaction Type': unify_interaction_type(min_part_a, min_part_b)
                     })
@@ -982,6 +987,8 @@ class SensoryMutantAnalysis:
                 'file': file,
                 'frame': np.nan,
                 'Interaction Pair': None,
+                'x_contact': np.nan,
+                'y_contact': np.nan,
                 'Distance': np.nan,
                 'Closest Interaction Type': None
             }]))
@@ -1313,7 +1320,7 @@ if __name__ == "__main__":
         # analysis.euclidean_distance()
         # analysis.speed()
         # analysis.distance_travelled()
-        analysis.nearest_neighbour()
+        # analysis.nearest_neighbour()
         # analysis.interaction_type_bout() 
         # analysis.probability_of_contact()
         # analysis.distance_travelled()

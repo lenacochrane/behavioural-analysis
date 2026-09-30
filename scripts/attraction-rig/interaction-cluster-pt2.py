@@ -10328,4 +10328,4 @@ if __name__ == "__main__":
     # pipeline.umap(n_pcs=5)
     # pipeline.spatial_cluster()
     # pipeline.larval_proximity()
-    pipeline.grouped_clusters()
+    # pipeline.grouped_clusters()

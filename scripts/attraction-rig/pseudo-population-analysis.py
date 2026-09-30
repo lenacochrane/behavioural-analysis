@@ -1666,7 +1666,7 @@ class PseudoAnalysis:
         Distances are in mm once conversion() has been run.
         """
 
-        ENCOUNTER_RADIUS = 10.0    # mm, focal head to nearest node of the other
+        ENCOUNTER_RADIUS =5.0    # mm, focal head to nearest node of the other
         CONTACT_THRESHOLD = 1.0    # mm, minimum node-node distance
         EXIT_FRAMES = 2            # consecutive frames outside the radius to unlock
         ANGLE_THRESHOLD = 35.0     # degrees, focal counts as facing the other
@@ -2027,13 +2027,13 @@ def perform_analysis(directory):
 
     # analysis.distance_from_centre()
     # analysis.euclidean_distance()
-    analysis.speed()
+    # analysis.speed()
     # analysis.acceleration()
     # analysis.ensemble_msd()
     # analysis.time_average_msd(list(range(1, 101, 1)))
     # analysis.trajectory()
     # analysis.contacts(proximity_threshold=5)
-    analysis.nearest_neighbour()
+    # analysis.nearest_neighbour()
     # analysis.interaction_types()
     # analysis.interaction_types_closest()
     # analysis.individual_approach_responses()
@@ -2052,7 +2052,7 @@ def perform_analysis(directory):
     # analysis.individual_approach_responses(10)
 
     # analysis.individual_approach_responses_consistent_approach_angle(10)
-    # analysis.probability_of_contact()
+    analysis.probability_of_contact()
 
     # analysis.interaction_type_bout()
 

@@ -25,12 +25,18 @@ df = df.sort_values('frame')
 df = df[df['frame'] < 300]
 
 
-output = '/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/tracks'
+output = '/Users/cochral/repos/behavioural-analysis/plots/lrs_paper/FIGURE-1/tracks'
 
 # =========================
 # 1) Frame 20 overlay -> PDF
 # =========================
 FRAME_TO_EXPORT = 22
+CROP_LEFT   = 120   # pixels trimmed from each side of the frame image
+CROP_TOP    = 150
+CROP_RIGHT  = 100
+CROP_BOTTOM = 80
+DOT_SIZE    = 8     # marker area (points^2)
+LINE_WIDTH  = 1.2   # skeleton line width (points)
 frame_df = df[df['frame'] == FRAME_TO_EXPORT].copy()
 
 # cap = cv2.VideoCapture(video_path)
@@ -53,8 +59,15 @@ frame_rgb = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)
 # frame_rgb[mask] = [255, 255, 255]
 # plt.figure(figsize=(8, 8)) 
 # plt.imshow(frame_rgb)
-plt.figure(figsize=(6, 6), dpi=600)          # 14*100 = 1400 px
-plt.imshow(frame_rgb, interpolation="nearest") # stops smoothing blur
+# figure shaped like the cropped image, so there is no stretching or empty space
+img_h, img_w = frame_rgb.shape[:2]
+crop_w = img_w - CROP_LEFT - CROP_RIGHT
+crop_h = img_h - CROP_TOP - CROP_BOTTOM
+FIG_WIDTH = 6   # inches
+plt.figure(figsize=(FIG_WIDTH, FIG_WIDTH * crop_h / crop_w), dpi=600)
+plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
+# "none" embeds the original video pixels in the PDF with no resampling/blur
+plt.imshow(frame_rgb, interpolation="none")
 
 
 plt.axis("off")
@@ -74,16 +87,17 @@ for tid, sub in frame_df.groupby("track_id"):
         [xh, xb, xt],
         [yh, yb, yt],
         color="navy",
-        linewidth=0.6,
-        alpha=0.4,
+        linewidth=LINE_WIDTH,
+        alpha=0.8,
+        solid_capstyle="round",
         zorder=1
     )
 
 
     # points
-    plt.scatter([xh], [yh], s=1, color='lightskyblue')
-    plt.scatter([xb], [yb], s=1, color='steelblue')
-    plt.scatter([xt], [yt], s=1, color='cornflowerblue')
+    plt.scatter([xh], [yh], s=DOT_SIZE, color='lightskyblue', linewidths=0, zorder=2)
+    plt.scatter([xb], [yb], s=DOT_SIZE, color='steelblue', linewidths=0, zorder=2)
+    plt.scatter([xt], [yt], s=DOT_SIZE, color='cornflowerblue', linewidths=0, zorder=2)
 
 
     # # tiny labels
@@ -91,8 +105,13 @@ for tid, sub in frame_df.groupby("track_id"):
     # plt.text(xb + 4, yb + 4, "B", fontsize=6,  color='indianred', fontweight='bold')
     # plt.text(xt + 4, yt + 4, "T", fontsize=6,  color='lightcoral', fontweight='bold')
 
+# crop the black edges (set limits so the track points stay aligned)
+plt.xlim(CROP_LEFT, img_w - CROP_RIGHT)
+plt.ylim(img_h - CROP_BOTTOM, CROP_TOP)
+
 out_pdf_frame = f"{output}/overlay{FRAME_TO_EXPORT}.pdf"
-plt.savefig(out_pdf_frame, format="pdf", bbox_inches="tight", pad_inches=0)
+plt.savefig(out_pdf_frame, format="pdf", pad_inches=0)
+plt.savefig(out_pdf_frame.replace(".pdf", ".png"), dpi=600, pad_inches=0)
 plt.close()
 
 
